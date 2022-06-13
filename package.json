@@ -31,6 +31,12 @@
 			"scopeName": "source.esi.platform",
 			"path": "./syntaxes/Platform.tmLanguage"
 		}],
+		"snippets": [
+			{
+				"language": "esi",
+				"path": "./snippets.json"
+			}
+		],
 		"commands": [
 			{
 				"command": "extension.helloWorld",
