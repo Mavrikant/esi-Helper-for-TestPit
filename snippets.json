@@ -10,7 +10,7 @@
     "Test definiton": {
 		"prefix": "[test definition]",
 		"body": [
-			"[TEST DEFINITION]\n    Test Description =  $1\n    Test Configuration = \n    est Dependencies = \n[/TEST DEFINITION]",
+			"[TEST DEFINITION]\n    Test Description =  $1\n    Test Configuration = \n    Test Dependencies = \n[/TEST DEFINITION]",
 			"$2"
 		],
 		"description": "Test definiton"
