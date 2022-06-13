@@ -1,0 +1,9 @@
+.DS_Store
+.vscode-test/
+*.db
+*.lsif
+*.vsix
+*/.vs/
+*/node_modules/
+*/out/
+npm-debug.log

@@ -1,0 +1,56 @@
+{
+	"name": "esi-for-testpit",
+	"displayName": "esi-for-testpit",
+	"description": "This is a extension for ESEN's TestPit files.",
+	"version": "0.0.1",
+	"publisher": "vscode-samples",
+	"repository": "https://github.com/Microsoft/vscode-extension-samples/helloworld-sample",
+	"engines": {
+		"vscode": "^1.34.0"
+	},
+	"categories": [
+		"Other"
+	],
+	"activationEvents": [
+		"onCommand:extension.helloWorld"
+	],
+	"main": "./out/extension.js",
+	"contributes": {
+		"languages": [{
+			"id": "esi",
+			"extensions": [ ".esi"],
+			"aliases": [ "ESI", "esi" ],
+			"configuration": "./language-configuration.json"
+		}],
+		"grammars": [{
+			"language": "esi",
+			"scopeName": "source.esi",
+			"path": "./syntaxes/esi.json"
+		},
+		{
+			"scopeName": "source.esi.platform",
+			"path": "./syntaxes/Platform.tmLanguage"
+		}],
+		"commands": [
+			{
+				"command": "extension.helloWorld",
+				"title": "Hello World",
+				"category": "ESEN"
+			}
+		]
+	},
+	"scripts": {
+		"vscode:prepublish": "npm run compile",
+		"compile": "tsc -p ./",
+		"lint": "eslint . --ext .ts,.tsx",
+		"watch": "tsc -watch -p ./"
+	},
+	"devDependencies": {
+		"@types/node": "^16.11.7",
+		"@types/vscode": "^1.34.0",
+		"@typescript-eslint/eslint-plugin": "^5.19.0",
+		"@typescript-eslint/parser": "^5.19.0",
+		"eslint": "^8.13.0",
+		"typescript": "^4.7.2"
+	}
+}
