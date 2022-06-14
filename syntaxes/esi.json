@@ -24,7 +24,7 @@
 			"name": "string.quoted.other.variable.include.c"
 		},
 		{
-			"match": "\\b(NULL|true|false|TRUE|FALSE)\\b",
+			"match": "\\b(NULL|true|false|TRUE|FALSE|N/A)\\b",
 			"name": "constant.language.c"
 		},
 		{
@@ -72,7 +72,7 @@
 			"name": "entity.name.function.c"
 		},
 		{
-			"match": "\\b(Test Description|Test Configuration|Test Dependencies|Step Description|Step Requirements|Step Dependencies|Step Conditions|Step Expected Results)\\b",
+			"match": "\\b(include file|Test Description|Test Configuration|Test Dependencies|Step Description|Step Requirements|Step Dependencies|Step Conditions|Step Expected Results)\\b",
 			"name": "entity.name.function.c"
 		},
 		{

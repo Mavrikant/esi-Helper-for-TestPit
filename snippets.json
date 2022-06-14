@@ -2,7 +2,7 @@
 	"Step definiton": {
 		"prefix": "[STEP DEFINITION]",
 		"body": [
-			"[STEP DEFINITION]\n    Step Description  = $1\n    Step Requirements = \n    Step Dependencies = \n    Step Conditions = <pre>\n                      </pre>\n    Step Expected Results = <pre>\n                            </pre>\n[/STEP DEFINITION]",
+			"[STEP DEFINITION]\n    Step Description  = $1\n    Step Requirements = \n    Step Dependencies = \n    Step Conditions = <pre>\n                          <br/>\n                          <br/>\n                      </pre>\n    Step Expected Results = <pre>\n                                <br/>\n                            </pre>\n[/STEP DEFINITION]",
 			"$2"
 		],
 		"description": "Step definiton"
