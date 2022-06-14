@@ -1,6 +1,6 @@
 {
 	"Step definiton": {
-		"prefix": "[step definition]",
+		"prefix": "[STEP DEFINITION]",
 		"body": [
 			"[STEP DEFINITION]\n    Step Description  = $1\n    Step Requirements = \n    Step Dependencies = \n    Step Conditions = <pre>\n                      </pre>\n    Step Expected Results = <pre>\n                            </pre>\n[/STEP DEFINITION]",
 			"$2"
@@ -8,7 +8,7 @@
 		"description": "Step definiton"
 	},
     "Test definiton": {
-		"prefix": "[test definition]",
+		"prefix": "[TEST DEFINITION]",
 		"body": [
 			"[TEST DEFINITION]\n    Test Description =  $1\n    Test Configuration = \n    Test Dependencies = \n[/TEST DEFINITION]",
 			"$2"

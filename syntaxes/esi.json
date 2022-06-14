@@ -61,11 +61,23 @@
 			]
 		},
 		{
-			"match": "\\b(time)\\b",
+			"match": "\\b(TEST DEFINITION|STEP DEFINITION|STEP INPUTS|STEP OUTPUTS|STEP ([0-9]+|Restart)|TEST STEPS|INCLUDE)\\b",
 			"name": "support.type.sys-types.c"
 		},
 		{
 			"include": "#block"
+		},
+		{
+			"match": "\\b(FUNC_[A-Za-z0-9_]+)\\b",
+			"name": "entity.name.function.c"
+		},
+		{
+			"match": "\\b(Test Description|Test Configuration|Test Dependencies|Step Description|Step Requirements|Step Dependencies|Step Conditions|Step Expected Results)\\b",
+			"name": "entity.name.function.c"
+		},
+		{
+			"match": "\\b((UBYTEARRAY|UINT|STRING)_[A-Za-z0-9_]+|time)\\b",
+			"name": "variable.other.member.c"
 		},
 		{
 			"begin": "(?x)\n(?:\n  ^ |\n  (?:\n    (?=\\s)(?<!else|new|return)(?<=\\w)  # word + space before name\n    |\n    (?=\\s*[A-Za-z_])(?<!&&)(?<=[*&>])   # type modifier before name\n  )\n)\n(\\s*)(?!(while|for|do|if|else|switch|catch|enumerate|return|sizeof|[cr]?iterate)\\s*\\()\n(\n  (?:[A-Za-z_][A-Za-z0-9_]*+|::)++  # actual name\n  |\n  (?:(?<=operator)(?:[-*&<>=+!]+|\\(\\)|\\[\\]))\n)\n\\s*(?=\\()",

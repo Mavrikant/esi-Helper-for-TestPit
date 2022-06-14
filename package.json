@@ -2,7 +2,7 @@
 	"name": "esi-for-testpit",
 	"displayName": "esi-for-testpit",
 	"description": "This is a extension for ESEN's TestPit files.",
-	"version": "0.0.1",
+	"version": "0.0.2",
 	"publisher": "karaman.dev",
 	"repository": "https://github.com/Microsoft/vscode-extension-samples/helloworld-sample",
 	"engines": {
