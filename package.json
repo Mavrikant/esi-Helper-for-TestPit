@@ -17,28 +17,24 @@
 	"main": "./out/extension.js",
 	"contributes": {
 		"languages": [{
-			"id": "esi",
-			"extensions": [ ".esi"],
-			"aliases": [ "ESI", "esi" ],
-			"configuration": "./language-configuration.json"
-		}],
+				"id": "esi",
+				"extensions": [ ".esi"],
+				"aliases": [ "ESI", "esi" ],
+				"configuration": "./language-configuration.json"
+			}
+		],
 		"grammars": [{
-			"language": "esi",
-			"scopeName": "source.esi",
-			"path": "./syntaxes/esi.json"
-		},
-		{
-			"scopeName": "source.esi.platform",
-			"path": "./syntaxes/Platform.tmLanguage"
-		}],
-		"snippets": [
-			{
+				"language": "esi",
+				"scopeName": "source.esi",
+				"path": "./syntaxes/esi.json"
+			}
+		],
+		"snippets": [{
 				"language": "esi",
 				"path": "./snippets.json"
 			}
 		],
-		"commands": [
-			{
+		"commands": [{
 				"command": "extension.helloWorld",
 				"title": "Hello World",
 				"category": "ESEN"
