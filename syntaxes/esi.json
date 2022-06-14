@@ -20,8 +20,19 @@
 			"include": "#comments"
 		},
 		{
-			"match": "\\b(break|case|continue|default|do|else|for|in|goto|if|and|while|_Pragma|pragma|runLim|encoding|return|switch|whil|then)\\b",
-			"name": "keyword.control.c"
+			"begin": "%",
+			"beginCaptures": {
+				"0": {
+					"name": "punctuation.definition.string.begin.c"
+				}
+			},
+			"end": "%",
+			"endCaptures": {
+				"0": {
+					"name": "punctuation.definition.string.end.c"
+				}
+			},
+			"name": "string.quoted.other.variable.include.c"
 		},
 		{
 			"match": "\\b(asm|__asm__|auto|bool|trigPreConFail|trigPostConFail|_Bool|char|_Complex|double|enum|float|_Imaginary|int|string|long|short|signed|struct|typedef|union|unsigned|void)\\b",
@@ -207,20 +218,8 @@
 			]
 		},
 		{
-			"match": "\\b(u_char|u_short|u_int|u_long|ushort|uint|u_quad_t|quad_t|qaddr_t|caddr_t|daddr_t|dev_t|fixpt_t|blkcnt_t|blksize_t|gid_t|in_addr_t|in_port_t|ino_t|key_t|mode_t|nlink_t|id_t|pid_t|off_t|segsz_t|swblk_t|uid_t|id_t|clock_t|size_t|ssize_t|time_t|useconds_t|suseconds_t|AccessRec|ADABool_|ADADefault_|ADAString_|ADAType_|ADMABool_|ADMAString_|AgentElement_|AllAttrDef_|AllAttrDefVal__|AllAttrType_|AllBaselineSet_|AllBaselineSetDefinition_|AllFolder_|AllItem_|AllModule_|AllObj__|AllObject_|AllProject_|AllRoot__|AllView_|AlternativeWord|ArchiveData|ArchiveInclusionDescriptor|ArchiveItem|ArchiveItemElementB_|ArchiveItemElementS_|ArchiveItemElementZ_|Array|ArraySect__|Arrow__|ATABaseType_|ATABool_|ATADesc_|ATAEnumColour_|ATAEnumColours_|ATAEnumDesc_|ATAEnumDescs_|ATAEnumSize_|ATAEnumString_|ATAEnumStrings_|ATAEnumValue_|ATAEnumValues_|ATAName_|ATARangeValue_|Attachment|Attr__|AttrBarsVal__|AttrBaseType|AttrDateVal__|AttrDef|AttrDef__|AttrDefVal__|AttrDescVal__|AttrDxlVal__|AttrHideVal__|AttrHistVal__|AttrInhVal__|AttrLocaleVal__|AttrMultiVal__|AttrTop__|AttrType|AttrType__|Baseline|BaselineSet|BaselineSetDefinition|Before__|Below__|Binary__|Bitmap|Buffer|Clipboard__|ClipboardLock|CMS_Message|CMS_MessageConsumer|Codepages__|Column|Comment|CommentBool_|CommentDate_|CommentDiscussion_|CommentModVer_|CommentStatus_|CommentString_|CommentUser_|ConfCachePolicy|ConfDirectory__|ConfStream|ConfType|ControlledResource__|Database__|Date|DB|DBE|DbPropertiesCache|DdcMode|DebugVar|DialogDefaults|Dictionary|Directory__|DiscDate_|DiscModVer_|DiscStatus_|DiscString_|DiscUser_|Discussion|DiscussionFilter|DiscussionFilterType|DiscussionStatus|DisplaySchemes|Document__|DOM_Document_|DOM_Element_|DropEvent|DropEventBool_|DropEventDBE_|DropEventInt_|DropEventString_|DxlObject|DxlObjectLHS|EachInLinkRef__|EmbeddedOleObject|Entire__|ExternalLink|ExternalLinkBehaviour|ExternalLinkDirection|ExtLinkRef__|Fattr_|Filter|FilteredLdapGroupListRef__|FilteredLdapUserListRef__|FilteredLdapUserRef__|Folder|FolderRef__|Fonts__|glueOn1__|glueOn2__|GrammarRules|Group|GroupElement_|GroupList|GroupRef__|HABool_|HADate_|HAInt_|HAString_|HAType_|HAValue_|HeaderEvent|History|HistorySession|HistoryType|HttpBody|HttpBody_|HttpBodyInt_|HttpBodyString_|HttpHeader|HttpHeader_|HttpHeaderEntry|HttpHeaderEntryString_|HttpResponse|HttpResponseBool_|HttpResponseInt_|HttpVerb|Icon|IconID|InLinkRef__|InPartition|InPartString_|InPlaceBox__|InPlaceEditEvent|IntegrityCheckItem|IntegrityItemType|IntegrityProblem|IntegrityResultsData|IPC|Item|Justification|Language|Languages__|Last__|LdapItem|LdapItemList|LdapItemString_|Link|LinkFilter|LinkModuleDescriptor|LinkRef|Linkset|Locale|Locales__|Lock|LockElement_|LockList|LockRef__|LoginPolicy|LongDateFormats__|MA_End__|MA_StdCombo__|MA_StdItem__|MA_StdMenu__|ModName_|Module|ModuleProperties|ModuleRef__|ModuleVersion|MsgExt|OAuthConsumer|OAuthConsumerBool_|OAuthConsumerString_|Object|ObjectRef__|OleAutoArgs|OleAutoObj|OSLCCatalogServiceProvider|OSLCCatalogServiceProviderString_|OSLCLinkType|OSLCLinkTypeBool_|OSLCLinkTypeString_|OSLCServer|OSLCServerBool_|OSLCServerString_|OSLCServiceProvider|OSLCServiceProviderDialog|OSLCServiceProviderDialog_|OSLCServiceProviderDialogBool_|OSLCServiceProviderDialogInt_|OSLCServiceProviderDialogs|OSLCServiceProviderDialogs_|OSLCServiceProviderDialogString_|OSLCServiceProviderString_|OutLinkRef__|OutPartition|OutPartString_|PageLayout|PageLayouts_|PartAttrString_|PartDefString_|PartFileString_|PartitionAttribute|PartitionDefinition|PartitionFile|PartitionLinkset|PartitionModule|PartitionPermission|PartitionView|PartModString_|PartViewString_|Permission|Picture__|ProblemItem|Project|Range_|RecentModule__|Regexp|ReservedName__|RichText|RichTextParagraph|RifDefinition|RifDefinitionBool_|RifDefinitionProject_|RifDefinitionString_|RifExportPackage|RifExportRecord|RifExportRecordDate_|RifExportRecordDef_|RifExportRecordString_|RifExportRecordUser_|RifImport|RifImportBool_|RifImportDate_|RifImportDef_|RifImportFolder_|RifImportFolderInfo|RifImportFolderInfoString_|RifImportModuleInfo|RifImportModuleInfoString_|RifImportPackage|RifImportPackageString_|RifImportUser_|RifModuleDefinition|RifModuleDefinitionBool_|RifModuleDefinitionDdcMode_|RifModuleDefinitionInt_|RifModuleDefinitionString_|RifModuleDefinitionVersion_|Root__|RowRef__|RTF_buffer__|RTF_buffer_No_Ole__|RTF_buffer_With_Ole__|RTF_string__|RTFCharset_|RTFEmbeddedOLE_|RTFInt_|RTFString_|RTFText_|Script__|Scroll__|ScrollDest__|ScrollEvent|ScrollSide|ScrollUpDown__|Sensitivity|SessionModule_|SessionObject_|ShortDateFormats__|Sibling__|SignatureEntry|SignatureInfo|SignatureInfoSpecifier__|Skip|Sort|SpellingAlternatives__|SpellingError|SpellingErrors__|SpellingOptions|Stat|Stream|Symbolic__|TableBorderPosition|TableBorderStyle|TableRef__|Template|TemplateB__|TokenReader|TokenWriter|ToolType|trigEvent_|Trigger|TriggerStatus|trigLevel_|trigLevelDesc_|trigLevelMod_|trigType_|User|UserClass|UserElement_|UserList|UserNotifyList|UserRef__|View|ViewDef|Views_|Window__|ZipType|allBaselines|noBaselines|HTMLToPlainText|HTMLToRichText|accept|ack|acknowledge|activateURL|active|addAcceleratorKey|addAwayLinkset|addBaselines|addFilter|addLinkModuleDescriptor|addLinkset|addMember|addMenu|addModule|addUser|addr_|after|all|ancestors|annotation|ansi|append|appendCell|appendColumn|appendRow|apply|applyTextFormattingToParagraph|archive|assignIcons|attrName|attrdef|attribute|backSlasher|background|baseWin|baseline|baselineExists|baselineInfo|baselineSet|baselined|batchMode|before|below|beside|binary|bitmap|block|body|box|bringToFront|busy|button|callStdItem_|canControl|canCreate|canDelete|canLock|canModify|canOpenFile|canRead|canUnlock|canWrite|canvas|cell|centered|centred|change|charOf|characterSet|charsetDefault|checkBox|checkConnect|checkDN|checkDXL|choice|cistrcmp|clear|clearDefaultViewForModule|clearDefaultViewForUser|client|clipClear|clipCopy|clipCut|clipLastOp|clipPaste|clipUndo|clipboardFormatName|close|codepageName|codepointOf|color|colour|column|combine|confAppend|confCopyFile|confDeleteDirectory|confDeleteFile|confDirectory|confDownloadFile|confFileExists|confMkdir|confRead|confRenameFile|confUploadFile|confWrite|confirm|contains|containsOle|contents|control|convertFromCodepage|convertToCodepage|copyFile|copyPassword|copyPictureObject|copyToClipboard|create|createButtonBar|createCombo|createDropCallback|createEditableCombo|createElement_|createItem|createMenu|createPrivate|createPublic|createString|current|currentANSIcodepage|currentColumn|currentDirectory|currentView|cutRichText|data|dateAndTime|dateOf|dateOnly|decodeResourceURL|decodeURL|decryptBuffer__|defaultTableAttribute|delete|deleteCell|deleteColumn|deleteFile|deleteMember|deletePicture|deleteRow|deleteTable|descendants|description|destroy|diff|directory|disable|disconnect|display|displayRich|displayRichWithColor|displayRichWithColour|document|doorsInfo|doorsVersion|doorsname|downgrade|downgradeShare|draw|drawIcon|dropDataAvailable|droppedAttrOLETextAvailable|droppedAttrRichTextAvailable|droppedAttrTextAvailable|droppedAttributeOLEText|droppedAttributeRichText|droppedAttributeText|droppedList|droppedString|dxlHere|dxlNumformat|dxlStrformat|echo|edit|editor|empty|enable|enableDefaultTableAttribute|encryptBuffer__|end|ensureUserRecordLoaded|entire|errorBox|escape|evalTop_|eval_|event|excludeCurrent|excludeLeaves|excludes|exists|existsGroup|existsUser|exportAttributeToFile|exportPicture|exportRTFString|field|fileName|filterTables|filtering|find|findByID|findGroupRDNFromName|findPlainText|findRichText|findUserInfoFromDN|findUserRDNFromLoginName|findUserRDNFromName|first|firstNonSpace|flush|flushDeletions|folder|font|formal|formalStatus|frame|fromBase64_|full|fullName|get|getAddressAttribute|getAttribute|getBorderSize|getBoundedUnicode|getCanvas|getCaptionHeight|getCellAlignment|getCellShowChangeBars|getCellShowLinkArrows|getCellWidth|getCheck|getColumnBottom|getColumnTop|getColumnValue|getDatabaseIdentifier|getDatabaseMailServer|getDatabaseName|getDateFormat|getDef|getDefaultViewForModule|getDefaultViewForUser|getDescription|getDescriptionAttribute|getDisplayPath|getDocumentBuffer_|getDocumentElement_|getDoorsBindNameDN|getDoorsGroupGroupDN|getDoorsGroupRoot|getDoorsUserGroupDN|getDoorsUserRoot|getDoorsUsernameAttribute|getElementName_|getElementText_|getElement_|getEmailAttribute|getFontSettings|getGroupMemberAttribute|getGroupNameAttribute|getGroupObjectClass|getIcon|getInPlaceColumnIndex|getInnerHTML|getInnerText|getLdapServerName|getLinkModuleDescriptorsExclusive|getLocksInDatabase|getLocksInFolder|getLocksInModule|getLoginNameAttribute|getMandatory|getMostRecentBaseline|getName|getOleWidthHeight|getOverridable|getParent|getParentFolder|getParentProject|getPictFormat|getPictWidthHeight|getPort|getPortNo|getPos|getProperties|getRealColorName|getRealColorOptionForTypes|getRealColourIcon|getRealColourName|getRealColourOptionForTypes|getRealPath|getRegistry|getResourceURL|getResourceURLConfigOptions|getRootOfPath|getRow|getSelectedCol|getSelectedItem|getSelectedListItemNames|getSelection|getShowTableAcrossModule|getSize|getSortColumn|getSourceName|getSourceVersion|getStringAttribute_|getTDSSOToken|getTable|getTargetName|getTelephoneAttribute|getTickCount_|getTitle|getURL|getUseLdap|getVal|getXML|getenv|gluedHelp|gotoObject|graphics|hardDelete|hasAttribute_|hasChildElements_|hasDefPermission|hasFocus|hasInPlace|hasLinks|hasNoLinks|hasPermission|hasValPermission|hash|height|help|helpOn|helpOnEx|hide|hideExplorer|htmlEdit|htmlText|htmlView|id|identifier|inClipboard|inPlaceChoiceAdd|inPlaceCopy|inPlaceCut|inPlaceGet|inPlaceMove|inPlacePaste|inPlaceReset|inPlaceSet|inPlaceShow|inPlaceTextHeight|inactive|includeCurrent|includeLeaves|includes|includesTime|infoBox|inherited|inheritedDef|inheritedVal|inplaceDisable|inplaceEditOff|inplaceEditing|inplaceEnable|inplaceEnabled|insert|insertCell|insertColumn|insertDroppedPicture|insertPictureFileAfter|insertRow|installed|intOf|invokeHTML|ipcHostname|isAccessInherited|isAccessInheritedDef|isAccessInheritedVal|isAnyBaselineSetOpen|isAttribute|isBaseline|isBaselinePresent|isBatch|isDefault|isDefaultURL|isDeleted|isDiscussionColumn|isEdit|isFiltered|isFirstObjectInDXLSet|isLastObjectInDXLSet|isLocked|isLockedByUser|isLockedClosed|isMember|isNull|isOleObjectSelected|isOpen|isOutline|isRanged|isRead|isRichText|isSelected|isShare|isUsed|isValidInt|isValidName|isViewModified|isVisible|isalnum|isalpha|isascii|iscntrl|isdigit|isgraph|islower|isprint|ispunct|isspace|isupper|isxdigit|item|itemClipboardIsEmpty|itemFromID|justify|key|kind|label|language|last|lastError|lastModifiedTime|lastSelectedModule_|ldapGroupsForUser|leaf|left|leftAligned|length|level|levelModifier|linksVisible|list|listView|load|loadDirectory|loadLdapConfig|loadUserRecord|locale|lock|lower|main|major|match|matches|member|menuBar|messageBox|minor|mkdir|modified|modify|module|moduleVersion|move|multiList|name|new|next|nextMajor|nextMinor|noElems|noError|notNull|null|number|object|of|ok|oleActivate|oleCloseAutoObject|oleCopy|oleCount|oleCreateAutoObject|oleCut|oleDeactivate|oleDelete|oleGet|oleGetAutoObject|oleGetResult|oleInsert|oleIsObject|oleMethod|oleOpen|olePaste|olePasteLink|olePut|oleResetSize|oleRtf|oleSaveBitmap|oleSetResult|open|opposite|outline|outlining|overrideTableAttribute|parent|parseXMLBuffer_|parseXMLString_|pasteToEditbox|path|pictureCopy|plainText|platform|previous|priority|probeAttr_|probeRichAttr_|progressCancelled|progressMessage|progressRange|progressStart|progressStep|progressStop|project|purge|purgeObjects_|put|query|radioBox|raise|random|read|readFile|ready|realBackground|realColor|realColour|realOf|realize|rectangle|recv|refresh|refreshDBExplorer|regexp|regexp2|region|registeredFormat|regular|reject|release|remove|removeLinkModuleDescriptor|removeModule|removeUnlistedRichText|rename|renameFile|replaceRichText|reserved|resumeDXLTracing_|return_|richClip|richField|richText|richTextFragment|richTextNoOle|richTextWithOle|richtext_identifier|right|rootName_|row|rtfSubString|safeHTMLBuffer|save|saveClipboardBitmapToFile|saveDirectory|saveDroppedPicture|saveLdapConfig|saveUserRecord|saved|scope|search|sectionNeedsSaved|select|selected|send|sendEMailMessage|sendEMailNotification|separator|server|session|set|setAddressAttribute|setAllCellsAlignment|setAllCellsBorder|setAllCellsShowChangeBars|setAllCellsShowLinkArrows|setAllCellsWidth|setAnnotation|setAttrFromHTML|setAttribute|setBaseWindowContext|setCellAlignment|setCellBorder|setCellShowChangeBars|setCellShowLinkArrows|setCellWidth|setCenteredSize|setCentredSize|setCheck|setColumnAlignment|setColumnShowChangeBars|setColumnShowLinkArrows|setColumnWidth|setDXLWindowAsParent|setDebugCallback_|setDebugging_|setDef|setDefault|setDefaultViewForModule|setDefaultViewForUser|setDescription|setDescriptionAttribute|setDiscussionColumn|setDoorsBindNameDN|setDoorsBindPassword|setDoorsBindPasswordDB|setDoorsGroupGroupDN|setDoorsGroupRoot|setDoorsUserGroupDN|setDoorsUserRoot|setDoorsUsernameAttribute|setDropList|setDropString|setEmailAttribute|setExtraHeightShare|setExtraWidthShare|setFocus|setFromBuffer|setGroupMemberAttribute|setGroupNameAttribute|setGroupObjectClass|setHTML|setInnerHTML|setInnerText|setLdapServerName|setLinkModuleDescriptorsExclusive|setLoginNameAttribute|setMandatory|setMaxValue|setMinValue|setOverridable|setParent|setPortNo|setPos|setRealColorOptionForTypes|setRealColourOptionForTypes|setRegistry|setRichClip|setRowWidth|setShowDeletedItems|setShowTableAcrossModule|setSize|setSortColumn|setStringAttribute_|setTelephoneAttribute|setTitle|setURL|setUseLdap|setVal|setempty|setenv|setlower|setupper|share|show|showDeletedObjects|showExplorer|showOlePropertiesDialog|showPictures|showTables|showing|showingExplorer|sibling|sizeof|sleep_|softDelete|sort|sorting|source|sourceAbsNo|sourceVersion|specific|specificDef|specificVal|splitter|stacked|start|startConfiguringMenus|startDXLTracing_|startTimer|stopConfiguringMenus|stopDXLTracing_|stopTimer|stored|stringOf|suffix|suspendDXLTracing_|symbolToUnicode|system|tab|table|tableContents|target|targetAbsNo|targetVersion|tempFileName|tempStringOf|text|timer|title|toBase64_|toTable|today|toggle|toolBar|toolBarComboAdd|toolBarComboCount|toolBarComboCutCopySelectedText|toolBarComboDelete|toolBarComboEmpty|toolBarComboGetEditBoxSelection|toolBarComboGetItem|toolBarComboGetSelection|toolBarComboInsert|toolBarComboPasteText|toolBarComboSelect|toolBarMove|toolBarShow|toolBarVisible|top|topMost|treeView|trigEvent_|trigLevelDesc_|trigLevel_|trigType_|trigger|type|typeName|undelete|undeleteCell|undeleteColumn|undeleteRow|undeleteTable|unicodeString|uniqueID|unixerror|unload|unlock|unlockDiscardAll|unlockDiscardSection|unlockSaveAll|unlockSaveSection|unsaved|unset|unsetAll|unsetAllDef|unsetAllVal|unsetDef|unsetVal|updateGroupList|updateToolBars|updateUserList|upper|useAncestors|useAutoIndentation|useColumns|useCompression|useCurrent|useDefaultTableAttribute|useDescendants|useFilterTables|useFiltering|useGraphics|useGraphicsColumn|useLevel|useOutlining|useRTFColour|useSelection|useShowDeleted|useShowExplorer|useShowLinkIndicators|useShowLinks|useShowPictures|useShowTables|useSorting|useTooltipColumn|useWindows|user|userLocale|username|utf8|validateDOORSURL|value|values|version|versionID|versionString|verticalCheckBox|verticalRadioBox|view|views|warningBox|halt|wcharOf|when|who|width|win32SystemWait_|write)\\b",
+			"match": "\\b(time)\\b",
 			"name": "support.type.sys-types.c"
-		},
-		{
-			"match": "\\b(pthread_attr_t|pthread_cond_t|pthread_condattr_t|pthread_mutex_t|pthread_mutexattr_t|pthread_once_t|pthread_rwlock_t|pthread_rwlockattr_t|pthread_t|pthread_key_t)\\b",
-			"name": "support.type.pthread.c"
-		},
-		{
-			"match": "(?x) \\b\n(int8_t|int16_t|int32_t|int64_t|uint8_t|uint16_t|uint32_t|uint64_t|int_least8_t\n|int_least16_t|int_least32_t|int_least64_t|uint_least8_t|uint_least16_t|uint_least32_t\n|uint_least64_t|int_fast8_t|int_fast16_t|int_fast32_t|int_fast64_t|uint_fast8_t\n|uint_fast16_t|uint_fast32_t|uint_fast64_t|intptr_t|uintptr_t|intmax_t|intmax_t\n|uintmax_t|uintmax_t)\n\\b",
-			"name": "support.type.stdint.c"
-		},
-		{
-			"match": "\\b(noErr|kNilOptions|kInvalidID|kVariableLengthArray)\\b",
-			"name": "support.constant.mac-classic.c"
 		},
 		{
 			"match": "(?x) \\b\n(AbsoluteTime|Boolean|Byte|ByteCount|ByteOffset|BytePtr|CompTimeValue|ConstLogicalAddress|ConstStrFileNameParam\n|ConstStringPtr|Duration|Fixed|FixedPtr|Float32|Float32Point|Float64|Float80|Float96|FourCharCode|Fract|FractPtr\n|Handle|ItemCount|LogicalAddress|OptionBits|OSErr|OSStatus|OSType|OSTypePtr|PhysicalAddress|ProcessSerialNumber\n|ProcessSerialNumberPtr|ProcHandle|Ptr|ResType|ResTypePtr|ShortFixed|ShortFixedPtr|SignedByte|SInt16|SInt32|SInt64\n|SInt8|Size|StrFileName|StringHandle|StringPtr|TimeBase|TimeRecord|TimeScale|TimeValue|TimeValue64|UInt16|UInt32\n|UInt64|UInt8|UniChar|UniCharCount|UniCharCountPtr|UniCharPtr|UnicodeScalarValue|UniversalProcHandle|UniversalProcPtr\n|UnsignedFixed|UnsignedFixedPtr|UnsignedWide|UTF16Char|UTF32Char|UTF8Char)\n\\b",
@@ -267,7 +266,90 @@
 		},
 		{
 			"include": "#line_continuation_character"
-		}
+		},
+		{
+			"begin": "([)([-_a-zA-Z0-9/s]+)(])",
+			"beginCaptures": {
+				"1": {
+					"name": "punctuation.definition.tag.xml"
+				},
+				"2": {
+					"name": "entity.name.tag.xml"
+				},
+				"3": {
+					"name": "entity.name.tag.namespace.xml"
+				},
+				"4": {
+					"name": "punctuation.separator.namespace.xml"
+				},
+				"5": {
+					"name": "entity.name.tag.localname.xml"
+				}
+			},
+			"end": "(/[/)([-_a-zA-Z0-9]+)(/])",
+			"endCaptures": {
+				"1": {
+					"name": "punctuation.definition.tag.xml"
+				},
+				"2": {
+					"name": "punctuation.definition.tag.xml"
+				},
+				"3": {
+					"name": "entity.name.tag.xml"
+				},
+				"4": {
+					"name": "entity.name.tag.namespace.xml"
+				},
+				"5": {
+					"name": "punctuation.separator.namespace.xml"
+				},
+				"6": {
+					"name": "entity.name.tag.localname.xml"
+				},
+				"7": {
+					"name": "punctuation.definition.tag.xml"
+				}
+			},
+			"name": "meta.tag.no-content.xml",
+			"patterns": [
+				{
+					"include": "#tagStuff"
+				}
+			]
+		},
+		{
+			"begin": "([/?)(?:([-\\w\\.]+)((:)))?([-\\w\\.:]+)",
+			"captures": {
+				"1": {
+					"name": "punctuation.definition.tag.xml"
+				},
+				"2": {
+					"name": "entity.name.tag.namespace.xml"
+				},
+				"3": {
+					"name": "entity.name.tag.xml"
+				},
+				"4": {
+					"name": "punctuation.separator.namespace.xml"
+				},
+				"5": {
+					"name": "entity.name.tag.localname.xml"
+				}
+			},
+			"end": "(/?])",
+			"name": "meta.tag.xml",
+			"patterns": [
+				{
+					"include": "#tagStuff"
+				}
+			]
+		},
+		{
+			"include": "#entity"
+		},
+		{
+			"include": "#bare-ampersand"
+		}		
 	],
 	"repository": {
 		"access": {
@@ -321,9 +403,6 @@
 				},
 				{
 					"include": "#access"
-				},
-				{
-					"include": "#libc"
 				},
 				{
 					"include": "#c_function_call"
@@ -404,17 +483,6 @@
 					"include": "#pragma-mark"
 				}
 			]
-		},
-		"libc": {
-			"captures": {
-				"1": {
-					"name": "punctuation.whitespace.support.function.leading.c"
-				},
-				"2": {
-					"name": "support.function.C99.c"
-				}
-			},
-			"match": "(?x) (\\s*) \\b\n(_Exit|(?:nearbyint|nextafter|nexttoward|netoward|nan)[fl]?|a(?:cos|sin)h?[fl]?|abort|abs|asctime|assert\n|atan(?:[h2]?[fl]?)?|atexit|ato[ifl]|atoll|bsearch|btowc|cabs[fl]?|cacos|cacos[fl]|cacosh[fl]?\n|calloc|carg[fl]?|casinh?[fl]?|catanh?[fl]?|cbrt[fl]?|ccosh?[fl]?|ceil[fl]?|cexp[fl]?|cimag[fl]?\n|clearerr|clock|clog[fl]?|conj[fl]?|copysign[fl]?|cosh?[fl]?|cpow[fl]?|cproj[fl]?|creal[fl]?\n|csinh?[fl]?|csqrt[fl]?|ctanh?[fl]?|ctime|difftime|div|erfc?[fl]?|exit|fabs[fl]?\n|exp(?:2[fl]?|[fl]|m1[fl]?)?|fclose|fdim[fl]?|fe[gs]et(?:env|exceptflag|round)|feclearexcept\n|feholdexcept|feof|feraiseexcept|ferror|fetestexcept|feupdateenv|fflush|fgetpos|fgetw?[sc]\n|floor[fl]?|fmax?[fl]?|fmin[fl]?|fmod[fl]?|fopen|fpclassify|fprintf|fputw?[sc]|fread|free|freopen\n|frexp[fl]?|fscanf|fseek|fsetpos|ftell|fwide|fwprintf|print|fwrite|fwscanf|genv|get[sc]|getchar|gmtime\n|gwc|gwchar|hypot[fl]?|ilogb[fl]?|imaxabs|imaxdiv|isalnum|isalpha|isblank|iscntrl|isdigit|isfinite\n|isgraph|isgreater|isgreaterequal|isinf|isless(?:equal|greater)?|isw?lower|isnan|isnormal|isw?print\n|isw?punct|isw?space|isunordered|isw?upper|iswalnum|iswalpha|iswblank|iswcntrl|iswctype|iswdigit|iswgraph\n|isw?xdigit|labs|ldexp[fl]?|ldiv|lgamma[fl]?|llabs|lldiv|llrint[fl]?|llround[fl]?|localeconv|localtime\n|log[2b]?[fl]?|log1[p0][fl]?|longjmp|lrint[fl]?|lround[fl]?|malloc|mbr?len|mbr?towc|mbsinit|mbsrtowcs\n|mbstowcs|memchr|memcmp|memcpy|memmove|memset|mktime|modf[fl]?|perror|pow[fl]?|printf|puts|putw?c(?:har)?\n|qsort|raise|rand|remainder[fl]?|realloc|remove|remquo[fl]?|rename|rewind|rint[fl]?|round[fl]?|scalbl?n[fl]?\n|scanf|setbuf|setjmp|setlocale|setvbuf|signal|signbit|sinh?[fl]?|snprintf|sprintf|sqrt[fl]?|srand|sscanf\n|strcat|strchr|strcmp|strcoll|strcpy|strcspn|strerror|strftime|strlen|strncat|strncmp|strncpy|strpbrk\n|strrchr|strspn|strstr|strto[kdf]|strtoimax|strtol[dl]?|strtoull?|strtoumax|strxfrm|swprintf|swscanf\n|system|tan|tan[fl]|tanh[fl]?|tgamma[fl]?|time|tmpfile|tmpnam|tolower|toupper|trunc[fl]?|ungetw?c|va_arg\n|va_copy|va_end|va_start|vfw?printf|vfw?scanf|vprintf|vscanf|vsnprintf|vsprintf|vsscanf|vswprintf|vswscanf\n|vwprintf|vwscanf|wcrtomb|wcscat|wcschr|wcscmp|wcscoll|wcscpy|wcscspn|wcsftime|wcslen|wcsncat|wcsncmp|wcsncpy\n|wcspbrk|wcsrchr|wcsrtombs|wcsspn|wcsstr|wcsto[dkf]|wcstoimax|wcstol[dl]?|wcstombs|wcstoull?|wcstoumax|wcsxfrm\n|wctom?b|wmem(?:set|chr|cpy|cmp|move)|wprintf|wscanf)\\b"
 		},
 		"line_continuation_character": {
 			"patterns": [
@@ -856,9 +924,6 @@
 							"include": "#access"
 						},
 						{
-							"include": "#libc"
-						},
-						{
 							"include": "#c_function_call"
 						},
 						{
@@ -890,29 +955,6 @@
 						},
 						{
 							"include": "#string_placeholder"
-						},
-						{
-							"include": "#line_continuation_character"
-						}
-					]
-				},
-				{
-					"begin": "'",
-					"beginCaptures": {
-						"0": {
-							"name": "punctuation.definition.string.begin.c"
-						}
-					},
-					"end": "'",
-					"endCaptures": {
-						"0": {
-							"name": "punctuation.definition.string.end.c"
-						}
-					},
-					"name": "string.quoted.single.c",
-					"patterns": [
-						{
-							"include": "#string_escaped_char"
 						},
 						{
 							"include": "#line_continuation_character"
