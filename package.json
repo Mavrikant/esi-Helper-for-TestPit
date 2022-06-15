@@ -1,10 +1,11 @@
 {
-	"name": "esi-for-testpit",
-	"displayName": "esi-for-testpit",
+	"name": "esi-helper-for-testpit",
+	"displayName": "esi Helper for TestPit",
 	"description": "This is a extension for ESEN's TestPit files.",
-	"version": "0.0.3",
+	"icon": "images/TestPitIcon.ico",
+	"version": "0.0.4",
 	"publisher": "karaman.dev",
-	"repository": "https://github.com/Microsoft/vscode-extension-samples/helloworld-sample",
+	"repository": "https://github.com/Mavrikant/esi-Helper-for-TestPit",
 	"engines": {
 		"vscode": "^1.34.0"
 	},
@@ -12,7 +13,7 @@
 		"Other"
 	],
 	"activationEvents": [
-		"onCommand:extension.helloWorld"
+		"onCommand:extension.sayHello"
 	],
 	"main": "./out/extension.js",
 	"contributes": {
@@ -44,8 +45,8 @@
 		],
 		"commands": [
 			{
-				"command": "extension.helloWorld",
-				"title": "Hello World",
+				"command": "extension.sayHello",
+				"title": "Say Hello",
 				"category": "ESI"
 			}
 		]
