@@ -9,9 +9,7 @@
 
 This is a extension for ESEN's TestPit files.
 
-## Demo
-
-TODO: add demo gif
+![Animation](/images/animation.gif)
 
 ## Features
 
