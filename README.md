@@ -9,7 +9,7 @@
 
 This is a extension for ESEN's TestPit files.
 
-![Animation](/images/animation.gif)
+![Animation](/images/Animation.gif)
 
 ## Features
 
