@@ -72,6 +72,10 @@
 			"name": "entity.name.function.c"
 		},
 		{
+			"match": "\\b(PART_[A-Za-z0-9_]+)\\b",
+			"name": "entity.name.function.c"
+		},
+		{
 			"match": "\\b(include file|Test Description|Test Configuration|Test Dependencies|Step Description|Step Requirements|Step Dependencies|Step Conditions|Step Expected Results)\\b",
 			"name": "entity.name.function.c"
 		},
