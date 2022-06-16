@@ -61,7 +61,7 @@
 			]
 		},
 		{
-			"match": "\\b(TEST DEFINITION|STEP DEFINITION|STEP INPUTS|STEP OUTPUTS|STEP ([0-9]+|Restart)|TEST STEPS|INCLUDE)\\b",
+			"match": "\\b(VARIABLES|TEST DEFINITION|STEP DEFINITION|STEP INPUTS|STEP OUTPUTS|STEP ([0-9]+|Restart)|TEST STEPS|INCLUDE)\\b",
 			"name": "support.type.sys-types.c"
 		},
 		{
@@ -76,7 +76,7 @@
 			"name": "entity.name.function.c"
 		},
 		{
-			"match": "\\b((UBYTEARRAY|UINT|STRING)_[A-Za-z0-9_]+|time)\\b",
+			"match": "\\b((UBYTEARRAY|INT|UINT|ULONGINT|STRING)_[A-Za-z0-9_]+|time)\\b",
 			"name": "variable.other.member.c"
 		},
 		{

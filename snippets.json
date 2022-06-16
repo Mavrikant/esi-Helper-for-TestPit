@@ -40,6 +40,20 @@
 			"[FUNC_$1]\n    time = $2\n[/FUNC_$1]"		
 		],
 		"description": "FUNC_ step"
+	},
+	"PART_": {
+		"prefix": "[PART_XXXXXX]",
+		"body": [
+			"[PART_$1]\n    time = $2\n[/PART_$1]"		
+		],
+		"description": "PART_ step"
+	},
+	"VARIABLES": {
+		"prefix": "[VARIABLES]",
+		"body": [
+			"[VARIABLES]\n    %$1% = $2\n[/VARIABLES]"		
+		],
+		"description": "VARIABLES"
 	}
 
 }
