@@ -61,7 +61,7 @@
 			]
 		},
 		{
-			"match": "\\b(VARIABLES|TEST DEFINITION|STEP DEFINITION|STEP INPUTS|STEP OUTPUTS|STEP ([0-9]+|Restart)|TEST STEPS|INCLUDE)\\b",
+			"match": "\\b(CMD_EXECUTE|VARIABLES|TEST DEFINITION|STEP DEFINITION|STEP INPUTS|STEP OUTPUTS|STEP ([0-9]+|Restart)|TEST STEPS|INCLUDE)\\b",
 			"name": "support.type.sys-types.c"
 		},
 		{

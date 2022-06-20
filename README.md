@@ -15,9 +15,10 @@ This is a extension for ESEN's TestPit files.
 
 - Snippet
 - Syntax-highlighting
+- Formatting (TODO)
+- Bracket control (TODO)
 - Semantic-highlighting (TODO)
 - Linting / Error Checking (TODO)
-- Formatting (TODO)
 - Component Data: auto-completion and hover-information (TODO)
 
 # Developers

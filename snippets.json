@@ -54,6 +54,13 @@
 			"[VARIABLES]\n    %$1% = $2\n[/VARIABLES]"		
 		],
 		"description": "VARIABLES"
+	},
+	"CMD_EXECUTE": {
+		"prefix": "[CMD_EXECUTE]",
+		"body": [
+			"[CMD_EXECUTE]\n    system call = $1\n    wait timeout = %TIMEOUT%\n[/CMD_EXECUTE]"		
+		],
+		"description": "CMD_EXECUTE"
 	}
 
 }
