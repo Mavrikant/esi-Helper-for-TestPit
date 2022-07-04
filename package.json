@@ -4,7 +4,7 @@
 	"description": "This is a extension for ESEN's TestPit files.",
 	"icon": "images/TestPitIcon.ico",
 	"version": "0.0.7",
-	"publisher": "karaman.dev",
+	"publisher": "karamandev",
 	"repository": "https://github.com/Mavrikant/esi-Helper-for-TestPit",
 	"engines": {
 		"vscode": "^1.34.0"
