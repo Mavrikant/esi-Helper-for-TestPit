@@ -76,11 +76,15 @@
 			"name": "entity.name.function.c"
 		},
 		{
+			"match": "\\b(DIS_[A-Za-z0-9_]+)\\b",
+			"name": "entity.name.function.c"
+		},
+		{
 			"match": "\\b(include file|Test Description|Test Configuration|Test Dependencies|Step Description|Step Requirements|Step Dependencies|Step Conditions|Step Expected Results)\\b",
 			"name": "entity.name.function.c"
 		},
 		{
-			"match": "\\b((UBYTEARRAY|INT|UINT|ULONGINT|STRING)_[A-Za-z0-9_]+|time)\\b",
+			"match": "\\b((UBYTEARRAY|INT|UINT|ULONGINT|STRING|UINTARRAY)_[A-Za-z0-9_]+|time)\\b",
 			"name": "variable.other.member.c"
 		},
 		{
