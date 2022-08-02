@@ -9,18 +9,7 @@
 			"include": "#comments"
 		},
 		{
-			"begin": "%",
-			"beginCaptures": {
-				"0": {
-					"name": "punctuation.definition.string.begin.c"
-				}
-			},
-			"end": "%",
-			"endCaptures": {
-				"0": {
-					"name": "punctuation.definition.string.end.c"
-				}
-			},
+			"match": "\\b(%[A-Za-z0-9_]+%)\\b",
 			"name": "string.quoted.other.variable.include.c"
 		},
 		{
@@ -34,9 +23,6 @@
 			"include": "#numbers"
 		},
 		{
-			"include": "#strings"
-		},	
-		{
 			"begin": "^\\s*((#)\\s*line)\\b",
 			"beginCaptures": {
 				"1": {
@@ -49,9 +35,6 @@
 			"end": "(?=(?://|/\\*))|(?<!\\\\)(?=\\n)",
 			"name": "meta.preprocessor.c",
 			"patterns": [
-				{
-					"include": "#strings"
-				},
 				{
 					"include": "#numbers"
 				},
@@ -68,15 +51,7 @@
 			"include": "#block"
 		},
 		{
-			"match": "\\b(FUNC_[A-Za-z0-9_]+)\\b",
-			"name": "entity.name.function.c"
-		},
-		{
-			"match": "\\b(PART_[A-Za-z0-9_]+)\\b",
-			"name": "entity.name.function.c"
-		},
-		{
-			"match": "\\b(DIS_[A-Za-z0-9_]+)\\b",
+			"match": "\\b((FUNC|PART|DIS|1553)_[A-Za-z0-9_]+)\\b",
 			"name": "entity.name.function.c"
 		},
 		{
@@ -765,36 +740,6 @@
 						},
 						{
 							"include": "$self"
-						}
-					]
-				}
-			]
-		},
-		"strings": {
-			"patterns": [
-				{
-					"begin": "\"",
-					"beginCaptures": {
-						"0": {
-							"name": "punctuation.definition.string.begin.c"
-						}
-					},
-					"end": "\"",
-					"endCaptures": {
-						"0": {
-							"name": "punctuation.definition.string.end.c"
-						}
-					},
-					"name": "string.quoted.double.c",
-					"patterns": [
-						{
-							"include": "#string_escaped_char"
-						},
-						{
-							"include": "#string_placeholder"
-						},
-						{
-							"include": "#line_continuation_character"
 						}
 					]
 				}
