@@ -3,7 +3,7 @@
 	"displayName": "esi Helper for TestPit",
 	"description": "This is a extension for ESEN's TestPit files.",
 	"icon": "images/TestPitIcon.ico",
-	"version": "0.0.11",
+	"version": "0.0.12",
 	"publisher": "karamandev",
 	"repository": "https://github.com/Mavrikant/esi-Helper-for-TestPit",
 	"engines": {
@@ -13,7 +13,8 @@
 		"Other"
 	],
 	"activationEvents": [
-		"onCommand:extension.sayHello"
+		"onCommand:extension.sayHello",
+		"onCommand:extension.openWithTestPit"
 	],
 	"main": "./out/extension.js",
 	"contributes": {
@@ -47,6 +48,11 @@
 			{
 				"command": "extension.sayHello",
 				"title": "Say Hello",
+				"category": "ESI"
+			},
+			{
+				"command": "extension.openWithTestPit",
+				"title": "Open with TestPit",
 				"category": "ESI"
 			}
 		]
