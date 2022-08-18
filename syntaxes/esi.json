@@ -44,14 +44,14 @@
 			]
 		},
 		{
-			"match": "\\b(CMD_EXECUTE|VARIABLES|TEST DEFINITION|STEP DEFINITION|STEP INPUTS|STEP OUTPUTS|STEP ([0-9]+|Restart)|TEST STEPS|INCLUDE)\\b",
+			"match": "\\b(CMD_EXECUTE|VARIABLES|TEST DEFINITION|STEP DEFINITION|STEP INPUTS|STEP OUTPUTS|STEP ([0-9]+|Restart)|TEST STEPS|MANUAL_VERIFY|EXTERNAL VERIFY|INCLUDE)\\b",
 			"name": "support.type.sys-types.c"
 		},
 		{
 			"include": "#block"
 		},
 		{
-			"match": "\\b((FUNC|PART|DIS|1553)_[A-Za-z0-9_]+)\\b",
+			"match": "\\b((429|1553|DIS|PART|FUNC|CMD)_[A-Za-z0-9_]+)\\b",
 			"name": "entity.name.function.c"
 		},
 		{
