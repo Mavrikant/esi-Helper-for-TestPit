@@ -55,6 +55,13 @@
 		],
 		"description": "VARIABLES"
 	},
+	"MANUAL_VERIFY": {
+		"prefix": "[MANUAL_VERIFY]",
+		"body": [
+			"[MANUAL_VERIFY]\n    text = $1\n[/MANUAL_VERIFY]"		
+		],
+		"description": "MANUAL_VERIFY"
+	},
 	"CMD_EXECUTE": {
 		"prefix": "[CMD_EXECUTE]",
 		"body": [
