@@ -62,6 +62,13 @@
 		],
 		"description": "MANUAL_VERIFY"
 	},
+	"EXTERNAL_VERIFY": {
+		"prefix": "[EXTERNAL_VERIFY]",
+		"body": [
+			"[EXTERNAL_VERIFY]\n    result file = $1\n[/EXTERNAL_VERIFY]"		
+		],
+		"description": "EXTERNAL_VERIFY"
+	},
 	"CMD_EXECUTE": {
 		"prefix": "[CMD_EXECUTE]",
 		"body": [
@@ -69,5 +76,4 @@
 		],
 		"description": "CMD_EXECUTE"
 	}
-
 }
