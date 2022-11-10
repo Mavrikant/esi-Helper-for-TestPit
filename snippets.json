@@ -23,16 +23,23 @@
 	"STEP INPUTS": {
 		"prefix": "[STEP INPUTS]",
 		"body": [
-			" [STEP INPUTS]\n    $1\n [/STEP INPUTS]"		
+			" [STEP INPUTS]\n     $1\n [/STEP INPUTS]"		
 		],
 		"description": "Step inputs"
 	},
 	"STEP OUTPUTS": {
 		"prefix": "[STEP OUTPUTS]",
 		"body": [
-			" [STEP OUTPUTS]\n    $1\n [/STEP OUTPUTS]"		
+			" [STEP OUTPUTS]\n     $1\n [/STEP OUTPUTS]"		
 		],
 		"description": "Step outputs"
+	},
+	"STEP GET_DUMP": {
+		"prefix": "[STEP GET_DUMP]",
+		"body": [
+			"[STEP GET_DUMP]\n    [STEP INPUTS]\n    [/STEP INPUTS]\n[/STEP GET_DUMP]"		
+		],
+		"description": "Step GET_DUMP"
 	},
 	"FUNC_": {
 		"prefix": "[FUNC_XXXXXX]",
