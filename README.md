@@ -15,7 +15,7 @@ This is a extension for ESEN's TestPit files.
 
 - Snippet
 - Syntax-highlighting
-- Step number update (TODO)
+- Step number update
 - Formatting (TODO)
 - Bracket control (TODO)
 - Semantic-highlighting (TODO)
