@@ -31,6 +31,5 @@ This project is licensed under the terms of the GNU General Public License v3.0
 
 Copyright © 2020 M. Serdar Karaman
 
-
 [3.2]: https://raw.githubusercontent.com/MartinHeinz/MartinHeinz/master/linkedin-3-16.png (LinkedIn)
 [2]: https://www.linkedin.com/in/mserdarkaraman/
