@@ -3,7 +3,7 @@
 	"displayName": "esi Helper for TestPit",
 	"description": "This is a extension for ESEN's TestPit files.",
 	"icon": "images/TestPitIcon.ico",
-	"version": "0.0.19",
+	"version": "0.0.20",
 	"publisher": "karamandev",
 	"repository": "https://github.com/Mavrikant/esi-Helper-for-TestPit",
 	"engines": {
@@ -60,7 +60,14 @@
 				"title": "Update Step Numbers",
 				"category": "ESI"
 			}
-		]
+		],
+		"keybindings": [
+            {
+                "command": "extension.gotoStep",
+                "key": "ctrl+g",
+                "mac": "cmd+g"
+            }
+        ]
 	},
 	"scripts": {
 		"vscode:prepublish": "npm run compile",
