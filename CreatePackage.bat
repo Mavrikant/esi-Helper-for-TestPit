@@ -1,2 +1,3 @@
-vsce package
-vsce publish
+call npm install 
+npx vsce package
+npx vsce publish

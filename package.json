@@ -3,7 +3,7 @@
 	"displayName": "esi Helper for TestPit",
 	"description": "This is a extension for ESEN's TestPit files.",
 	"icon": "images/TestPitIcon.ico",
-	"version": "0.0.21",
+	"version": "0.0.22",
 	"publisher": "karamandev",
 	"repository": "https://github.com/Mavrikant/esi-Helper-for-TestPit",
 	"engines": {
