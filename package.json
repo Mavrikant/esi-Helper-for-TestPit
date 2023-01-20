@@ -65,7 +65,8 @@
             {
                 "command": "extension.gotoStep",
                 "key": "ctrl+g",
-                "mac": "cmd+g"
+                "mac": "cmd+g",
+				"when": "editorLangId == esi"
             }
         ]
 	},

@@ -63,39 +63,47 @@ export function activate(context: vscode.ExtensionContext) {
         });
       }
 
-    const disposable4 = vscode.commands.registerCommand('extension.gotoStep', async () => {
-        vscode.window.showInformationMessage('gotoStep');
-        let stepNumberStr = "a";
+    const disposable4 = vscode.commands.registerCommand("extension.gotoStep", async () => {
+        let stepNumberStr = "10";
         const searchQuery = await vscode.window.showInputBox({
           placeHolder: "Step number",
-          prompt: "Step Number to go",
-          value: stepNumberStr
+          prompt: "Enter step number you want to",
+          value: stepNumberStr,
         });
-        stepNumberStr = String(searchQuery);
-        let lineNumber = 0;
-        const editor = vscode.window.activeTextEditor;
-        if (!editor) {
-          return;
-        }
-        const reg1 = /\[STEP /;
-        const reg2 = /\]/g;
-        const zzz = new RegExp(reg1.source + stepNumberStr + reg2.source);
+        
+        if (searchQuery != undefined) {
+          stepNumberStr = String(searchQuery);
+          let lineNumber = 0;
+          const editor = vscode.window.activeTextEditor;
+          if (!editor) {
+            return;
+          }
+          const reg1 = /\[STEP /;
+          const reg2 = /\]/g;
+          const stepRegex = new RegExp(
+            reg1.source + stepNumberStr + reg2.source
+          );
 
-        const lines = editor.document.getText().split('\n');
-        for (let i = 0; i < lines.length; i++)
-        {
-            const match = lines[i].match(zzz);
-            if (match)
-            {
-                lineNumber = i+1;
-                break;
+          const lines = editor.document.getText().split("\n");
+          for (let i = 0; i < lines.length; i++) {
+            const match = lines[i].match(stepRegex);
+            if (match) {
+              lineNumber = i + 1;
+              break;
             }
+          }
+          if(lineNumber !=0)
+          {
+            const range = editor.document.lineAt(lineNumber - 1).range;
+            editor.selection = new vscode.Selection(range.start, range.end);
+            editor.revealRange(range, vscode.TextEditorRevealType.AtTop);
+          }
+          else{
+            vscode.window.showInformationMessage('Step not found!');
+          }
         }
-
-        const range = editor.document.lineAt(lineNumber-1).range;
-        editor.selection =  new vscode.Selection(range.start, range.end);
-        editor.revealRange(range, vscode.TextEditorRevealType.AtTop);
-    });
+      }
+    );
 
     context.subscriptions.push(disposable);
     context.subscriptions.push(disposable2);
