@@ -3,7 +3,7 @@
 	"displayName": "esi Helper for TestPit",
 	"description": "This is a extension for ESEN's TestPit files.",
 	"icon": "images/TestPitIcon.ico",
-	"version": "0.0.23",
+	"version": "0.0.24",
 	"publisher": "karamandev",
 	"repository": "https://github.com/Mavrikant/esi-Helper-for-TestPit",
 	"engines": {
@@ -58,6 +58,11 @@
 			{
 				"command": "extension.updateStepNumbers",
 				"title": "Update Step Numbers",
+				"category": "ESI"
+			},
+			{
+				"command": "extension.refactorDocument",
+				"title": "Refactor document",
 				"category": "ESI"
 			}
 		],
