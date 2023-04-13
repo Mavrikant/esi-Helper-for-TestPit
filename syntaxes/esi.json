@@ -59,7 +59,7 @@
 			"name": "entity.name.function.c"
 		},
 		{
-			"match": "\\b((UBYTE|USHORT|INT|UINT|ULONGINT|FLOAT|DOUBLE|STRING)(ARRAY)?_[A-Za-z0-9_]+|time)\\b",
+			"match": "\\b((BOOL|BOOLARRAY|BYTE|BYTEARRAY|DOUBLE|DOUBLEARRAY|FLOAT|FLOATARRAY|INT|INTARRAY|LONG|LONGARRAY|SHORT|SHORTARRAY|STRING|UBYTE|UBYTEARRAY|UINT|UINTARRAY|ULONG|ULONGARRAY|USHORT|USHORTARRAY)_[A-Za-z0-9_]+|time)\\b",
 			"name": "variable.other.member.c"
 		},
 		{

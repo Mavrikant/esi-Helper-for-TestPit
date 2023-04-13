@@ -27,12 +27,8 @@ export function activate(context: vscode.ExtensionContext) {
     "extension.openWithTestPit",
     async () => {
       const execSync = cp.exec;
-      const currentlyOpenTabfilePath =
-        vscode.window.activeTextEditor?.document.uri.fsPath;
-      execSync(
-        '"C:\\Program Files (x86)\\TestPit\\Tools\\bin\\TestPit.exe" --sf=' +
-          currentlyOpenTabfilePath
-      );
+      const currentlyOpenTabfilePath = vscode.window.activeTextEditor?.document.uri.fsPath;
+      execSync('"C:\\Program Files (x86)\\TestPit\\Tools\\bin\\TestPit.exe" --sf=' + currentlyOpenTabfilePath);
     }
   );
 
