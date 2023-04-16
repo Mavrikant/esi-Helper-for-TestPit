@@ -1,22 +1,13 @@
-// The module 'vscode' contains the VS Code extensibility API
-// Import the module and reference it with the alias vscode in your code below
 import * as vscode from "vscode";
 import * as cp from "child_process";
 import * as fs from "fs";
-import * as path from "path";
-import * as os from "os";
 
-const testpitExecutablePath =
-  '"C:\\Program Files (x86)\\TestPit\\Tools\\bin\\TestPit.exe"';
+const testpitExecutablePath = '"C:\\Program Files (x86)\\TestPit\\Tools\\bin\\TestPit.exe"';
 let isUpdating = false;
-const updateInterval = 1000; // milliseconds
+const updateInterval = 500; // milliseconds
 const diagnosticCollections = new Map<string, vscode.DiagnosticCollection>();
 
-// this method is called when your extension is activated
-// your extension is activated the very first time the command is executed
 export function activate(context: vscode.ExtensionContext) {
-  // Use the console to output diagnostic information (console.log) and errors (console.error)
-  // This line of code will only be executed once when your extension is activated
   console.log(
     'Congratulations, your extension "esi Helper for TestPit" is now active!'
   );
@@ -29,16 +20,68 @@ export function activate(context: vscode.ExtensionContext) {
       cp.exec(testpitExecutablePath + " --ow=" + currentlyOpenTabfilePath);
     }
   );
+  class OutputChannel {
+    private static instance: vscode.OutputChannel;
 
-  function clearDiagnostics(document: vscode.TextDocument) {
-    const uri = document.uri.toString();
-    const diagnosticCollection = diagnosticCollections.get(uri);
-    if (diagnosticCollection) {
-      diagnosticCollection.clear();
-      diagnosticCollection.dispose();
-      diagnosticCollections.delete(uri);
+    public static getInstance(): vscode.OutputChannel {
+      if (!OutputChannel.instance) {
+        OutputChannel.instance =
+          vscode.window.createOutputChannel("esi Helper");
+      }
+      return OutputChannel.instance;
     }
   }
+  const disposable6 = vscode.commands.registerCommand(
+    "extension.runValidityCheck",
+    async () => {
+      const editor = vscode.window.activeTextEditor;
+
+      if (!editor) {
+        return;
+      }
+
+      // create a temporary file with a unique filename
+      const tempFilePath = editor.document.uri.fsPath + ".temp";
+      fs.writeFileSync(tempFilePath, editor.document.getText());
+
+      // Add new diagnostics to the collection
+      const diagnosticList: vscode.Diagnostic[] = [];
+
+      const config = vscode.workspace.getConfiguration();
+      const testpitConfigFolderpath = config.get(
+        "esihelper.testpitConfigFolderpath"
+      );
+
+      const validityOutput = cp
+        .execSync(
+          testpitExecutablePath +
+            " --cf=" +
+            testpitConfigFolderpath +
+            "MessageConfig_RNESystemTestCable" +
+            " --ac=" +
+            testpitConfigFolderpath +
+            "A429MessageFields.xml" +
+            " --mc=" +
+            testpitConfigFolderpath +
+            "1553MessageFields.xml" +
+            " --dc=" +
+            testpitConfigFolderpath +
+            "DiscreteSignals.xml" +
+            " --pc=" +
+            testpitConfigFolderpath +
+            "MemoryPorts.xml" +
+            " --sf=" +
+            tempFilePath +
+            " --validateScriptOnly=true"
+        )
+        .toString();
+
+      // print a message to the output channel
+      OutputChannel.getInstance().clear();
+      OutputChannel.getInstance().appendLine(validityOutput);
+      OutputChannel.getInstance().show(true);
+    }
+  );
 
   vscode.workspace.onDidChangeTextDocument((event) => {
     if (isUpdating) {
@@ -66,18 +109,35 @@ export function activate(context: vscode.ExtensionContext) {
       }
       diagnosticCollection.clear();
 
-      // Add new diagnostics to the collection
       const diagnosticList: vscode.Diagnostic[] = [];
+      const config = vscode.workspace.getConfiguration();
+      const testpitConfigFolderpath = config.get(
+        "esihelper.testpitConfigFolderpath"
+      );
 
       const validityOutput = cp
         .execSync(
           testpitExecutablePath +
+            " --cf=" +
+            testpitConfigFolderpath +
+            "MessageConfig_RNESystemTestCable" +
+            " --ac=" +
+            testpitConfigFolderpath +
+            "A429MessageFields.xml" +
+            " --mc=" +
+            testpitConfigFolderpath +
+            "1553MessageFields.xml" +
+            " --dc=" +
+            testpitConfigFolderpath +
+            "DiscreteSignals.xml" +
+            " --pc=" +
+            testpitConfigFolderpath +
+            "MemoryPorts.xml" +
             " --sf=" +
             tempFilePath +
             " --validateScriptOnly=true"
         )
         .toString();
-      console.log(validityOutput);
       fs.unlinkSync(tempFilePath);
 
       const lines = validityOutput.split("\n");
@@ -90,13 +150,10 @@ export function activate(context: vscode.ExtensionContext) {
           const Type = regexMatch[1];
           const isLineNumberExist = regexMatch[2];
           const lineNumber = regexMatch[3];
-          console.log(`Type: ${Type}`);
-          console.log(`isLineNumberExist: ${isLineNumberExist}`);
-          console.log(`Line number: ${lineNumber}`);
-
+    
           const range = new vscode.Range(
             new vscode.Position(parseInt(lineNumber) - 1, 0),
-            new vscode.Position(parseInt(lineNumber) - 1, 0)
+            new vscode.Position(parseInt(lineNumber) - 1, 100)
           );
           const message = line.substring(9).trim();
           let DiagnosticSeverity = vscode.DiagnosticSeverity.Error;
@@ -112,7 +169,6 @@ export function activate(context: vscode.ExtensionContext) {
         }
       }
 
-      // Add the diagnostic to the collection
       diagnosticCollection.set(uri, diagnosticList);
 
       isUpdating = false;
@@ -125,7 +181,6 @@ export function activate(context: vscode.ExtensionContext) {
   );
 
   async function updateStepNumbers() {
-    // Get the active text editor
     const editor = vscode.window.activeTextEditor;
 
     if (!editor) {
@@ -199,30 +254,18 @@ export function activate(context: vscode.ExtensionContext) {
   );
 
   async function refactorDocument() {
-    // Get the current editor
     const editor = vscode.window.activeTextEditor;
 
-    // If there's no open editor, do nothing
     if (!editor) {
       return;
     }
 
-    // Get the entire text of the document
     const text = editor.document.getText();
-
-    // Split the text into an array of lines
     const lines = text.split("\n");
-
-    // Trim trailing spaces from each line
     const trimmedLines = lines.map((line) => line.trimEnd());
-
-    // Join the lines back into a single string
     const trimmedText = trimmedLines.join("\n");
-
-    // Replace tabs with 4 spaces and trim trailing spaces
     const replacedText = trimmedText.replace(/\t/g, "    ");
 
-    // Replace the entire text of the document with the trimmed text
     editor.edit((editBuilder) => {
       const fullDocRange = new vscode.Range(
         editor.document.positionAt(0),
@@ -236,4 +279,5 @@ export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(disposable3);
   context.subscriptions.push(disposable4);
   context.subscriptions.push(disposable5);
+  context.subscriptions.push(disposable6);
 }

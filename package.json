@@ -1,9 +1,9 @@
 {
 	"name": "esi-helper-for-testpit",
 	"displayName": "esi Helper for TestPit",
-	"description": "This is a extension for ESEN's TestPit files.",
+	"description": "Provides syntax highlighting, validation, and code snippets for esi files used in the TestPit tool.",
 	"icon": "images/TestPitIcon.ico",
-	"version": "0.0.25",
+	"version": "0.1.0",
 	"publisher": "karamandev",
 	"repository": "https://github.com/Mavrikant/esi-Helper-for-TestPit",
 	"engines": {
@@ -11,10 +11,6 @@
 	},
 	"categories": [
 		"Other"
-	],
-	"activationEvents": [
-		"onCommand:extension.sayHello",
-		"onCommand:extension.openWithTestPit"
 	],
 	"main": "./out/extension.js",
 	"contributes": {
@@ -57,7 +53,12 @@
 			},
 			{
 				"command": "extension.refactorDocument",
-				"title": "Refactor document",
+				"title": "Refactor Document",
+				"category": "ESI"
+			},
+			{
+				"command": "extension.runValidityCheck",
+				"title": "Run Validity Check",
 				"category": "ESI"
 			}
 		],
@@ -68,7 +69,22 @@
                 "mac": "cmd+g",
 				"when": "editorLangId == esi"
             }
-        ]
+        ],
+		"configuration": {
+			"title": "esi Helper for TestPit",
+			"properties": {
+				"esihelper.refactorDocumentOnSave": {
+					"type": "boolean",
+					"default": false,
+					"description": "Refactor document on save by cleaning whitespaces and turning tabs to spaces."
+				},
+				"esihelper.testpitConfigFolderpath": {
+					"type": ["string"],
+					"default": "D:\\RNE\\product_library\\tools\\TestPit\\Config\\",
+					"description": "Path of TestPit Config files."
+				}
+			}
+		}
 	},
 	"scripts": {
 		"vscode:prepublish": "npm run compile",
