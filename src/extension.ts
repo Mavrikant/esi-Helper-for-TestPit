@@ -3,6 +3,12 @@
 import * as vscode from "vscode";
 import * as cp from "child_process";
 
+const testpitExecutablePath =
+  '"C:\\Program Files (x86)\\TestPit\\Tools\\bin\\TestPit.exe"';
+let diagnosticCollection: vscode.DiagnosticCollection;
+let isUpdating = false;
+const updateInterval = 1000; // milliseconds
+
 // this method is called when your extension is activated
 // your extension is activated the very first time the command is executed
 export function activate(context: vscode.ExtensionContext) {
@@ -26,11 +32,72 @@ export function activate(context: vscode.ExtensionContext) {
   const disposable2 = vscode.commands.registerCommand(
     "extension.openWithTestPit",
     async () => {
-      const execSync = cp.exec;
-      const currentlyOpenTabfilePath = vscode.window.activeTextEditor?.document.uri.fsPath;
-      execSync('"C:\\Program Files (x86)\\TestPit\\Tools\\bin\\TestPit.exe" --sf=' + currentlyOpenTabfilePath);
+      const currentlyOpenTabfilePath =
+        vscode.window.activeTextEditor?.document.uri.fsPath;
+      cp.exec(testpitExecutablePath + " --ow=" + currentlyOpenTabfilePath);
     }
   );
+
+  vscode.workspace.onDidChangeTextDocument((event) => {
+    if (isUpdating) {
+      return;
+    }
+    isUpdating = true;
+    setTimeout(() => {
+      const activeEditor = vscode.window.activeTextEditor;
+      if (!activeEditor) {
+        return;
+      }
+
+      const uri = activeEditor.document.uri;
+            
+      diagnosticCollection = vscode.languages.createDiagnosticCollection(
+        uri.fsPath
+      );
+
+      const diagnosticList: vscode.Diagnostic[] | undefined = [];
+      diagnosticCollection.set(activeEditor.document.uri, diagnosticList);
+
+      const validityOutput = cp
+        .execSync(
+          testpitExecutablePath +
+            " --sf=" +
+            uri.fsPath +
+            " --validateScriptOnly=true"
+        )
+        .toString();
+      console.log(validityOutput);
+
+      const lines = validityOutput.split("\n");
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        const regexMatch = line.match(/\[(Fatal|Error|Warn.)\] Line:\s*(\d+)/);
+        if (regexMatch) {
+          const Type = regexMatch[1];
+          const lineNumber = regexMatch[2];
+          console.log(`Type: ${Type}`);
+          console.log(`Line number: ${lineNumber}`);
+
+          const range = new vscode.Range(
+            new vscode.Position(parseInt(lineNumber) - 1, 99),
+            new vscode.Position(parseInt(lineNumber) - 1, 99)
+          );
+          const message = line.substring(9).trim();
+          const diagnostic = new vscode.Diagnostic(
+            range,
+            message,
+            vscode.DiagnosticSeverity.Warning
+          );
+          diagnosticList.push(diagnostic);
+        }
+      }
+
+      // Add the diagnostic to the collection
+      diagnosticCollection.set(activeEditor.document.uri, diagnosticList);
+
+      isUpdating = false;
+    }, updateInterval);
+  });
 
   const disposable3 = vscode.commands.registerCommand(
     "extension.updateStepNumbers",
