@@ -2,6 +2,14 @@ import * as vscode from "vscode";
 import * as cp from "child_process";
 import * as fs from "fs";
 import * as util from "util";
+import TelemetryReporter from "@vscode/extension-telemetry";
+import { performance } from "perf_hooks";
+
+// the application insights key (also known as instrumentation key)
+const key = "53cdcbb8-0891-4ebb-8804-641335a36c2a";
+
+// telemetry reporter
+let reporter: TelemetryReporter;
 
 const testpitExecutablePath =
   '"C:\\Program Files (x86)\\TestPit\\Tools\\bin\\TestPit.exe"';
@@ -13,10 +21,16 @@ export function activate(context: vscode.ExtensionContext) {
   console.log(
     'Congratulations, your extension "esi Helper for TestPit" is now active!'
   );
+  // create telemetry reporter on extension activation
+  reporter = new TelemetryReporter(key);
+  // ensure it gets properly disposed. Upon disposal the events will be flushed
+  context.subscriptions.push(reporter);
 
   const disposable2 = vscode.commands.registerCommand(
     "extension.openWithTestPit",
     async () => {
+      reporter.sendTelemetryEvent("openWithTestPit_Usage");
+
       const currentlyOpenTabfilePath =
         vscode.window.activeTextEditor?.document.uri.fsPath;
       cp.exec(testpitExecutablePath + " --ow=" + currentlyOpenTabfilePath);
@@ -41,6 +55,7 @@ export function activate(context: vscode.ExtensionContext) {
       if (!editor) {
         return;
       }
+      const start = performance.now();
 
       // create a temporary file with a unique filename
       const tempFilePath = editor.document.uri.fsPath + ".temp";
@@ -83,6 +98,14 @@ export function activate(context: vscode.ExtensionContext) {
       OutputChannel.getInstance().clear();
       OutputChannel.getInstance().appendLine(validityOutput);
       OutputChannel.getInstance().show(true);
+
+      const end = performance.now();
+      const elapsedTime = end - start;
+      reporter.sendTelemetryEvent(
+        "runValidityCheck_Usage",
+        { stringProp: "some string" },
+        { elapsedTime_ms: elapsedTime }
+      );
     }
   );
 
@@ -96,7 +119,7 @@ export function activate(context: vscode.ExtensionContext) {
       if (!editor) {
         return;
       }
-
+      const start = performance.now();
       const uri = editor.document.uri;
       let diagnosticCollection = diagnosticCollections.get(uri.toString());
       if (!diagnosticCollection) {
@@ -125,8 +148,23 @@ export function activate(context: vscode.ExtensionContext) {
       fs.unlinkSync(tempFilePath);
 
       diagnosticCollection.set(uri, diagnostics);
-    } catch (err) {
-      console.error(err);
+
+      const end = performance.now();
+      const elapsedTime = end - start;
+      reporter.sendTelemetryEvent(
+        "onDidChangeTextDocument_Usage",
+        { stringProp: "some string" },
+        { elapsedTime_ms: elapsedTime }
+      );
+    } catch (error: any) {
+      const stackTrace = error.stack || "";
+      const errorMessage = error.message || "";
+      const exception = {
+        name: error.name,
+        message: errorMessage,
+        stack: stackTrace,
+      };
+      reporter.sendTelemetryException(exception);
     } finally {
       isUpdating = false;
     }
@@ -186,7 +224,7 @@ export function activate(context: vscode.ExtensionContext) {
     if (!editor) {
       return;
     }
-
+    reporter.sendTelemetryEvent("updateStepNumbers_Usage");
     const fullText = editor.document.getText();
     const firstLine = editor.document.lineAt(0);
     const lastLine = editor.document.lineAt(editor.document.lineCount - 1);
@@ -226,6 +264,8 @@ export function activate(context: vscode.ExtensionContext) {
       if (!editor) {
         return;
       }
+      reporter.sendTelemetryEvent("gotoStep_Usage");
+
       const searchQuery = await vscode.window.showInputBox({
         placeHolder: "Step number",
         prompt: "Enter the step number you want to go to",
@@ -259,6 +299,7 @@ export function activate(context: vscode.ExtensionContext) {
     if (!editor) {
       return;
     }
+    reporter.sendTelemetryEvent("refactorDocument_Usage");
 
     const text = editor.document.getText();
     const lines = text.split("\n");
