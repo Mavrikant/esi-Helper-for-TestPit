@@ -18,17 +18,6 @@ export function activate(context: vscode.ExtensionContext) {
     'Congratulations, your extension "esi Helper for TestPit" is now active!'
   );
 
-  // The command has been defined in the package.json file
-  // Now provide the implementation of the command with registerCommand
-  // The commandId parameter must match the command field in package.json
-
-  const disposable = vscode.commands.registerCommand(
-    "extension.sayHello",
-    () => {
-      vscode.window.showInformationMessage("Hello World from esi Helper!");
-    }
-  );
-
   const disposable2 = vscode.commands.registerCommand(
     "extension.openWithTestPit",
     async () => {
@@ -212,7 +201,6 @@ export function activate(context: vscode.ExtensionContext) {
     });
   }
 
-  context.subscriptions.push(disposable);
   context.subscriptions.push(disposable2);
   context.subscriptions.push(disposable3);
   context.subscriptions.push(disposable4);

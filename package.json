@@ -46,11 +46,6 @@
 		],
 		"commands": [
 			{
-				"command": "extension.sayHello",
-				"title": "Say Hello",
-				"category": "ESI"
-			},
-			{
 				"command": "extension.openWithTestPit",
 				"title": "Open with TestPit",
 				"category": "ESI"
