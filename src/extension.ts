@@ -2,12 +2,15 @@
 // Import the module and reference it with the alias vscode in your code below
 import * as vscode from "vscode";
 import * as cp from "child_process";
+import * as fs from "fs";
+import * as path from "path";
+import * as os from "os";
 
 const testpitExecutablePath =
   '"C:\\Program Files (x86)\\TestPit\\Tools\\bin\\TestPit.exe"';
-let diagnosticCollection: vscode.DiagnosticCollection;
 let isUpdating = false;
 const updateInterval = 1000; // milliseconds
+const diagnosticCollections = new Map<string, vscode.DiagnosticCollection>();
 
 // this method is called when your extension is activated
 // your extension is activated the very first time the command is executed
@@ -27,62 +30,90 @@ export function activate(context: vscode.ExtensionContext) {
     }
   );
 
+  function clearDiagnostics(document: vscode.TextDocument) {
+    const uri = document.uri.toString();
+    const diagnosticCollection = diagnosticCollections.get(uri);
+    if (diagnosticCollection) {
+      diagnosticCollection.clear();
+      diagnosticCollection.dispose();
+      diagnosticCollections.delete(uri);
+    }
+  }
+
   vscode.workspace.onDidChangeTextDocument((event) => {
     if (isUpdating) {
       return;
     }
     isUpdating = true;
     setTimeout(() => {
-      const activeEditor = vscode.window.activeTextEditor;
-      if (!activeEditor) {
+      const editor = vscode.window.activeTextEditor;
+
+      if (!editor) {
         return;
       }
 
-      const uri = activeEditor.document.uri;
-            
-      diagnosticCollection = vscode.languages.createDiagnosticCollection(
-        uri.fsPath
-      );
+      // create a temporary file with a unique filename
+      const tempFilePath = editor.document.uri.fsPath + ".temp";
+      fs.writeFileSync(tempFilePath, editor.document.getText());
 
-      const diagnosticList: vscode.Diagnostic[] | undefined = [];
-      diagnosticCollection.set(activeEditor.document.uri, diagnosticList);
+      const uri = editor.document.uri;
+      let diagnosticCollection = diagnosticCollections.get(uri.toString());
+      if (!diagnosticCollection) {
+        diagnosticCollection = vscode.languages.createDiagnosticCollection(
+          uri.toString()
+        );
+        diagnosticCollections.set(uri.toString(), diagnosticCollection);
+      }
+      diagnosticCollection.clear();
+
+      // Add new diagnostics to the collection
+      const diagnosticList: vscode.Diagnostic[] = [];
 
       const validityOutput = cp
         .execSync(
           testpitExecutablePath +
             " --sf=" +
-            uri.fsPath +
+            tempFilePath +
             " --validateScriptOnly=true"
         )
         .toString();
       console.log(validityOutput);
+      fs.unlinkSync(tempFilePath);
 
       const lines = validityOutput.split("\n");
       for (let i = 0; i < lines.length; i++) {
         const line = lines[i];
-        const regexMatch = line.match(/\[(Fatal|Error|Warn.)\] Line:\s*(\d+)/);
+        const regexMatch = line.match(
+          /\[(Fatal|Error|Warn.)\] (Line:)?\s*(\d+)?/
+        );
         if (regexMatch) {
           const Type = regexMatch[1];
-          const lineNumber = regexMatch[2];
+          const isLineNumberExist = regexMatch[2];
+          const lineNumber = regexMatch[3];
           console.log(`Type: ${Type}`);
+          console.log(`isLineNumberExist: ${isLineNumberExist}`);
           console.log(`Line number: ${lineNumber}`);
 
           const range = new vscode.Range(
-            new vscode.Position(parseInt(lineNumber) - 1, 99),
-            new vscode.Position(parseInt(lineNumber) - 1, 99)
+            new vscode.Position(parseInt(lineNumber) - 1, 0),
+            new vscode.Position(parseInt(lineNumber) - 1, 0)
           );
           const message = line.substring(9).trim();
+          let DiagnosticSeverity = vscode.DiagnosticSeverity.Error;
+          if (Type == "Warn.") {
+            DiagnosticSeverity = vscode.DiagnosticSeverity.Warning;
+          }
           const diagnostic = new vscode.Diagnostic(
             range,
             message,
-            vscode.DiagnosticSeverity.Warning
+            DiagnosticSeverity
           );
           diagnosticList.push(diagnostic);
         }
       }
 
       // Add the diagnostic to the collection
-      diagnosticCollection.set(activeEditor.document.uri, diagnosticList);
+      diagnosticCollection.set(uri, diagnosticList);
 
       isUpdating = false;
     }, updateInterval);
