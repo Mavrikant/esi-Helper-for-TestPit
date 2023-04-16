@@ -7,21 +7,22 @@
     </a>
 </p>
 
-This is a extension for ESEN's TestPit files.
+The **ESI Helper for TestPit** is a powerful Visual Studio Code extension that enhances the test script development process. It provides real-time feedback by checking the validity of test scripts, allowing for reliable and accurate debugging of errors. With its powerful syntax highlighter, the extension makes test scripts easy to read and understand. Additionally, the library of snippets enables developers to quickly and easily complete tests, while the refactoring feature speeds up the code maintenance process. Overall, the ESI Helper for TestPit improves developer productivity, saves time, and ensures the creation of faster and error-free tests.
 
 ![Animation](/images/Animation.gif)
 
+![Problmes](/images/Problems.png)
 ## Features
 
 - Snippet
 - Syntax-highlighting
 - Step number update
+- Bracket control
 - Goto step number(CTRL + G)
-- Undefined macro usage check (TODO)
-- Formatting (TODO)
-- Bracket control (TODO)
+- Linting / Error Checking
+- Undefined macro usage control
+- Auto-formatting (TODO)
 - Semantic-highlighting (TODO)
-- Linting / Error Checking (TODO)
 - Component Data: auto-completion and hover-information (TODO)
 
 # Developers
