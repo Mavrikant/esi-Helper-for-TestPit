@@ -2,7 +2,8 @@ import * as vscode from "vscode";
 import * as cp from "child_process";
 import * as fs from "fs";
 
-const testpitExecutablePath = '"C:\\Program Files (x86)\\TestPit\\Tools\\bin\\TestPit.exe"';
+const testpitExecutablePath =
+  '"C:\\Program Files (x86)\\TestPit\\Tools\\bin\\TestPit.exe"';
 let isUpdating = false;
 const updateInterval = 500; // milliseconds
 const diagnosticCollections = new Map<string, vscode.DiagnosticCollection>();
@@ -148,12 +149,11 @@ export function activate(context: vscode.ExtensionContext) {
         );
         if (regexMatch) {
           const Type = regexMatch[1];
-          const isLineNumberExist = regexMatch[2];
-          const lineNumber = regexMatch[3];
-    
+          const lineNumber = parseInt(regexMatch[3]) - 1;
+
           const range = new vscode.Range(
-            new vscode.Position(parseInt(lineNumber) - 1, 0),
-            new vscode.Position(parseInt(lineNumber) - 1, 100)
+            new vscode.Position(lineNumber, editor.document.lineAt(lineNumber).text.search(/\S|$/)),
+            editor.document.lineAt(lineNumber).range.end
           );
           const message = line.substring(9).trim();
           let DiagnosticSeverity = vscode.DiagnosticSeverity.Error;
