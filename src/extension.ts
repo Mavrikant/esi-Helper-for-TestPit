@@ -1,6 +1,7 @@
 import * as vscode from "vscode";
 import * as cp from "child_process";
 import * as fs from "fs";
+import * as util from "util";
 
 const testpitExecutablePath =
   '"C:\\Program Files (x86)\\TestPit\\Tools\\bin\\TestPit.exe"';
@@ -76,6 +77,7 @@ export function activate(context: vscode.ExtensionContext) {
             " --validateScriptOnly=true"
         )
         .toString();
+      fs.unlinkSync(tempFilePath);
 
       // print a message to the output channel
       OutputChannel.getInstance().clear();
@@ -84,21 +86,16 @@ export function activate(context: vscode.ExtensionContext) {
     }
   );
 
-  vscode.workspace.onDidChangeTextDocument((event) => {
+  vscode.workspace.onDidChangeTextDocument(async (event) => {
     if (isUpdating) {
       return;
     }
     isUpdating = true;
-    setTimeout(() => {
+    try {
       const editor = vscode.window.activeTextEditor;
-
       if (!editor) {
         return;
       }
-
-      // create a temporary file with a unique filename
-      const tempFilePath = editor.document.uri.fsPath + ".temp";
-      fs.writeFileSync(tempFilePath, editor.document.getText());
 
       const uri = editor.document.uri;
       let diagnosticCollection = diagnosticCollections.get(uri.toString());
@@ -110,70 +107,73 @@ export function activate(context: vscode.ExtensionContext) {
       }
       diagnosticCollection.clear();
 
-      const diagnosticList: vscode.Diagnostic[] = [];
-      const config = vscode.workspace.getConfiguration();
-      const testpitConfigFolderpath = config.get(
-        "esihelper.testpitConfigFolderpath"
+      const testpitConfigFolderpath = vscode.workspace
+        .getConfiguration()
+        .get("esihelper.testpitConfigFolderpath");
+
+      // create a temporary file with a unique filename
+      const tempFilePath = editor.document.uri.fsPath + ".temp";
+      fs.writeFileSync(tempFilePath, editor.document.getText());
+
+      const validityOutput = await executeTestpitValidity(
+        tempFilePath,
+        testpitExecutablePath,
+        testpitConfigFolderpath
       );
 
-      const validityOutput = cp
-        .execSync(
-          testpitExecutablePath +
-            " --cf=" +
-            testpitConfigFolderpath +
-            "MessageConfig_RNESystemTestCable" +
-            " --ac=" +
-            testpitConfigFolderpath +
-            "A429MessageFields.xml" +
-            " --mc=" +
-            testpitConfigFolderpath +
-            "1553MessageFields.xml" +
-            " --dc=" +
-            testpitConfigFolderpath +
-            "DiscreteSignals.xml" +
-            " --pc=" +
-            testpitConfigFolderpath +
-            "MemoryPorts.xml" +
-            " --sf=" +
-            tempFilePath +
-            " --validateScriptOnly=true"
-        )
-        .toString();
+      const diagnostics = parseValidtyOutput(validityOutput, editor);
       fs.unlinkSync(tempFilePath);
 
-      const lines = validityOutput.split("\n");
-      for (let i = 0; i < lines.length; i++) {
-        const line = lines[i];
-        const regexMatch = line.match(
-          /\[(Fatal|Error|Warn.)\] (Line:)?\s*(\d+)?/
-        );
-        if (regexMatch) {
-          const Type = regexMatch[1];
-          const lineNumber = parseInt(regexMatch[3]) - 1;
-
-          const range = new vscode.Range(
-            new vscode.Position(lineNumber, editor.document.lineAt(lineNumber).text.search(/\S|$/)),
-            editor.document.lineAt(lineNumber).range.end
-          );
-          const message = line.substring(9).trim();
-          let DiagnosticSeverity = vscode.DiagnosticSeverity.Error;
-          if (Type == "Warn.") {
-            DiagnosticSeverity = vscode.DiagnosticSeverity.Warning;
-          }
-          const diagnostic = new vscode.Diagnostic(
-            range,
-            message,
-            DiagnosticSeverity
-          );
-          diagnosticList.push(diagnostic);
-        }
-      }
-
-      diagnosticCollection.set(uri, diagnosticList);
-
+      diagnosticCollection.set(uri, diagnostics);
+    } catch (err) {
+      console.error(err);
+    } finally {
       isUpdating = false;
-    }, updateInterval);
+    }
   });
+
+  async function executeTestpitValidity(
+    FilePath: fs.PathLike,
+    testpitExecutablePath: string,
+    testpitConfigFolderpath: unknown
+  ) {
+    const command = `${testpitExecutablePath} --cf=${testpitConfigFolderpath}MessageConfig_RNESystemTestCable --ac=${testpitConfigFolderpath}A429MessageFields.xml --mc=${testpitConfigFolderpath}1553MessageFields.xml --dc=${testpitConfigFolderpath}DiscreteSignals.xml --pc=${testpitConfigFolderpath}MemoryPorts.xml --sf=${FilePath} --validateScriptOnly=true`;
+    const validityOutput = await util.promisify(cp.exec)(command);
+    return validityOutput.stdout.toString();
+  }
+
+  function parseValidtyOutput(
+    validityOutput: string,
+    editor: vscode.TextEditor
+  ) {
+    const diagnostics = [];
+    const lines = validityOutput.split("\n");
+    for (const line of lines) {
+      const regexMatch = line.match(
+        /\[(Fatal|Error|Warn.)\] (Line:)?\s*(\d+)?/
+      );
+      if (regexMatch) {
+        const type = regexMatch[1];
+        const lineNumber = parseInt(regexMatch[3]) - 1;
+        const lineText = editor.document.lineAt(lineNumber).text;
+        const firstNonSpaceCharIndex = lineText.search(/\S|$/);
+        const range = new vscode.Range(
+          lineNumber,
+          firstNonSpaceCharIndex,
+          lineNumber,
+          lineText.trimEnd().length
+        );
+        const message = line.substring(9).trim();
+        const severity =
+          type === "Warn."
+            ? vscode.DiagnosticSeverity.Warning
+            : vscode.DiagnosticSeverity.Error;
+        const diagnostic = new vscode.Diagnostic(range, message, severity);
+        diagnostics.push(diagnostic);
+      }
+    }
+    return diagnostics;
+  }
 
   const disposable3 = vscode.commands.registerCommand(
     "extension.updateStepNumbers",
