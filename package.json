@@ -82,7 +82,9 @@
 					"description": "Refactor document on save by cleaning whitespaces and turning tabs to spaces."
 				},
 				"esihelper.testpitConfigFolderpath": {
-					"type": ["string"],
+					"type": [
+						"string"
+					],
 					"default": "D:\\RNE\\product_library\\tools\\TestPit\\Config\\",
 					"description": "Path of TestPit Config files."
 				}
@@ -96,13 +98,13 @@
 		"watch": "tsc -watch -p ./"
 	},
 	"devDependencies": {
-		"@types/node": "^16.11.7",
-		"@types/vscode": "^1.34.0",
+		"@types/node": "^16.18.23",
+		"@types/vscode": "^1.77.0",
 		"@typescript-eslint/eslint-plugin": "^5.19.0",
 		"@typescript-eslint/parser": "^5.19.0",
+		"@vscode/test-electron": "^2.3.0",
 		"eslint": "^8.13.0",
-		"typescript": "^4.7.2",
-		"vscode-test": "^1.2.0"
+		"typescript": "^4.7.2"
 	},
 	"dependencies": {
 		"@vscode/extension-telemetry": "^0.7.7"
