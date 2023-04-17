@@ -14,7 +14,6 @@ let reporter: TelemetryReporter;
 const testpitExecutablePath =
   '"C:\\Program Files (x86)\\TestPit\\Tools\\bin\\TestPit.exe"';
 let isUpdating = false;
-const updateInterval = 500; // milliseconds
 const diagnosticCollections = new Map<string, vscode.DiagnosticCollection>();
 
 export function activate(context: vscode.ExtensionContext) {
@@ -60,9 +59,6 @@ export function activate(context: vscode.ExtensionContext) {
       // create a temporary file with a unique filename
       const tempFilePath = editor.document.uri.fsPath + ".temp";
       fs.writeFileSync(tempFilePath, editor.document.getText());
-
-      // Add new diagnostics to the collection
-      const diagnosticList: vscode.Diagnostic[] = [];
 
       const config = vscode.workspace.getConfiguration();
       const testpitConfigFolderpath = config.get(
