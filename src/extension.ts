@@ -4,6 +4,7 @@ import * as fs from "fs";
 import * as util from "util";
 import TelemetryReporter from "@vscode/extension-telemetry";
 import { performance } from "perf_hooks";
+import * as os from "os";
 
 // the application insights key (also known as instrumentation key)
 const key = "53cdcbb8-0891-4ebb-8804-641335a36c2a";
@@ -183,13 +184,20 @@ export function activate(context: vscode.ExtensionContext) {
     const diagnostics = [];
     const lines = validityOutput.split("\n");
     for (const line of lines) {
-      const regexMatch = line.match(
-        /\[(Fatal|Error|Warn.)\] (Line: )?(\d+)?/
-      );
+      // Updated regex to capture both "Line:" and "Line(s):" followed by one or more numbers
+      const regexMatch = line.match(/\[(Fatal|Error|Warn.)\].*(Line:|Line\(s\):)\s?(\d+)/);
       if (regexMatch) {
         const type = regexMatch[1];
-        let lineNumber = parseInt(regexMatch[3]) - 1;
-        if(Number.isNaN(lineNumber)) lineNumber = 0;
+        // Assuming the line number might be missing, we use 0 as a fallback
+        let lineNumber = regexMatch[3] ? parseInt(regexMatch[3]) - 1 : 0;
+        if (Number.isNaN(lineNumber)) lineNumber = 0; // Additional check to ensure lineNumber is a number
+  
+        // Protect against accessing a line out of the document's range
+        const documentLineCount = editor.document.lineCount;
+        if (lineNumber >= documentLineCount) {
+          lineNumber = documentLineCount - 1;
+        }
+  
         const lineText = editor.document.lineAt(lineNumber).text;
         const firstNonSpaceCharIndex = lineText.search(/\S|$/);
         const range = new vscode.Range(
@@ -198,7 +206,8 @@ export function activate(context: vscode.ExtensionContext) {
           lineNumber,
           lineText.trimEnd().length
         );
-        const message = line.substring(9).trim();
+        // Modified to correctly slice the message from the rest of the line
+        const message = line.trim().slice(8);
         const severity =
           type === "Warn."
             ? vscode.DiagnosticSeverity.Warning
@@ -209,6 +218,7 @@ export function activate(context: vscode.ExtensionContext) {
     }
     return diagnostics;
   }
+  
 
   const disposable3 = vscode.commands.registerCommand(
     "extension.updateStepNumbers",
@@ -313,9 +323,45 @@ export function activate(context: vscode.ExtensionContext) {
     });
   }
 
+  const disposable7 = vscode.commands.registerCommand(
+    "extension.showProcessedFile",
+    showProcessedFile
+  );
+
+  async function showProcessedFile() {
+    const editor = vscode.window.activeTextEditor;
+    console.log("showProcessedFile");
+
+    if (!editor) {
+      return;
+    }
+    reporter.sendTelemetryEvent("showProcessedFile_Usage");
+
+    // Get the current username
+    const username = os.userInfo().username;
+    console.log(username);
+
+    // Create a Uri from the file path
+    const filePath = `C:\\Users\\${username}\\Documents\\Testpit\\Preprocessed.esi`;
+    const fileUri = vscode.Uri.file(filePath);
+
+    try {
+        await vscode.window.showTextDocument(fileUri, {
+            viewColumn: vscode.ViewColumn.Beside
+        });
+    } catch (error) {
+        console.error("Error opening file:", error);
+        vscode.window.showErrorMessage("Could not open file.");
+    }
+}
+
+
+
+
   context.subscriptions.push(disposable2);
   context.subscriptions.push(disposable3);
   context.subscriptions.push(disposable4);
   context.subscriptions.push(disposable5);
   context.subscriptions.push(disposable6);
+  context.subscriptions.push(disposable7);
 }

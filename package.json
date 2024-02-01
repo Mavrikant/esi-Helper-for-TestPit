@@ -3,7 +3,7 @@
 	"displayName": "esi Helper for TestPit",
 	"description": "Provides syntax highlighting, validation, and code snippets for esi files used in the TestPit tool.",
 	"icon": "images/TestPitIcon.ico",
-	"version": "0.1.1",
+	"version": "0.1.2",
 	"publisher": "karamandev",
 	"repository": "https://github.com/Mavrikant/esi-Helper-for-TestPit",
 	"engines": {
@@ -62,6 +62,11 @@
 			{
 				"command": "extension.runValidityCheck",
 				"title": "Run Validity Check",
+				"category": "ESI"
+			},
+			{
+				"command": "extension.showProcessedFile",
+				"title": "Show Processed File",
 				"category": "ESI"
 			}
 		],
