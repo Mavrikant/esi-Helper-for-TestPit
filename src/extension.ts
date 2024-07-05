@@ -71,7 +71,7 @@ export function activate(context: vscode.ExtensionContext) {
           testpitExecutablePath +
             " --cf=" +
             testpitConfigFolderpath +
-            "MessageConfig_RNESystemTestCable" +
+            "MessageConfig_RNESystemTestCable.xml" +
             " --ac=" +
             testpitConfigFolderpath +
             "A429MessageFields.xml" +
