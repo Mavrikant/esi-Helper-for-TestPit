@@ -18,11 +18,11 @@ The **ESI Helper for TestPit** is a powerful Visual Studio Code extension that e
 - Syntax-highlighting
 - Step number update
 - Bracket control
-- Goto step number(CTRL + G)
+- Goto step number (Ctrl + G)
 - Linting / Error Checking
 - Undefined macro usage control
 - Auto-formatting (TODO)
-- Semantic-highlighting (TODO)
+- Semantic highlighting (TODO)
 - Component Data: auto-completion and hover-information (TODO)
 
 # Developers
