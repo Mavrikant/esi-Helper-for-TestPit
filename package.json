@@ -12,6 +12,9 @@
   "categories": [
     "Other"
   ],
+  "activationEvents": [
+		"onCommand:extension.openWithTestPit"
+	],
   "main": "./out/extension.js",
   "contributes": {
     "viewsContainers": {
