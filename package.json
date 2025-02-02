@@ -12,9 +12,7 @@
 	"categories": [
 		"Other"
 	],
-	"activationEvents": [
-		"onCommand:extension.openWithTestPit"
-	],
+
 	"main": "./out/extension.js",
 	"contributes": {
 		"languages": [
@@ -68,6 +66,11 @@
 				"command": "extension.showProcessedFile",
 				"title": "Show Processed File",
 				"category": "ESI"
+			}			,
+			{
+				"command": "extension.serdAI",
+				"title": "Chat with SerdAI",
+				"category": "ESI"
 			}
 		],
 		"keybindings": [
@@ -114,7 +117,8 @@
 		"vscode": "^1.1.37"
 	},
 	"dependencies": {
-		"@vscode/extension-telemetry": "^0.7.7"
+		"@vscode/extension-telemetry": "^0.7.7",
+		"ollama": "^0.5.12"
 	},
 	"overrides": {
 		"minimatch": "3.0.5",

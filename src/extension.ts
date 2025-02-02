@@ -5,6 +5,7 @@ import * as util from "util";
 import TelemetryReporter from "@vscode/extension-telemetry";
 import { performance } from "perf_hooks";
 import * as os from "os";
+import ollama from "ollama";
 
 // the application insights key (also known as instrumentation key)
 const key = "53cdcbb8-0891-4ebb-8804-641335a36c2a";
@@ -21,6 +22,83 @@ export function activate(context: vscode.ExtensionContext) {
   console.log(
     'Congratulations, your extension "esi Helper for TestPit" is now active!'
   );
+
+  const panel = vscode.window.createWebviewPanel(
+    'SerdAI',
+    'Chat with SerdAI',
+    vscode.ViewColumn.One,
+    {
+      enableScripts: true,
+    }
+  );
+  panel.webview.html = getWebviewContent();
+
+
+
+  function getWebviewContent(): string {
+    return `
+      <!DOCTYPE html>
+      <html lang="en">
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>SerdAI</title>
+      </head>
+      <body>
+        <input type="text" id="message" />
+        <button id="send">Send</button>
+        <ul id="chat"></ul>
+        <script>
+          const vscode = acquireVsCodeApi();
+          const message = document.getElementById('message');
+          const send = document.getElementById('send');
+          const chat = document.getElementById('chat');
+          send.addEventListener('click', () => {
+            const li = document.createElement('li');
+            li.textContent = message.value;
+            chat.appendChild(li);
+            vscode.postMessage(message.value);
+            message.value = '';
+          });
+          window.addEventListener('message', event => {
+            const li = document.createElement('li');
+            li.textContent = event.data;
+            chat.appendChild(li);
+          });
+        </script>
+      </body>
+      </html>
+    `;
+  }
+
+  panel.webview.onDidReceiveMessage(async (message: any) => {
+    console.log(message);
+
+    if (message === 'chat') {
+      const userprompt = message.text;
+      let responseText = '';
+      try {
+        const streamResponse = await ollama.chat({
+          model: 'deepseek-r1:8b',
+          messages: [{ role: 'user', content: userprompt }],
+          stream: true
+        });
+        for await (const response of streamResponse) {
+          responseText += response.message.content;
+          console.log(responseText);
+          panel.webview.postMessage({ comman: 'chatResponse', text: responseText });
+        }
+      }
+
+
+      catch (error) {
+        console.log(error);
+      }
+
+    }
+  });
+
+
   // create telemetry reporter on extension activation
   reporter = new TelemetryReporter(key);
   // ensure it gets properly disposed. Upon disposal the events will be flushed
@@ -69,24 +147,24 @@ export function activate(context: vscode.ExtensionContext) {
       const validityOutput = cp
         .execSync(
           testpitExecutablePath +
-            " --cf=" +
-            testpitConfigFolderpath +
-            "MessageConfig_RNESystemTestCable.xml" +
-            " --ac=" +
-            testpitConfigFolderpath +
-            "A429MessageFields.xml" +
-            " --mc=" +
-            testpitConfigFolderpath +
-            "1553MessageFields.xml" +
-            " --dc=" +
-            testpitConfigFolderpath +
-            "DiscreteSignals.xml" +
-            " --pc=" +
-            testpitConfigFolderpath +
-            "MemoryPorts.xml" +
-            " --sf=" +
-            tempFilePath +
-            " --validateScriptOnly=true"
+          " --cf=" +
+          testpitConfigFolderpath +
+          "MessageConfig_RNESystemTestCable.xml" +
+          " --ac=" +
+          testpitConfigFolderpath +
+          "A429MessageFields.xml" +
+          " --mc=" +
+          testpitConfigFolderpath +
+          "1553MessageFields.xml" +
+          " --dc=" +
+          testpitConfigFolderpath +
+          "DiscreteSignals.xml" +
+          " --pc=" +
+          testpitConfigFolderpath +
+          "MemoryPorts.xml" +
+          " --sf=" +
+          tempFilePath +
+          " --validateScriptOnly=true"
         )
         .toString();
       fs.unlinkSync(tempFilePath);
@@ -191,13 +269,13 @@ export function activate(context: vscode.ExtensionContext) {
         // Assuming the line number might be missing, we use 0 as a fallback
         let lineNumber = regexMatch[3] ? parseInt(regexMatch[3]) - 1 : 0;
         if (Number.isNaN(lineNumber)) lineNumber = 0; // Additional check to ensure lineNumber is a number
-  
+
         // Protect against accessing a line out of the document's range
         const documentLineCount = editor.document.lineCount;
         if (lineNumber >= documentLineCount) {
           lineNumber = documentLineCount - 1;
         }
-  
+
         const lineText = editor.document.lineAt(lineNumber).text;
         const firstNonSpaceCharIndex = lineText.search(/\S|$/);
         const range = new vscode.Range(
@@ -218,7 +296,7 @@ export function activate(context: vscode.ExtensionContext) {
     }
     return diagnostics;
   }
-  
+
 
   const disposable3 = vscode.commands.registerCommand(
     "extension.updateStepNumbers",
@@ -330,7 +408,6 @@ export function activate(context: vscode.ExtensionContext) {
 
   async function showProcessedFile() {
     const editor = vscode.window.activeTextEditor;
-    console.log("showProcessedFile");
 
     if (!editor) {
       return;
@@ -346,17 +423,67 @@ export function activate(context: vscode.ExtensionContext) {
     const fileUri = vscode.Uri.file(filePath);
 
     try {
-        await vscode.window.showTextDocument(fileUri, {
-            viewColumn: vscode.ViewColumn.Beside
-        });
+      await vscode.window.showTextDocument(fileUri, {
+        viewColumn: vscode.ViewColumn.Beside
+      });
     } catch (error) {
-        console.error("Error opening file:", error);
-        vscode.window.showErrorMessage("Could not open file.");
+      console.error("Error opening file:", error);
+      vscode.window.showErrorMessage("Could not open file.");
     }
-}
+  }
 
+  const disposable8 = vscode.commands.registerCommand(
+    "extension.serdAI",
+    runSerdAI
+  );
 
+  async function runSerdAI() {
+    const editor = vscode.window.activeTextEditor;
+    if (!editor) {
+      vscode.window.showErrorMessage("No active editor found.");
+      return;
+    }
+    reporter.sendTelemetryEvent("SerdAI_Usage");
 
+    const serdAIPrompt = `You will act as serdAI, an expert AI helper for test development specializing in safety‐critical avionics software projects (DO-178C Level A). When I provide you with test scripts, you will analyze them and suggest improvements based on the detailed checklist provided below. Begin each session by introducing yourself as serdAI. Your responses must be clear, direct, and structured, using a professional tone that mirrors my communication style.
+
+Your responsibilities include:
+
+Self-introduction: Start by introducing yourself as serdAI.
+Test Script Analysis: Upon receiving a test script, review it thoroughly using the following checklist categories:
+Documentation and Planning: Verify the completeness and currency of plans (SDP, PSAC, SVP, SQAP, SCMP) and ensure that roles, responsibilities, and processes are clearly defined. Confirm traceability and proper baseline documentation, and check tool qualification per DO-178C/DO-330.
+Requirements Review: Ensure that high-level and low-level requirements are clear, complete, testable, and traceable, with safety-critical items correctly identified.
+Design Review: Assess whether the design architecture and interfaces reflect the requirements, comply with internal guidelines and DO-178C objectives, and support modularity and maintainability.
+Code Review: Check adherence to coding standards, readability, proper error handling, static analysis, and traceability from code to requirements.
+Verification and Test Case Review: Evaluate test cases for completeness and coverage, confirm that test environments and results are well-documented, and ensure regression and integration testing is properly executed.
+Configuration Management and Traceability: Verify that all artifacts are under configuration management, with baselines established and traceability matrices maintained.
+Safety and Regulatory Compliance: Confirm compliance with DO-178C objectives, ensuring independent reviews, documented audit trails, and appropriate handling of discrepancies.
+General Review Process: Check for reviewer independence, comprehensive issue identification, and documented corrective actions.
+Training and Mentorship: Encourage continuous learning by providing guidance on standards, tools, and best practices.
+Clarification: If any part of the test script or checklist is ambiguous, ask clarifying questions before providing your evaluation.
+Rationale: For every suggested improvement, include a brief explanation of why it is necessary, referencing the corresponding checklist section.
+Write your responses using a clear, structured format, and ensure that each point of feedback is directly tied to the checklist criteria.
+
+Communication style examples drawn from my prior messages:
+“Im genererating an AI helper for test development. user will sent test scripts and AI will suggest inprovments according to test checklist.”`
+    try {
+
+      const selection = editor.selection;
+      const selectedText = editor.document.getText(selection);
+
+      // Sample usage of the ollama package. Adjust model and message as needed.
+      const response = await ollama.chat({
+        model: "deepseek-r1:8b",
+        messages: [{ role: "user", content: selectedText },{ role: "system", content: serdAIPrompt }],
+      });
+      console.log("Ollama response:", response);
+      const cleanResponse = response.message.content.replace(/<think>[\s\S]*?<\/think>/g, '');
+      vscode.window.showInformationMessage(`${cleanResponse}`);
+    } catch (error) {
+      console.error("Error running SerdAI:", error);
+      vscode.window.showErrorMessage("Error running SerdAI command.");
+    }
+  }
 
   context.subscriptions.push(disposable2);
   context.subscriptions.push(disposable3);
@@ -364,4 +491,6 @@ export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(disposable5);
   context.subscriptions.push(disposable6);
   context.subscriptions.push(disposable7);
+  context.subscriptions.push(disposable8);
+
 }
