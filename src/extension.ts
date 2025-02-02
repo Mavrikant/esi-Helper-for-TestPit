@@ -23,82 +23,6 @@ export function activate(context: vscode.ExtensionContext) {
     'Congratulations, your extension "esi Helper for TestPit" is now active!'
   );
 
-  const panel = vscode.window.createWebviewPanel(
-    'SerdAI',
-    'Chat with SerdAI',
-    vscode.ViewColumn.One,
-    {
-      enableScripts: true,
-    }
-  );
-  panel.webview.html = getWebviewContent();
-
-
-
-  function getWebviewContent(): string {
-    return `
-      <!DOCTYPE html>
-      <html lang="en">
-      <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>SerdAI</title>
-      </head>
-      <body>
-        <input type="text" id="message" />
-        <button id="send">Send</button>
-        <ul id="chat"></ul>
-        <script>
-          const vscode = acquireVsCodeApi();
-          const message = document.getElementById('message');
-          const send = document.getElementById('send');
-          const chat = document.getElementById('chat');
-          send.addEventListener('click', () => {
-            const li = document.createElement('li');
-            li.textContent = message.value;
-            chat.appendChild(li);
-            vscode.postMessage(message.value);
-            message.value = '';
-          });
-          window.addEventListener('message', event => {
-            const li = document.createElement('li');
-            li.textContent = event.data;
-            chat.appendChild(li);
-          });
-        </script>
-      </body>
-      </html>
-    `;
-  }
-
-  panel.webview.onDidReceiveMessage(async (message: any) => {
-    console.log(message);
-
-    if (message === 'chat') {
-      const userprompt = message.text;
-      let responseText = '';
-      try {
-        const streamResponse = await ollama.chat({
-          model: 'deepseek-r1:8b',
-          messages: [{ role: 'user', content: userprompt }],
-          stream: true
-        });
-        for await (const response of streamResponse) {
-          responseText += response.message.content;
-          console.log(responseText);
-          panel.webview.postMessage({ comman: 'chatResponse', text: responseText });
-        }
-      }
-
-
-      catch (error) {
-        console.log(error);
-      }
-
-    }
-  });
-
-
   // create telemetry reporter on extension activation
   reporter = new TelemetryReporter(key);
   // ensure it gets properly disposed. Upon disposal the events will be flushed
@@ -467,23 +391,36 @@ Write your responses using a clear, structured format, and ensure that each poin
 Communication style examples drawn from my prior messages:
 “Im genererating an AI helper for test development. user will sent test scripts and AI will suggest inprovments according to test checklist.”`
     try {
-
       const selection = editor.selection;
       const selectedText = editor.document.getText(selection);
 
       // Sample usage of the ollama package. Adjust model and message as needed.
       const response = await ollama.chat({
         model: "deepseek-r1:8b",
-        messages: [{ role: "user", content: selectedText },{ role: "system", content: serdAIPrompt }],
+        messages: [{ role: "user", content: selectedText }, { role: "system", content: serdAIPrompt }],
       });
       console.log("Ollama response:", response);
       const cleanResponse = response.message.content.replace(/<think>[\s\S]*?<\/think>/g, '');
-      vscode.window.showInformationMessage(`${cleanResponse}`);
+
+      myOutputViewProvider.updateContent(cleanResponse);
+
     } catch (error) {
       console.error("Error running SerdAI:", error);
       vscode.window.showErrorMessage("Error running SerdAI command.");
     }
   }
+
+  const myOutputViewProvider = new MyOutputViewProvider(context);
+  context.subscriptions.push(
+    vscode.window.registerWebviewViewProvider(
+      'myOutputView',
+      myOutputViewProvider
+    )
+  );
+
+
+
+
 
   context.subscriptions.push(disposable2);
   context.subscriptions.push(disposable3);
@@ -493,4 +430,65 @@ Communication style examples drawn from my prior messages:
   context.subscriptions.push(disposable7);
   context.subscriptions.push(disposable8);
 
+}
+
+
+
+class MyOutputViewProvider implements vscode.WebviewViewProvider {
+  private _view?: vscode.WebviewView;
+
+  constructor(private readonly _context: vscode.ExtensionContext) {}
+
+  public resolveWebviewView(
+    webviewView: vscode.WebviewView,
+    _context: vscode.WebviewViewResolveContext,
+    _token: vscode.CancellationToken
+  ) {
+    this._view = webviewView;
+    
+    // Allow scripts in the webview.
+    webviewView.webview.options = { enableScripts: true };
+
+    // Set the initial HTML content.
+    webviewView.webview.html = this.getHtmlForWebview();
+    this.updateContent("Hello, SerdAI here! How can I help you today?");
+  }
+
+  // This function sends a message with a markdown string.
+  public updateContent(markdown: string) {
+    if (this._view) {
+      this._view.webview.postMessage({ command: 'update', markdown });
+    }
+  }
+
+  private getHtmlForWebview(): string {
+    // Load the marked library from a CDN to render markdown.
+    return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Markdown Renderer</title>
+  <style>
+    body { font-family: sans-serif; padding: 10px; }
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+</head>
+<body>
+  <div id="output">Initial content</div>
+  <script>
+    // Acquire VS Code API
+    const vscode = acquireVsCodeApi();
+    // Listen for messages from the extension.
+    window.addEventListener('message', event => {
+      const message = event.data;
+      if (message.command === 'update') {
+        // Use marked to convert markdown to HTML.
+        const html = marked.parse(message.markdown);
+        document.getElementById('output').innerHTML = html;
+      }
+    });
+  </script>
+</body>
+</html>`;
+  }
 }
