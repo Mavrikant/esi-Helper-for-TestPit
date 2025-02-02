@@ -314,7 +314,7 @@ export function activate(context: vscode.ExtensionContext) {
     const trimmedText = trimmedLines.join("\n");
     const replacedText = trimmedText.replace(/\t/g, "    ");
 
-    editor.edit((editBuilder) => {
+    await editor.edit((editBuilder) => {
       const fullDocRange = new vscode.Range(
         editor.document.positionAt(0),
         editor.document.positionAt(text.length)
