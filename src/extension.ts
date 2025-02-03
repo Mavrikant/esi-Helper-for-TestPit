@@ -369,35 +369,62 @@ export function activate(context: vscode.ExtensionContext) {
     }
     reporter.sendTelemetryEvent("SerdAI_Usage");
 
-    const serdAIPrompt = `You will act as serdAI, an expert AI helper for test development specializing in safety‐critical avionics software projects (DO-178C Level A). When I provide you with test scripts, you will analyze them and suggest improvements based on the detailed checklist provided below. Begin each session by introducing yourself as serdAI. Your responses must be clear, direct, and structured, using a professional tone that mirrors my communication style.
+    const serdAIPrompt = `You will act as serdAI, an expert AI helper for test development specializing in safety‐critical avionics software projects (DO-178C Level A). When I provide you with complete test scripts—consisting of multiple test steps—you will analyze the entire script from start to end and list any problems found in each step along with its step name. For each step, you must:
+
+Evaluate the step against the detailed checklist items (TC-1 through TC-27).
+Identify issues or gaps, clearly noting the specific step name (e.g., [STEP 70]) and linking each problem to one or more checklist items.
+Provide a concise rationale for each identified problem, explaining why the issue is significant in the context of the checklist criteria.
+Ask clarifying questions if any part of the test script or checklist is ambiguous before providing your full evaluation.
+Begin every session by introducing yourself as serdAI.
 
 Your responsibilities include:
 
-Self-introduction: Start by introducing yourself as serdAI.
-Test Script Analysis: Upon receiving a test script, review it thoroughly using the following checklist categories:
-Documentation and Planning: Verify the completeness and currency of plans (SDP, PSAC, SVP, SQAP, SCMP) and ensure that roles, responsibilities, and processes are clearly defined. Confirm traceability and proper baseline documentation, and check tool qualification per DO-178C/DO-330.
-Requirements Review: Ensure that high-level and low-level requirements are clear, complete, testable, and traceable, with safety-critical items correctly identified.
-Design Review: Assess whether the design architecture and interfaces reflect the requirements, comply with internal guidelines and DO-178C objectives, and support modularity and maintainability.
-Code Review: Check adherence to coding standards, readability, proper error handling, static analysis, and traceability from code to requirements.
-Verification and Test Case Review: Evaluate test cases for completeness and coverage, confirm that test environments and results are well-documented, and ensure regression and integration testing is properly executed.
-Configuration Management and Traceability: Verify that all artifacts are under configuration management, with baselines established and traceability matrices maintained.
-Safety and Regulatory Compliance: Confirm compliance with DO-178C objectives, ensuring independent reviews, documented audit trails, and appropriate handling of discrepancies.
-General Review Process: Check for reviewer independence, comprehensive issue identification, and documented corrective actions.
-Training and Mentorship: Encourage continuous learning by providing guidance on standards, tools, and best practices.
-Clarification: If any part of the test script or checklist is ambiguous, ask clarifying questions before providing your evaluation.
-Rationale: For every suggested improvement, include a brief explanation of why it is necessary, referencing the corresponding checklist section.
-Write your responses using a clear, structured format, and ensure that each point of feedback is directly tied to the checklist criteria.
+Self-Introduction: Start each session by introducing yourself as serdAI.
+Comprehensive Script Analysis: Read the complete test script from start to finish, and analyze each test step individually.
+Checklist Alignment: Structure your feedback by referencing the detailed checklist items (TC-1 to TC-27) to ensure that aspects such as test environment, unique identification, traceability, clarity, consistency, correctness, and performance are thoroughly evaluated.
+Structured and Clear Responses: Present your findings in a clear and organized format (e.g., bullet points or numbered lists), ensuring that each step’s problems are clearly labeled with the corresponding step name.
+Feedback with Rationale: For every identified issue, include a brief explanation tying the problem back to the relevant checklist criteria.
 
+Checklist for Test Evaluation:
+TC-1: Test environment and configurations are defined.
+TC-2: Each test case is uniquely identified.
+TC-3: Test case complies with the testing methodology.
+TC-4: Test procedures comply with the test environment and configuration.
+TC-5: Traceability between the requirements and test procedures is correct and complete.
+TC-6: Data/object/function is specified only once and referenced thereafter.
+TC-7: Reference documents, acronyms, abbreviations, and definitions are complete.
+TC-8: The information given is unambiguous.
+TC-9: The information given is consistent.
+TC-10: Document is free of typographical, documentation, style, and template errors.
+TC-11: Test procedures comply with the test case.
+TC-12: The software requirements traced by a test procedure are fully verified under normal and robust procedures.
+TC-13: Inputs and expected results are clearly specified.
+TC-14: Test procedures are compatible with the target hardware.
+TC-15: Precision, performance, and accuracy of test steps are correct.
+TC-16: Variables are tested using equivalence class partitioning.
+TC-17: Time-related functions are tested.
+TC-18: State transitions are exercised.
+TC-19: Loops are exercised with abnormal range instances.
+TC-20: Boolean logic expressions are exercised considering modified condition/decision coverage.
+TC-21: Computations for out-of-range conditions are exercised.
+TC-22: Arithmetic overflow conditions are tested.
+TC-23: System initialization is exercised under abnormal conditions.
+TC-24: Input of corrupted and failure mode data from external sources is exercised.
+TC-25: Test procedures are repeatable.
+TC-26: Test procedures are correct.
+TC-27: Real and integer input variables are exercised using boundary values.
 Communication style examples drawn from my prior messages:
-“Im genererating an AI helper for test development. user will sent test scripts and AI will suggest inprovments according to test checklist.”`
+“When users submit test scripts, the AI will analyze them and offer constructive suggestions for improvement, referencing the test checklist. Ensure the feedback is clear, supportive, and helpful to foster a positive experience.”
+
+When you receive a complete test script, analyze it thoroughly from start to finish, listing any problems you find in each step along with its step name.`;
     try {
       const selection = editor.selection;
       const selectedText = editor.document.getText(selection);
 
       // Sample usage of the ollama package. Adjust model and message as needed.
       const response = await ollama.chat({
-        model: "deepseek-r1:8b",
-        messages: [{ role: "user", content: selectedText }, { role: "system", content: serdAIPrompt }],
+        model: "deepseek-r1:1.5b",
+        messages: [{ role: "user", content: "<TestScript>\n" + selectedText + "\n</TestScript>" }, { role: "system", content: serdAIPrompt }],
       });
       console.log("Ollama response:", response);
       const cleanResponse = response.message.content.replace(/<think>[\s\S]*?<\/think>/g, '');
@@ -418,10 +445,6 @@ Communication style examples drawn from my prior messages:
     )
   );
 
-
-
-
-
   context.subscriptions.push(disposable2);
   context.subscriptions.push(disposable3);
   context.subscriptions.push(disposable4);
@@ -432,29 +455,23 @@ Communication style examples drawn from my prior messages:
 
 }
 
-
-
 class MyOutputViewProvider implements vscode.WebviewViewProvider {
   private _view?: vscode.WebviewView;
 
-  constructor(private readonly _context: vscode.ExtensionContext) {}
+  constructor(private readonly _context: vscode.ExtensionContext) { }
 
   public resolveWebviewView(
     webviewView: vscode.WebviewView,
     _context: vscode.WebviewViewResolveContext,
-    _token: vscode.CancellationToken
-  ) {
+    _token: vscode.CancellationToken) 
+  {
     this._view = webviewView;
-    
-    // Allow scripts in the webview.
     webviewView.webview.options = { enableScripts: true };
-
-    // Set the initial HTML content.
     webviewView.webview.html = this.getHtmlForWebview();
     this.updateContent("Hello, SerdAI here! How can I help you today?");
   }
 
-  // This function sends a message with a markdown string.
+  // Call this function from anywhere in your extension to update the content.
   public updateContent(markdown: string) {
     if (this._view) {
       this._view.webview.postMessage({ command: 'update', markdown });
@@ -462,33 +479,57 @@ class MyOutputViewProvider implements vscode.WebviewViewProvider {
   }
 
   private getHtmlForWebview(): string {
-    // Load the marked library from a CDN to render markdown.
+    // Load marked and KaTeX (with its auto-render extension) from CDN.
     return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Markdown Renderer</title>
-  <style>
-    body { font-family: sans-serif; padding: 10px; }
-  </style>
-  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-</head>
-<body>
-  <div id="output">Initial content</div>
-  <script>
-    // Acquire VS Code API
-    const vscode = acquireVsCodeApi();
-    // Listen for messages from the extension.
+  <title>Markdown Update Example</title>
+
+  
+  <!-- Marked for Markdown parsing -->
+  <script  src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  
+  <!-- KaTeX CSS and JS for math rendering -->
+  <link  rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.0/dist/katex.min.css">
+  <script  src="https://cdn.jsdelivr.net/npm/katex@0.16.0/dist/katex.min.js"></script>
+  <script  src="https://cdn.jsdelivr.net/npm/katex@0.16.0/dist/contrib/auto-render.min.js"></script>
+  
+  <script >
+    // Define a function to update content based on Markdown input.
+    function updateContent(newMarkdown) {
+      // Convert Markdown to HTML using Marked.
+      const html = marked.parse(newMarkdown);
+      const outputDiv = document.getElementById('output');
+      outputDiv.innerHTML = html;
+      
+      // Render math expressions using KaTeX auto-render.
+      renderMathInElement(outputDiv, {
+        delimiters: [
+          { left: "$$", right: "$$", display: true },
+          { left: "$", right: "$", display: false },
+          { left: "\\(", right: "\\)", display: false },
+          { left: "\\[", right: "\\]", display: true }
+        ]
+      });
+    }
+
+    // Listen for messages from the extension (for example, in a VS Code webview).
     window.addEventListener('message', event => {
       const message = event.data;
       if (message.command === 'update') {
-        // Use marked to convert markdown to HTML.
-        const html = marked.parse(message.markdown);
-        document.getElementById('output').innerHTML = html;
+        updateContent(message.markdown);
       }
     });
+
+    // Optionally expose updateContent globally to allow updates via direct function calls.
+    window.updateContent = updateContent;
   </script>
+</head>
+<body>
+  <div id="output">Space for serdAI outputs.</div>
 </body>
-</html>`;
+</html>
+`;
   }
 }
