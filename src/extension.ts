@@ -5,7 +5,7 @@ import * as util from "util";
 import TelemetryReporter from "@vscode/extension-telemetry";
 import { performance } from "perf_hooks";
 import * as os from "os";
-import ollama from "ollama";
+import { Ollama } from 'ollama'
 
 // the application insights key (also known as instrumentation key)
 const key = "53cdcbb8-0891-4ebb-8804-641335a36c2a";
@@ -421,10 +421,11 @@ When you receive a complete test script, analyze it thoroughly from start to fin
       const selection = editor.selection;
       const selectedText = editor.document.getText(selection);
 
-      // Sample usage of the ollama package. Adjust model and message as needed.
+      const ollama = new Ollama({ host: 'http://192.168.6.118:11434' });
       const response = await ollama.chat({
-        model: "deepseek-r1:1.5b",
-        messages: [{ role: "user", content: "<TestScript>\n" + selectedText + "\n</TestScript>" }, { role: "system", content: serdAIPrompt }],
+        model: "qwen2.5:72b",
+        messages: [{ role: "user", content: "<TestScript>\n" + selectedText + "\n</TestScript>" }, 
+                   { role: "system", content: serdAIPrompt }],
       });
       console.log("Ollama response:", response);
       const cleanResponse = response.message.content.replace(/<think>[\s\S]*?<\/think>/g, '');
