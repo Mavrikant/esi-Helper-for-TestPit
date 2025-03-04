@@ -13,8 +13,8 @@
     "Other"
   ],
   "activationEvents": [
-		"onCommand:extension.openWithTestPit"
-	],
+    "onCommand:extension.openWithTestPit"
+  ],
   "main": "./out/extension.js",
   "contributes": {
     "viewsContainers": {
@@ -137,6 +137,7 @@
     "vscode": "^1.1.37"
   },
   "dependencies": {
+    "@google/generative-ai": "^0.23.0",
     "@vscode/extension-telemetry": "^0.7.7"
   },
   "overrides": {
