@@ -5,13 +5,28 @@ import * as util from "util";
 import TelemetryReporter from "@vscode/extension-telemetry";
 import { performance } from "perf_hooks";
 import * as os from "os";
-import { Ollama } from 'ollama'
+import { GoogleGenerativeAI } from '@google/generative-ai';
+
+// Add utility for delay
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 // the application insights key (also known as instrumentation key)
 const key = "53cdcbb8-0891-4ebb-8804-641335a36c2a";
 
 // telemetry reporter
 let reporter: TelemetryReporter;
+
+// Initialize Google Generative AI with API key from configuration
+let genAI: GoogleGenerativeAI;
+
+// Rate limiting configuration
+const rateLimitConfig = {
+  maxRetries: 5,
+  initialDelayMs: 1000,
+  maxDelayMs: 60000, // Max 1 minute delay
+  lastRequestTime: 0,
+  minTimeBetweenRequestsMs: 1000, // Minimum 1 second between requests
+};
 
 const testpitExecutablePath =
   '"C:\\Program Files (x86)\\TestPit\\Tools\\bin\\TestPit.exe"';
@@ -23,10 +38,29 @@ export function activate(context: vscode.ExtensionContext) {
     'Congratulations, your extension "esi Helper for TestPit" is now active!'
   );
 
+  // Get the configuration for Gemini API
+  const config = vscode.workspace.getConfiguration('esihelper');
+  const geminiApiKey = config.get('geminiApiKey') as string || 'AIzaSyBqg0Zo3XVh2Xohh4TABtqi1D4u9cY80A4';
+  
+  // Initialize the GenAI client with the API key from configuration
+  genAI = new GoogleGenerativeAI(geminiApiKey);
+
   // create telemetry reporter on extension activation
   reporter = new TelemetryReporter(key);
   // ensure it gets properly disposed. Upon disposal the events will be flushed
   context.subscriptions.push(reporter);
+
+  // Listen for configuration changes
+  context.subscriptions.push(
+    vscode.workspace.onDidChangeConfiguration((event) => {
+      if (event.affectsConfiguration('esihelper.geminiApiKey')) {
+        // Reinitialize the GenAI client with the updated API key
+        const newConfig = vscode.workspace.getConfiguration('esihelper');
+        const newApiKey = newConfig.get('geminiApiKey') as string || '';
+        genAI = new GoogleGenerativeAI(newApiKey);
+      }
+    })
+  );
 
   const disposable2 = vscode.commands.registerCommand(
     "extension.openWithTestPit",
@@ -63,9 +97,9 @@ export function activate(context: vscode.ExtensionContext) {
       const tempFilePath = editor.document.uri.fsPath + ".temp";
       fs.writeFileSync(tempFilePath, editor.document.getText());
 
-      const config = vscode.workspace.getConfiguration();
+      const config = vscode.workspace.getConfiguration('esihelper');
       const testpitConfigFolderpath = config.get(
-        "esihelper.testpitConfigFolderpath"
+        "testpitConfigFolderpath"
       );
 
       const validityOutput = cp
@@ -130,8 +164,8 @@ export function activate(context: vscode.ExtensionContext) {
       diagnosticCollection.clear();
 
       const testpitConfigFolderpath = vscode.workspace
-        .getConfiguration()
-        .get("esihelper.testpitConfigFolderpath");
+        .getConfiguration('esihelper')
+        .get("testpitConfigFolderpath");
 
       // create a temporary file with a unique filename
       const tempFilePath = editor.document.uri.fsPath + ".temp";
@@ -340,7 +374,6 @@ export function activate(context: vscode.ExtensionContext) {
 
     // Get the current username
     const username = os.userInfo().username;
-    console.log(username);
 
     // Create a Uri from the file path
     const filePath = `C:\\Users\\${username}\\Documents\\Testpit\\Preprocessed.esi`;
@@ -351,7 +384,6 @@ export function activate(context: vscode.ExtensionContext) {
         viewColumn: vscode.ViewColumn.Beside
       });
     } catch (error) {
-      console.error("Error opening file:", error);
       vscode.window.showErrorMessage("Could not open file.");
     }
   }
@@ -369,72 +401,246 @@ export function activate(context: vscode.ExtensionContext) {
     }
     reporter.sendTelemetryEvent("SerdAI_Usage");
 
-    const serdAIPrompt = `You will act as serdAI, an expert AI helper for test development specializing in safety‐critical avionics software projects (DO-178C Level A). When I provide you with complete test scripts—consisting of multiple test steps—you will analyze the entire script from start to end and list any problems found in each step along with its step name. For each step, you must:
+    // Initialize the webview with a starting message
+    myOutputViewProvider.updateContent("Hello, SerdAI here! I'm analyzing your test script...");
 
-Evaluate the step against the detailed checklist items (TC-1 through TC-27).
-Identify issues or gaps, clearly noting the specific step name (e.g., [STEP 70]) and linking each problem to one or more checklist items.
-Provide a concise rationale for each identified problem, explaining why the issue is significant in the context of the checklist criteria.
-Ask clarifying questions if any part of the test script or checklist is ambiguous before providing your full evaluation.
-Begin every session by introducing yourself as serdAI.
-
-Your responsibilities include:
-
-Self-Introduction: Start each session by introducing yourself as serdAI.
-Comprehensive Script Analysis: Read the complete test script from start to finish, and analyze each test step individually.
-Checklist Alignment: Structure your feedback by referencing the detailed checklist items (TC-1 to TC-27) to ensure that aspects such as test environment, unique identification, traceability, clarity, consistency, correctness, and performance are thoroughly evaluated.
-Structured and Clear Responses: Present your findings in a clear and organized format (e.g., bullet points or numbered lists), ensuring that each step’s problems are clearly labeled with the corresponding step name.
-Feedback with Rationale: For every identified issue, include a brief explanation tying the problem back to the relevant checklist criteria.
-
-Checklist for Test Evaluation:
-TC-1: Test environment and configurations are defined.
-TC-2: Each test case is uniquely identified.
-TC-3: Test case complies with the testing methodology.
-TC-4: Test procedures comply with the test environment and configuration.
-TC-5: Traceability between the requirements and test procedures is correct and complete.
-TC-6: Data/object/function is specified only once and referenced thereafter.
-TC-7: Reference documents, acronyms, abbreviations, and definitions are complete.
-TC-8: The information given is unambiguous.
-TC-9: The information given is consistent.
-TC-10: Document is free of typographical, documentation, style, and template errors.
-TC-11: Test procedures comply with the test case.
-TC-12: The software requirements traced by a test procedure are fully verified under normal and robust procedures.
-TC-13: Inputs and expected results are clearly specified.
-TC-14: Test procedures are compatible with the target hardware.
-TC-15: Precision, performance, and accuracy of test steps are correct.
-TC-16: Variables are tested using equivalence class partitioning.
-TC-17: Time-related functions are tested.
-TC-18: State transitions are exercised.
-TC-19: Loops are exercised with abnormal range instances.
-TC-20: Boolean logic expressions are exercised considering modified condition/decision coverage.
-TC-21: Computations for out-of-range conditions are exercised.
-TC-22: Arithmetic overflow conditions are tested.
-TC-23: System initialization is exercised under abnormal conditions.
-TC-24: Input of corrupted and failure mode data from external sources is exercised.
-TC-25: Test procedures are repeatable.
-TC-26: Test procedures are correct.
-TC-27: Real and integer input variables are exercised using boundary values.
-Communication style examples drawn from my prior messages:
-“When users submit test scripts, the AI will analyze them and offer constructive suggestions for improvement, referencing the test checklist. Ensure the feedback is clear, supportive, and helpful to foster a positive experience.”
-
-When you receive a complete test script, analyze it thoroughly from start to finish, listing any problems you find in each step along with its step name.`;
     try {
       const selection = editor.selection;
       const selectedText = editor.document.getText(selection);
+      
+      // Get configuration file paths
+      const config = vscode.workspace.getConfiguration('esihelper');
+      const testpitConfigFolderpath = config.get("testpitConfigFolderpath") as string;
+      
+      // Read configuration files for context
+      let configFiles = {
+        messageConfig: "",
+        a429: "",
+        m1553: "",
+        discrete: "",
+        memory: ""
+      };
 
-      const ollama = new Ollama({ host: 'http://192.168.6.118:11434' });
-      const response = await ollama.chat({
-        model: "qwen2.5:72b",
-        messages: [{ role: "user", content: "<TestScript>\n" + selectedText + "\n</TestScript>" }, 
-                   { role: "system", content: serdAIPrompt }],
-      });
-      console.log("Ollama response:", response);
-      const cleanResponse = response.message.content.replace(/<think>[\s\S]*?<\/think>/g, '');
+      try {
+        // Attempt to read each config file
+        const messageConfigPath = `${testpitConfigFolderpath}MessageConfig_RNESystemTestCable.xml`;
+        const a429Path = `${testpitConfigFolderpath}A429MessageFields.xml`;
+        const m1553Path = `${testpitConfigFolderpath}1553MessageFields.xml`;
+        const discretePath = `${testpitConfigFolderpath}DiscreteSignals.xml`;
+        const memoryPath = `${testpitConfigFolderpath}MemoryPorts.xml`;
 
-      myOutputViewProvider.updateContent(cleanResponse);
+        if (fs.existsSync(messageConfigPath)) {
+          configFiles.messageConfig = fs.readFileSync(messageConfigPath, 'utf-8');
+        }
+        if (fs.existsSync(a429Path)) {
+          configFiles.a429 = fs.readFileSync(a429Path, 'utf-8');
+        }
+        if (fs.existsSync(m1553Path)) {
+          configFiles.m1553 = fs.readFileSync(m1553Path, 'utf-8');
+        }
+        if (fs.existsSync(discretePath)) {
+          configFiles.discrete = fs.readFileSync(discretePath, 'utf-8');
+        }
+        if (fs.existsSync(memoryPath)) {
+          configFiles.memory = fs.readFileSync(memoryPath, 'utf-8');
+        }
+      } catch (error) {
+        console.error("Error reading config files:", error);
+        // Continue even if files can't be read
+      }
+      
+      const serdAIPrompt = `### Role and Objective
+You are serdAI, an expert AI helper specializing in test development for safety-critical avionics software projects adhering to DO-178C Level A standards. Your primary task is to analyze complete test scripts, which consist of multiple test steps, and identify any issues or gaps based on a provided checklist.
 
-    } catch (error) {
+### Analysis Process
+To accomplish this, you will:
+1. Read the complete test script from start to finish to understand the overall flow and context.
+2. Analyze each test step individually, evaluating it against the detailed checklist items provided. Note that not all checklist items will apply to every test step; use your judgment to determine relevance based on the step's purpose and content.
+3. Use the configuration file, which details the test environment, including hardware configurations and signal definitions, to validate that each test step correctly interacts with the specified hardware and signals.
+
+### Feedback Structure
+For each test step that does not fully comply with the checklist, you will:
+- Clearly identify the step by its name (e.g., [STEP 70]).
+- List each problem found in that step.
+- For each problem, specify which checklist item(s) it violates.
+- Provide a concise rationale explaining why the issue is significant in the context of the checklist criteria.
+
+Structure your feedback as follows:
+- **Step Name:** [e.g., [STEP 70]]
+  - **Problem:** [Brief description of the issue]
+    - **Rationale:** [Why it’s a problem]
+
+If a step has multiple issues, list them all under that step, sepete with empty new line. For steps with no issues, you may skip them or briefly note that they comply with the checklist.
+
+### Additional Guidelines
+- Ensure feedback is specific and actionable. For example, instead of saying "Input unclear," specify "Define the exact input value for variable X in [STEP 10]."
+- Avoid general statements, praise for well-executed aspects, or repetition of test script content unless directly relevant to an issue.
+- Identify and suggest corrections for any typographical or grammatical errors found in the test script.
+- Ensure all feedback is clear, concise, and focused solely on identifying problems.
+
+### Checklist for Test Evaluation
+- Test environment and configurations are defined.
+- Each test case is uniquely identified.
+- Test case complies with the testing methodology.
+- Test procedures comply with the test environment and configuration.
+- Traceability between requirements and test procedures is correct and complete.
+- Data/object/function is specified only once and referenced thereafter.
+- Reference documents, acronyms, abbreviations, and definitions are complete.
+- The information given is unambiguous.
+- The information given is consistent.
+- Document is free of typographical, documentation, style, and template errors.
+- Test procedures comply with the test case.
+- The software requirements traced by a test procedure are fully verified under normal and robust procedures.
+- Inputs and expected results are clearly specified.
+- Test procedures are compatible with the target hardware.
+- Precision, performance, and accuracy of test steps are correct.
+- Variables are tested using equivalence class partitioning.
+- Time-related functions are tested.
+- State transitions are exercised.
+- Loops are exercised with abnormal range instances.
+- Boolean logic expressions are exercised considering modified condition/decision coverage.
+- Computations for out-of-range conditions are exercised.
+- Arithmetic overflow conditions are tested.
+- System initialization is exercised under abnormal conditions.
+- Input of corrupted and failure mode data from external sources is exercised.
+- Test procedures are repeatable.
+- Test procedures are correct.
+- Real and integer input variables are exercised using boundary values.
+      
+TestPit's Configuration File Contents:
+
+<MessageConfig_RNESystemTestCable>
+${configFiles.messageConfig}
+</MessageConfig_RNESystemTestCable>
+
+<A429MessageFields>
+${configFiles.a429}
+</A429MessageFields>
+
+<1553MessageFields>
+${configFiles.m1553}
+</1553MessageFields>
+
+<DiscreteSignals>
+${configFiles.discrete}
+</DiscreteSignals>
+
+<MemoryPorts>
+${configFiles.memory}
+</MemoryPorts>
+
+Communication style examples drawn from my prior messages:
+"When users submit test scripts, the AI will analyze them and offer constructive suggestions for improvement, referencing the test checklist. Ensure the feedback is clear, supportive, and helpful to foster a positive experience."
+
+When you receive a complete test script, analyze it thoroughly from start to finish, listing any problems you find in each step along with its step name. Use the configuration file information to understand the test environment and validate that the test steps correctly interact with the configured hardware and signals.`;
+      
+      // Implement the API call with retries and rate limiting
+      await callGeminiWithRetry("<TestScript>\n" + selectedText + "\n</TestScript>", serdAIPrompt, myOutputViewProvider);
+      
+    } catch (error: any) {
       console.error("Error running SerdAI:", error);
-      vscode.window.showErrorMessage("Error running SerdAI command.");
+      myOutputViewProvider.updateContent("Error running SerdAI command: " + (error.message || String(error)));
+      vscode.window.showErrorMessage("Error running SerdAI command: " + (error.message || String(error)));
+    }
+  }
+
+  /**
+   * Makes calls to Gemini API with retry logic and rate limiting
+   */
+  async function callGeminiWithRetry(
+    userContent: string, 
+    systemPrompt: string, 
+    outputProvider: MyOutputViewProvider
+  ): Promise<void> {
+    let retryCount = 0;
+    let delay = rateLimitConfig.initialDelayMs;
+
+    // Get the current configuration for model name
+    const config = vscode.workspace.getConfiguration('esihelper');
+    const modelName = config.get('geminiModelName') as string || 'gemini-2.0-flash-lite';
+
+    // Implement rate limiting - ensure minimum time between requests
+    const now = Date.now();
+    const timeSinceLastRequest = now - rateLimitConfig.lastRequestTime;
+    if (timeSinceLastRequest < rateLimitConfig.minTimeBetweenRequestsMs) {
+      const waitTime = rateLimitConfig.minTimeBetweenRequestsMs - timeSinceLastRequest;
+      outputProvider.updateContent("Rate limiting in effect. Waiting a moment before making request...");
+      await sleep(waitTime);
+    }
+
+    while (retryCount <= rateLimitConfig.maxRetries) {
+      try {
+        // Update the last request time
+        rateLimitConfig.lastRequestTime = Date.now();
+        
+        // Configure the model using the name from configuration
+        const model = genAI.getGenerativeModel({ model: modelName });
+        
+        // Create a chat session
+        const chat = model.startChat({
+          history: [
+            {
+              role: "user",
+              parts: [{ text: systemPrompt }],
+            },
+            {
+              role: "model",
+              parts: [{ text: "I'll analyze this test script according to the checklist criteria." }],
+            },
+          ],
+          generationConfig: {
+            temperature: 0.2, // Lower temperature for more focused responses
+            maxOutputTokens: 8192,
+          },
+        });
+        
+        // Send the system prompt and stream the response
+        const result = await chat.sendMessageStream(userContent);
+        
+        let accumulatedResponse = "";
+        
+        // Process the stream as it comes in
+        for await (const chunk of result.stream) {
+          const chunkText = chunk.text();
+          accumulatedResponse += chunkText;
+          
+          // Update the webview with each chunk of text
+          outputProvider.updateContent(accumulatedResponse);
+        }
+        
+        // If we reach here, the request was successful
+        return;
+        
+      } catch (error: any) {
+        console.error(`API call failed (attempt ${retryCount + 1}/${rateLimitConfig.maxRetries + 1}):`, error);
+        
+        // Check specifically for rate limit errors
+        if (error.message && error.message.includes("429") || 
+            error.toString().includes("429") || 
+            error.toString().includes("Too Many Requests") ||
+            error.toString().includes("Resource has been exhausted")) {
+          
+          retryCount++;
+          
+          if (retryCount <= rateLimitConfig.maxRetries) {
+            // Update the webview with retry information
+            outputProvider.updateContent(`Rate limit reached. Waiting ${delay/1000} seconds before retry ${retryCount}/${rateLimitConfig.maxRetries}...`);
+            
+            // Wait before retrying with exponential backoff
+            await sleep(delay);
+            
+            // Exponential backoff with max delay cap
+            delay = Math.min(delay * 2, rateLimitConfig.maxDelayMs);
+          } else {
+            outputProvider.updateContent("Maximum retry attempts reached. Please try again later when the API quota refreshes.");
+            throw new Error("Maximum retry attempts reached for rate limit. Please try again later.");
+          }
+        } else {
+          // For non-rate-limit errors, don't retry
+          outputProvider.updateContent("Error communicating with the Gemini API: " + (error.message || String(error)));
+          throw error;
+        }
+      }
     }
   }
 
@@ -480,42 +686,52 @@ class MyOutputViewProvider implements vscode.WebviewViewProvider {
   }
 
   private getHtmlForWebview(): string {
-    // Load marked and KaTeX (with its auto-render extension) from CDN.
+    // Load only Marked for Markdown parsing (no KaTeX)
     return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Markdown Update Example</title>
+  <title>SerdAI Output</title>
 
-  
   <!-- Marked for Markdown parsing -->
-  <script  src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   
-  <!-- KaTeX CSS and JS for math rendering -->
-  <link  rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.0/dist/katex.min.css">
-  <script  src="https://cdn.jsdelivr.net/npm/katex@0.16.0/dist/katex.min.js"></script>
-  <script  src="https://cdn.jsdelivr.net/npm/katex@0.16.0/dist/contrib/auto-render.min.js"></script>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe WPC', 'Segoe UI', system-ui, 'Ubuntu', 'Droid Sans', sans-serif;
+      padding: 0 20px;
+      line-height: 1.5;
+    }
+    #output {
+      max-width: 100%;
+    }
+    pre {
+      background-color: #f3f3f3;
+      padding: 10px;
+      border-radius: 5px;
+      overflow-x: auto;
+    }
+    code {
+      font-family: 'SF Mono', Monaco, Menlo, Consolas, 'Ubuntu Mono', 'Liberation Mono', 'DejaVu Sans Mono', monospace;
+    }
+    blockquote {
+      border-left: 3px solid #ccc;
+      margin-left: 0;
+      padding-left: 15px;
+      color: #666;
+    }
+  </style>
   
-  <script >
+  <script>
     // Define a function to update content based on Markdown input.
     function updateContent(newMarkdown) {
       // Convert Markdown to HTML using Marked.
       const html = marked.parse(newMarkdown);
       const outputDiv = document.getElementById('output');
       outputDiv.innerHTML = html;
-      
-      // Render math expressions using KaTeX auto-render.
-      renderMathInElement(outputDiv, {
-        delimiters: [
-          { left: "$$", right: "$$", display: true },
-          { left: "$", right: "$", display: false },
-          { left: "\\(", right: "\\)", display: false },
-          { left: "\\[", right: "\\]", display: true }
-        ]
-      });
     }
 
-    // Listen for messages from the extension (for example, in a VS Code webview).
+    // Listen for messages from the extension
     window.addEventListener('message', event => {
       const message = event.data;
       if (message.command === 'update') {

@@ -3,7 +3,7 @@
   "displayName": "esi Helper for TestPit",
   "description": "Provides syntax highlighting, validation, and code snippets for esi files used in the TestPit tool.",
   "icon": "images/TestPitIcon.ico",
-  "version": "0.2.2",
+  "version": "0.2.4",
   "publisher": "karamandev",
   "repository": "https://github.com/Mavrikant/esi-Helper-for-TestPit",
   "engines": {
@@ -137,8 +137,7 @@
     "vscode": "^1.1.37"
   },
   "dependencies": {
-    "@vscode/extension-telemetry": "^0.7.7",
-    "ollama": "^0.5.12"
+    "@vscode/extension-telemetry": "^0.7.7"
   },
   "overrides": {
     "minimatch": "3.0.5",
