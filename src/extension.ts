@@ -413,7 +413,7 @@ export function activate(context: vscode.ExtensionContext) {
       const testpitConfigFolderpath = config.get("testpitConfigFolderpath") as string;
       
       // Read configuration files for context
-      let configFiles = {
+      const configFiles = {
         messageConfig: "",
         a429: "",
         m1553: "",
