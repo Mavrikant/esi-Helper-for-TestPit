@@ -2,22 +2,12 @@ import * as vscode from "vscode";
 import * as cp from "child_process";
 import * as fs from "fs";
 import * as util from "util";
-import TelemetryReporter from "@vscode/extension-telemetry";
 import { performance } from "perf_hooks";
 import * as os from "os";
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
 // Add utility for delay
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-
-// the application insights key (also known as instrumentation key)
-const key = "53cdcbb8-0891-4ebb-8804-641335a36c2a";
-
-// telemetry reporter
-let reporter: TelemetryReporter;
-
-// Initialize Google Generative AI with API key from configuration
-let genAI: GoogleGenerativeAI;
 
 // Rate limiting configuration
 const rateLimitConfig = {
@@ -33,10 +23,11 @@ const testpitExecutablePath =
 let isUpdating = false;
 const diagnosticCollections = new Map<string, vscode.DiagnosticCollection>();
 
+// Initialize Google Generative AI with API key from configuration
+let genAI: GoogleGenerativeAI;
+
 export function activate(context: vscode.ExtensionContext) {
-  console.log(
-    'Congratulations, your extension "esi Helper for TestPit" is now active!'
-  );
+  console.log('Congratulations, your extension "esi Helper for TestPit" is now active!');
 
   // Get the configuration for Gemini API
   const config = vscode.workspace.getConfiguration('esihelper');
@@ -44,11 +35,6 @@ export function activate(context: vscode.ExtensionContext) {
   
   // Initialize the GenAI client with the API key from configuration
   genAI = new GoogleGenerativeAI(geminiApiKey);
-
-  // create telemetry reporter on extension activation
-  reporter = new TelemetryReporter(key);
-  // ensure it gets properly disposed. Upon disposal the events will be flushed
-  context.subscriptions.push(reporter);
 
   // Listen for configuration changes
   context.subscriptions.push(
@@ -65,13 +51,12 @@ export function activate(context: vscode.ExtensionContext) {
   const disposable2 = vscode.commands.registerCommand(
     "extension.openWithTestPit",
     async () => {
-      reporter.sendTelemetryEvent("openWithTestPit_Usage");
-
       const currentlyOpenTabfilePath =
         vscode.window.activeTextEditor?.document.uri.fsPath;
       cp.exec(testpitExecutablePath + " --ow=" + currentlyOpenTabfilePath);
     }
   );
+  
   class OutputChannel {
     private static instance: vscode.OutputChannel;
 
@@ -83,6 +68,7 @@ export function activate(context: vscode.ExtensionContext) {
       return OutputChannel.instance;
     }
   }
+  
   const disposable6 = vscode.commands.registerCommand(
     "extension.runValidityCheck",
     async () => {
@@ -131,14 +117,6 @@ export function activate(context: vscode.ExtensionContext) {
       OutputChannel.getInstance().clear();
       OutputChannel.getInstance().appendLine(validityOutput);
       OutputChannel.getInstance().show(true);
-
-      const end = performance.now();
-      const elapsedTime = end - start;
-      reporter.sendTelemetryEvent(
-        "runValidityCheck_Usage",
-        { stringProp: "some string" },
-        { elapsedTime_ms: elapsedTime }
-      );
     }
   );
 
@@ -152,7 +130,6 @@ export function activate(context: vscode.ExtensionContext) {
       if (!editor) {
         return;
       }
-      const start = performance.now();
       const uri = editor.document.uri;
       let diagnosticCollection = diagnosticCollections.get(uri.toString());
       if (!diagnosticCollection) {
@@ -181,23 +158,8 @@ export function activate(context: vscode.ExtensionContext) {
       fs.unlinkSync(tempFilePath);
 
       diagnosticCollection.set(uri, diagnostics);
-
-      const end = performance.now();
-      const elapsedTime = end - start;
-      reporter.sendTelemetryEvent(
-        "onDidChangeTextDocument_Usage",
-        { stringProp: "some string" },
-        { elapsedTime_ms: elapsedTime }
-      );
     } catch (error: any) {
-      const stackTrace = error.stack || "";
-      const errorMessage = error.message || "";
-      const exception = {
-        name: error.name,
-        message: errorMessage,
-        stack: stackTrace,
-      };
-      reporter.sendTelemetryException(exception);
+      console.error("Error in onDidChangeTextDocument:", error);
     } finally {
       isUpdating = false;
     }
@@ -267,7 +229,7 @@ export function activate(context: vscode.ExtensionContext) {
     if (!editor) {
       return;
     }
-    reporter.sendTelemetryEvent("updateStepNumbers_Usage");
+    
     const fullText = editor.document.getText();
     const firstLine = editor.document.lineAt(0);
     const lastLine = editor.document.lineAt(editor.document.lineCount - 1);
@@ -307,7 +269,6 @@ export function activate(context: vscode.ExtensionContext) {
       if (!editor) {
         return;
       }
-      reporter.sendTelemetryEvent("gotoStep_Usage");
 
       const searchQuery = await vscode.window.showInputBox({
         placeHolder: "Step number",
@@ -342,7 +303,6 @@ export function activate(context: vscode.ExtensionContext) {
     if (!editor) {
       return;
     }
-    reporter.sendTelemetryEvent("refactorDocument_Usage");
 
     const text = editor.document.getText();
     const lines = text.split("\n");
@@ -370,7 +330,6 @@ export function activate(context: vscode.ExtensionContext) {
     if (!editor) {
       return;
     }
-    reporter.sendTelemetryEvent("showProcessedFile_Usage");
 
     // Get the current username
     const username = os.userInfo().username;
@@ -399,7 +358,6 @@ export function activate(context: vscode.ExtensionContext) {
       vscode.window.showErrorMessage("No active editor found.");
       return;
     }
-    reporter.sendTelemetryEvent("SerdAI_Usage");
 
     // Initialize the webview with a starting message
     myOutputViewProvider.updateContent("Hello, SerdAI here! I'm analyzing your test script...");
@@ -659,7 +617,6 @@ When you receive a complete test script, analyze it thoroughly from start to fin
   context.subscriptions.push(disposable6);
   context.subscriptions.push(disposable7);
   context.subscriptions.push(disposable8);
-
 }
 
 class MyOutputViewProvider implements vscode.WebviewViewProvider {

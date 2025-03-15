@@ -3,7 +3,7 @@
   "displayName": "esi Helper for TestPit",
   "description": "Provides syntax highlighting, validation, and code snippets for esi files used in the TestPit tool.",
   "icon": "images/TestPitIcon.ico",
-  "version": "0.2.6",
+  "version": "0.2.7",
   "publisher": "karamandev",
   "repository": "https://github.com/Mavrikant/esi-Helper-for-TestPit",
   "engines": {
@@ -12,9 +12,6 @@
   },
   "categories": [
     "Other"
-  ],
-  "activationEvents": [
-    "onCommand:extension.openWithTestPit"
   ],
   "main": "./out/extension.js",
   "contributes": {
@@ -116,6 +113,16 @@
           ],
           "default": "D:\\RNE\\product_library\\tools\\TestPit\\Config\\",
           "description": "Path of TestPit Config files."
+        },
+        "esihelper.geminiApiKey": {
+          "type": "string",
+          "default": "AIzaSyBqg0Zo3XVh2Xohh4TABtqi1D4u9cY80A4",
+          "description": "API key for Google Gemini AI"
+        },
+        "esihelper.geminiModelName": {
+          "type": "string",
+          "default": "gemini-2.0-flash-lite",
+          "description": "Model name to use for Gemini AI"
         }
       }
     }
@@ -135,7 +142,6 @@
     "eslint": "^8.13.0",
     "mocha": "^11.1.0",
     "typescript": "^5.7.3",
-    "@vscode/extension-telemetry": "^0.7.7",
     "vscode": "^1.1.37"
   },
   "dependencies": {
