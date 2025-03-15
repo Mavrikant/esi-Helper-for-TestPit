@@ -13,6 +13,17 @@
   "categories": [
     "Other"
   ],
+  "activationEvents": [
+    "onStartupFinished",
+    "onLanguage:esi",
+    "onCommand:extension.openWithTestPit",
+    "onCommand:extension.updateStepNumbers",
+    "onCommand:extension.refactorDocument",
+    "onCommand:extension.runValidityCheck",
+    "onCommand:extension.showProcessedFile",
+    "onCommand:extension.serdAI",
+    "onCommand:extension.gotoStep"
+  ],
   "main": "./out/extension.js",
   "contributes": {
     "viewsContainers": {
