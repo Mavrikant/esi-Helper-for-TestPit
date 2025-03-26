@@ -5,6 +5,7 @@ import * as util from "util";
 import { performance } from "perf_hooks";
 import * as os from "os";
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { generateStepDocumentation } from './generators/stepDocGenerator';
 
 // Add utility for delay
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
@@ -502,105 +503,19 @@ When you receive a complete test script, analyze it thoroughly from start to fin
     }
   }
 
-  /**
-   * Makes calls to Gemini API with retry logic and rate limiting
-   */
-  async function callGeminiWithRetry(
-    userContent: string, 
-    systemPrompt: string, 
-    outputProvider: MyOutputViewProvider
-  ): Promise<void> {
-    let retryCount = 0;
-    let delay = rateLimitConfig.initialDelayMs;
-
-    // Get the current configuration for model name
-    const config = vscode.workspace.getConfiguration('esihelper');
-    const modelName = config.get('geminiModelName') as string || 'gemini-2.0-flash-lite';
-
-    // Implement rate limiting - ensure minimum time between requests
-    const now = Date.now();
-    const timeSinceLastRequest = now - rateLimitConfig.lastRequestTime;
-    if (timeSinceLastRequest < rateLimitConfig.minTimeBetweenRequestsMs) {
-      const waitTime = rateLimitConfig.minTimeBetweenRequestsMs - timeSinceLastRequest;
-      outputProvider.updateContent("Rate limiting in effect. Waiting a moment before making request...");
-      await sleep(waitTime);
-    }
-
-    while (retryCount <= rateLimitConfig.maxRetries) {
+  const disposable9 = vscode.commands.registerCommand(
+    "extension.generateStepDocumentation",
+    async () => {
       try {
-        // Update the last request time
-        rateLimitConfig.lastRequestTime = Date.now();
-        
-        // Configure the model using the name from configuration
-        const model = genAI.getGenerativeModel({ model: modelName });
-        
-        // Create a chat session
-        const chat = model.startChat({
-          history: [
-            {
-              role: "user",
-              parts: [{ text: systemPrompt }],
-            },
-            {
-              role: "model",
-              parts: [{ text: "I'll analyze this test script according to the checklist criteria." }],
-            },
-          ],
-          generationConfig: {
-            temperature: 0.2, // Lower temperature for more focused responses
-            maxOutputTokens: 8192,
-          },
-        });
-        
-        // Send the system prompt and stream the response
-        const result = await chat.sendMessageStream(userContent);
-        
-        let accumulatedResponse = "";
-        
-        // Process the stream as it comes in
-        for await (const chunk of result.stream) {
-          const chunkText = chunk.text();
-          accumulatedResponse += chunkText;
-          
-          // Update the webview with each chunk of text
-          outputProvider.updateContent(accumulatedResponse);
-        }
-        
-        // If we reach here, the request was successful
-        return;
-        
-      } catch (error: any) {
-        console.error(`API call failed (attempt ${retryCount + 1}/${rateLimitConfig.maxRetries + 1}):`, error);
-        
-        // Check specifically for rate limit errors
-        if (error.message && error.message.includes("429") || 
-            error.toString().includes("429") || 
-            error.toString().includes("Too Many Requests") ||
-            error.toString().includes("Resource has been exhausted")) {
-          
-          retryCount++;
-          
-          if (retryCount <= rateLimitConfig.maxRetries) {
-            // Update the webview with retry information
-            outputProvider.updateContent(`Rate limit reached. Waiting ${delay/1000} seconds before retry ${retryCount}/${rateLimitConfig.maxRetries}...`);
-            
-            // Wait before retrying with exponential backoff
-            await sleep(delay);
-            
-            // Exponential backoff with max delay cap
-            delay = Math.min(delay * 2, rateLimitConfig.maxDelayMs);
-          } else {
-            outputProvider.updateContent("Maximum retry attempts reached. Please try again later when the API quota refreshes.");
-            throw new Error("Maximum retry attempts reached for rate limit. Please try again later.");
-          }
-        } else {
-          // For non-rate-limit errors, don't retry
-          outputProvider.updateContent("Error communicating with the Gemini API: " + (error.message || String(error)));
-          throw error;
-        }
+        await generateStepDocumentation(myOutputViewProvider);
+      } catch (error: unknown) {
+        console.error("Error generating step documentation:", error);
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        myOutputViewProvider.updateContent(`Error generating step documentation: ${errorMessage}`);
+        vscode.window.showErrorMessage(`Error generating step documentation: ${errorMessage}`);
       }
     }
-  }
+  );
 
   const myOutputViewProvider = new MyOutputViewProvider(context);
   context.subscriptions.push(
@@ -617,6 +532,7 @@ When you receive a complete test script, analyze it thoroughly from start to fin
   context.subscriptions.push(disposable6);
   context.subscriptions.push(disposable7);
   context.subscriptions.push(disposable8);
+  context.subscriptions.push(disposable9);
 }
 
 class MyOutputViewProvider implements vscode.WebviewViewProvider {
@@ -705,5 +621,105 @@ class MyOutputViewProvider implements vscode.WebviewViewProvider {
 </body>
 </html>
 `;
+  }
+}
+
+/**
+ * Makes calls to Gemini API with retry logic and rate limiting
+ */
+export async function callGeminiWithRetry(
+  userContent: string, 
+  systemPrompt: string, 
+  outputProvider: any
+): Promise<void> {
+  let retryCount = 0;
+  let delay = rateLimitConfig.initialDelayMs;
+
+  // Get the current configuration for model name
+  const config = vscode.workspace.getConfiguration('esihelper');
+  const modelName = config.get('geminiModelName') as string || 'gemini-2.0-flash-lite';
+
+  // Implement rate limiting - ensure minimum time between requests
+  const now = Date.now();
+  const timeSinceLastRequest = now - rateLimitConfig.lastRequestTime;
+  if (timeSinceLastRequest < rateLimitConfig.minTimeBetweenRequestsMs) {
+    const waitTime = rateLimitConfig.minTimeBetweenRequestsMs - timeSinceLastRequest;
+    outputProvider.updateContent("Rate limiting in effect. Waiting a moment before making request...");
+    await sleep(waitTime);
+  }
+
+  while (retryCount <= rateLimitConfig.maxRetries) {
+    try {
+      // Update the last request time
+      rateLimitConfig.lastRequestTime = Date.now();
+      
+      // Configure the model using the name from configuration
+      const model = genAI.getGenerativeModel({ model: modelName });
+      
+      // Create a chat session
+      const chat = model.startChat({
+        history: [
+          {
+            role: "user",
+            parts: [{ text: systemPrompt }],
+          },
+          {
+            role: "model",
+            parts: [{ text: "I'll analyze this test script according to the checklist criteria." }],
+          },
+        ],
+        generationConfig: {
+          temperature: 0.2, // Lower temperature for more focused responses
+          maxOutputTokens: 8192,
+        },
+      });
+      
+      // Send the system prompt and stream the response
+      const result = await chat.sendMessageStream(userContent);
+      
+      let accumulatedResponse = "";
+      
+      // Process the stream as it comes in
+      for await (const chunk of result.stream) {
+        const chunkText = chunk.text();
+        accumulatedResponse += chunkText;
+        
+        // Update the webview with each chunk of text
+        outputProvider.updateContent(accumulatedResponse);
+      }
+      
+      // If we reach here, the request was successful
+      return;
+      
+    } catch (error: any) {
+      console.error(`API call failed (attempt ${retryCount + 1}/${rateLimitConfig.maxRetries + 1}):`, error);
+      
+      // Check specifically for rate limit errors
+      if (error.message && error.message.includes("429") || 
+          error.toString().includes("429") || 
+          error.toString().includes("Too Many Requests") ||
+          error.toString().includes("Resource has been exhausted")) {
+        
+        retryCount++;
+        
+        if (retryCount <= rateLimitConfig.maxRetries) {
+          // Update the webview with retry information
+          outputProvider.updateContent(`Rate limit reached. Waiting ${delay/1000} seconds before retry ${retryCount}/${rateLimitConfig.maxRetries}...`);
+          
+          // Wait before retrying with exponential backoff
+          await sleep(delay);
+          
+          // Exponential backoff with max delay cap
+          delay = Math.min(delay * 2, rateLimitConfig.maxDelayMs);
+        } else {
+          outputProvider.updateContent("Maximum retry attempts reached. Please try again later when the API quota refreshes.");
+          throw new Error("Maximum retry attempts reached for rate limit. Please try again later.");
+        }
+      } else {
+        // For non-rate-limit errors, don't retry
+        outputProvider.updateContent("Error communicating with the Gemini API: " + (error.message || String(error)));
+        throw error;
+      }
+    }
   }
 }

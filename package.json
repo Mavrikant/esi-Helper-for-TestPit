@@ -3,7 +3,7 @@
   "displayName": "esi Helper for TestPit",
   "description": "Provides syntax highlighting, validation, and code snippets for esi files used in the TestPit tool.",
   "icon": "images/TestPitIcon.ico",
-  "version": "0.2.7",
+  "version": "0.2.8",
   "publisher": "karamandev",
   "repository": "https://github.com/Mavrikant/esi-Helper-for-TestPit",
   "engines": {
@@ -100,6 +100,10 @@
         "command": "extension.serdAI",
         "title": "Chat with SerdAI",
         "category": "ESI"
+      },
+      {
+        "command": "extension.generateStepDocumentation",
+        "title": "ESI Helper: Generate Step Documentation"
       }
     ],
     "keybindings": [
@@ -110,6 +114,15 @@
         "when": "editorLangId == esi"
       }
     ],
+    "menus": {
+      "editor/context": [
+        {
+          "command": "extension.generateStepDocumentation",
+          "when": "editorLangId == 'plaintext' && resourceExtname == '.esi'",
+          "group": "esiHelper"
+        }
+      ]
+    },
     "configuration": {
       "title": "esi Helper for TestPit",
       "properties": {
