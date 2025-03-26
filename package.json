@@ -74,36 +74,37 @@
       {
         "command": "extension.openWithTestPit",
         "title": "Open with TestPit",
-        "category": "ESI"
+        "category": "ESI Helper"
       },
       {
         "command": "extension.updateStepNumbers",
         "title": "Update Step Numbers",
-        "category": "ESI"
+        "category": "ESI Helper"
       },
       {
         "command": "extension.refactorDocument",
         "title": "Refactor Document",
-        "category": "ESI"
+        "category": "ESI Helper"
       },
       {
         "command": "extension.runValidityCheck",
         "title": "Run Validity Check",
-        "category": "ESI"
+        "category": "ESI Helper"
       },
       {
         "command": "extension.showProcessedFile",
         "title": "Show Processed File",
-        "category": "ESI"
+        "category": "ESI Helper"
       },
       {
         "command": "extension.serdAI",
         "title": "Chat with SerdAI",
-        "category": "ESI"
+        "category": "ESI Helper"
       },
       {
         "command": "extension.generateStepDocumentation",
-        "title": "ESI Helper: Generate Step Documentation"
+        "title": "Generate Step Documentation",
+        "category": "ESI Helper"
       }
     ],
     "keybindings": [
