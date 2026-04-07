@@ -22,7 +22,8 @@
     "onCommand:extension.runValidityCheck",
     "onCommand:extension.showProcessedFile",
     "onCommand:extension.serdAI",
-    "onCommand:extension.gotoStep"
+    "onCommand:extension.gotoStep",
+    "onCommand:extension.selectProject"
   ],
   "main": "./out/extension.js",
   "contributes": {
@@ -105,6 +106,11 @@
         "command": "extension.generateStepDocumentation",
         "title": "Generate Step Documentation",
         "category": "ESI Helper"
+      },
+      {
+        "command": "extension.selectProject",
+        "title": "Select Project Preset",
+        "category": "ESI Helper"
       }
     ],
     "keybindings": [
@@ -132,12 +138,68 @@
           "default": false,
           "description": "Refactor document on save by cleaning whitespaces and turning tabs to spaces."
         },
-        "esihelper.testpitConfigFolderpath": {
-          "type": [
-            "string"
-          ],
-          "default": "D:\\RNE\\product_library\\tools\\TestPit\\Config\\",
-          "description": "Path of TestPit Config files."
+        "esihelper.activeProject": {
+          "type": "string",
+          "default": "RNE",
+          "description": "Name of the currently active project preset."
+        },
+        "esihelper.projects": {
+          "type": "array",
+          "description": "List of project presets. Each preset defines the TestPit config folder and XML file names for a project.",
+          "items": {
+            "type": "object",
+            "required": ["name", "configFolderPath"],
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "Display name for the project preset."
+              },
+              "configFolderPath": {
+                "type": "string",
+                "description": "Path to the folder containing the TestPit config XML files."
+              },
+              "messageConfigFile": {
+                "type": "string",
+                "description": "Name of the message config XML file (e.g. MessageConfig_RNESystemTestCable.xml)."
+              },
+              "a429File": {
+                "type": "string",
+                "description": "Name of the A429 message fields XML file."
+              },
+              "m1553File": {
+                "type": "string",
+                "description": "Name of the 1553 message fields XML file."
+              },
+              "discreteFile": {
+                "type": "string",
+                "description": "Name of the discrete signals XML file."
+              },
+              "memoryPortsFile": {
+                "type": "string",
+                "description": "Name of the memory ports XML file."
+              }
+            }
+          },
+          "default": [
+            {
+              "name": "RNE",
+              "configFolderPath": "D:\\RNE\\product_library\\tools\\TestPit\\Config\\",
+              "messageConfigFile": "MessageConfig_RNESystemTestCable.xml",
+              "a429File": "A429MessageFields.xml",
+              "m1553File": "1553MessageFields.xml",
+              "discreteFile": "DiscreteSignals.xml",
+              "memoryPortsFile": "MemoryPorts.xml"
+            },
+            {
+              "name": "VORILS",
+              "configFolderPath": "D:\\VORILS\\product_library\\tools\\TestPit\\Config\\",
+              "messageConfigFile": "MessageConfig_VORILSSystemTestCable.xml",
+              "a429File": "A429MessageFields.xml",
+              "m1553File": "1553MessageFields.xml",
+              "discreteFile": "DiscreteSignals.xml",
+              "memoryPortsFile": "MemoryPorts.xml"
+            }
+          ]
         },
         "esihelper.geminiApiKey": {
           "type": "string",

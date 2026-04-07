@@ -24,6 +24,64 @@ const testpitExecutablePath =
 let isUpdating = false;
 const diagnosticCollections = new Map<string, vscode.DiagnosticCollection>();
 
+// Project preset definition
+interface ProjectPreset {
+  name: string;
+  configFolderPath: string;
+  messageConfigFile: string;
+  a429File: string;
+  m1553File: string;
+  discreteFile: string;
+  memoryPortsFile: string;
+}
+
+const DEFAULT_FILE_NAMES = {
+  messageConfigFile: "MessageConfig_RNESystemTestCable.xml",
+  a429File: "A429MessageFields.xml",
+  m1553File: "1553MessageFields.xml",
+  discreteFile: "DiscreteSignals.xml",
+  memoryPortsFile: "MemoryPorts.xml",
+};
+
+function getActiveProjectConfig(): ProjectPreset {
+  const config = vscode.workspace.getConfiguration('esihelper');
+  const projects = config.get<Partial<ProjectPreset>[]>('projects') ?? [];
+  const activeName = config.get<string>('activeProject') ?? '';
+
+  const found = projects.find(p => p.name === activeName);
+  if (found && found.name && found.configFolderPath) {
+    return {
+      name: found.name,
+      configFolderPath: found.configFolderPath,
+      messageConfigFile: found.messageConfigFile ?? DEFAULT_FILE_NAMES.messageConfigFile,
+      a429File: found.a429File ?? DEFAULT_FILE_NAMES.a429File,
+      m1553File: found.m1553File ?? DEFAULT_FILE_NAMES.m1553File,
+      discreteFile: found.discreteFile ?? DEFAULT_FILE_NAMES.discreteFile,
+      memoryPortsFile: found.memoryPortsFile ?? DEFAULT_FILE_NAMES.memoryPortsFile,
+    };
+  }
+
+  // Fallback: use first preset or bare defaults
+  if (projects.length > 0 && projects[0].configFolderPath) {
+    const first = projects[0];
+    return {
+      name: first.name ?? 'Default',
+      configFolderPath: first.configFolderPath!,
+      messageConfigFile: first.messageConfigFile ?? DEFAULT_FILE_NAMES.messageConfigFile,
+      a429File: first.a429File ?? DEFAULT_FILE_NAMES.a429File,
+      m1553File: first.m1553File ?? DEFAULT_FILE_NAMES.m1553File,
+      discreteFile: first.discreteFile ?? DEFAULT_FILE_NAMES.discreteFile,
+      memoryPortsFile: first.memoryPortsFile ?? DEFAULT_FILE_NAMES.memoryPortsFile,
+    };
+  }
+
+  return {
+    name: activeName || 'No Project',
+    configFolderPath: '',
+    ...DEFAULT_FILE_NAMES,
+  };
+}
+
 // Initialize Google Generative AI with API key from configuration
 let genAI: GoogleGenerativeAI;
 
@@ -46,8 +104,63 @@ export function activate(context: vscode.ExtensionContext) {
         const newApiKey = newConfig.get('geminiApiKey') as string || '';
         genAI = new GoogleGenerativeAI(newApiKey);
       }
+      if (event.affectsConfiguration('esihelper.activeProject') ||
+          event.affectsConfiguration('esihelper.projects')) {
+        updateStatusBar();
+      }
     })
   );
+
+  // Status bar item for active project
+  const projectStatusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
+  projectStatusBarItem.command = 'extension.selectProject';
+  projectStatusBarItem.tooltip = 'Click to switch project preset';
+  context.subscriptions.push(projectStatusBarItem);
+
+  function updateStatusBar() {
+    const preset = getActiveProjectConfig();
+    projectStatusBarItem.text = `$(folder) Project: ${preset.name}`;
+    projectStatusBarItem.show();
+  }
+
+  updateStatusBar();
+
+  // Select project command
+  const disposableSelectProject = vscode.commands.registerCommand(
+    "extension.selectProject",
+    async () => {
+      const cfg = vscode.workspace.getConfiguration('esihelper');
+      const projects = cfg.get<Partial<ProjectPreset>[]>('projects') ?? [];
+
+      if (projects.length === 0) {
+        vscode.window.showWarningMessage(
+          'No project presets configured. Add presets in esihelper.projects setting.'
+        );
+        return;
+      }
+
+      const items = projects
+        .filter(p => p.name)
+        .map(p => ({
+          label: p.name!,
+          description: p.configFolderPath ?? '',
+        }));
+
+      const selected = await vscode.window.showQuickPick(items, {
+        placeHolder: 'Select a project preset',
+        title: 'ESI Helper: Select Project',
+      });
+
+      if (!selected) {
+        return;
+      }
+
+      await cfg.update('activeProject', selected.label, vscode.ConfigurationTarget.Global);
+      updateStatusBar();
+      vscode.window.showInformationMessage(`ESI Helper: Active project set to "${selected.label}"`);
+    }
+  );
+  context.subscriptions.push(disposableSelectProject);
 
   const disposable2 = vscode.commands.registerCommand(
     "extension.openWithTestPit",
@@ -84,29 +197,27 @@ export function activate(context: vscode.ExtensionContext) {
       const tempFilePath = editor.document.uri.fsPath + ".temp";
       fs.writeFileSync(tempFilePath, editor.document.getText());
 
-      const config = vscode.workspace.getConfiguration('esihelper');
-      const testpitConfigFolderpath = config.get(
-        "testpitConfigFolderpath"
-      );
+      const preset = getActiveProjectConfig();
+      const fp = preset.configFolderPath;
 
       const validityOutput = cp
         .execSync(
           testpitExecutablePath +
           " --cf=" +
-          testpitConfigFolderpath +
-          "MessageConfig_RNESystemTestCable.xml" +
+          fp +
+          preset.messageConfigFile +
           " --ac=" +
-          testpitConfigFolderpath +
-          "A429MessageFields.xml" +
+          fp +
+          preset.a429File +
           " --mc=" +
-          testpitConfigFolderpath +
-          "1553MessageFields.xml" +
+          fp +
+          preset.m1553File +
           " --dc=" +
-          testpitConfigFolderpath +
-          "DiscreteSignals.xml" +
+          fp +
+          preset.discreteFile +
           " --pc=" +
-          testpitConfigFolderpath +
-          "MemoryPorts.xml" +
+          fp +
+          preset.memoryPortsFile +
           " --sf=" +
           tempFilePath +
           " --validateScriptOnly=true"
@@ -141,9 +252,7 @@ export function activate(context: vscode.ExtensionContext) {
       }
       diagnosticCollection.clear();
 
-      const testpitConfigFolderpath = vscode.workspace
-        .getConfiguration('esihelper')
-        .get("testpitConfigFolderpath");
+      const preset = getActiveProjectConfig();
 
       // create a temporary file with a unique filename
       const tempFilePath = editor.document.uri.fsPath + ".temp";
@@ -152,7 +261,7 @@ export function activate(context: vscode.ExtensionContext) {
       const validityOutput = await executeTestpitValidity(
         tempFilePath,
         testpitExecutablePath,
-        testpitConfigFolderpath
+        preset
       );
 
       const diagnostics = parseValidtyOutput(validityOutput, editor);
@@ -169,9 +278,10 @@ export function activate(context: vscode.ExtensionContext) {
   async function executeTestpitValidity(
     FilePath: fs.PathLike,
     testpitExecutablePath: string,
-    testpitConfigFolderpath: unknown
+    preset: ProjectPreset
   ) {
-    const command = `${testpitExecutablePath} --cf=${testpitConfigFolderpath}MessageConfig_RNESystemTestCable.xml --ac=${testpitConfigFolderpath}A429MessageFields.xml --mc=${testpitConfigFolderpath}1553MessageFields.xml --dc=${testpitConfigFolderpath}DiscreteSignals.xml --pc=${testpitConfigFolderpath}MemoryPorts.xml --sf="${FilePath}" --validateScriptOnly=true`;
+    const fp = preset.configFolderPath;
+    const command = `${testpitExecutablePath} --cf=${fp}${preset.messageConfigFile} --ac=${fp}${preset.a429File} --mc=${fp}${preset.m1553File} --dc=${fp}${preset.discreteFile} --pc=${fp}${preset.memoryPortsFile} --sf="${FilePath}" --validateScriptOnly=true`;
     const validityOutput = await util.promisify(cp.exec)(command);
     return validityOutput.stdout.toString();
   }
@@ -367,9 +477,9 @@ export function activate(context: vscode.ExtensionContext) {
       const selection = editor.selection;
       const selectedText = editor.document.getText(selection);
       
-      // Get configuration file paths
-      const config = vscode.workspace.getConfiguration('esihelper');
-      const testpitConfigFolderpath = config.get("testpitConfigFolderpath") as string;
+      // Get config file paths from the active project preset
+      const preset = getActiveProjectConfig();
+      const fp = preset.configFolderPath;
       
       // Read configuration files for context
       const configFiles = {
@@ -382,11 +492,11 @@ export function activate(context: vscode.ExtensionContext) {
 
       try {
         // Attempt to read each config file
-        const messageConfigPath = `${testpitConfigFolderpath}MessageConfig_RNESystemTestCable.xml`;
-        const a429Path = `${testpitConfigFolderpath}A429MessageFields.xml`;
-        const m1553Path = `${testpitConfigFolderpath}1553MessageFields.xml`;
-        const discretePath = `${testpitConfigFolderpath}DiscreteSignals.xml`;
-        const memoryPath = `${testpitConfigFolderpath}MemoryPorts.xml`;
+        const messageConfigPath = `${fp}${preset.messageConfigFile}`;
+        const a429Path = `${fp}${preset.a429File}`;
+        const m1553Path = `${fp}${preset.m1553File}`;
+        const discretePath = `${fp}${preset.discreteFile}`;
+        const memoryPath = `${fp}${preset.memoryPortsFile}`;
 
         if (fs.existsSync(messageConfigPath)) {
           configFiles.messageConfig = fs.readFileSync(messageConfigPath, 'utf-8');
