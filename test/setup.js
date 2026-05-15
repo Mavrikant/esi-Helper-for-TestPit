@@ -93,6 +93,7 @@ mock('vscode', {
     registerDocumentSemanticTokensProvider() { return { dispose() {} }; },
     registerCompletionItemProvider() { return { dispose() {} }; },
     registerHoverProvider() { return { dispose() {} }; },
+    registerCodeActionsProvider() { return { dispose() {} }; },
     createDiagnosticCollection() { return { clear() {}, set() {}, delete() {}, dispose() {} }; },
     registerDocumentFormattingEditProvider() { return { dispose() {} }; },
   },
@@ -120,4 +121,12 @@ mock('vscode', {
   },
   Disposable: { from() { return { dispose() {} }; } },
   ConfigurationTarget: { Workspace: 1 },
+  CodeAction: class CodeAction {
+    constructor(title, kind) { this.title = title; this.kind = kind; this.diagnostics = []; this.edit = undefined; }
+  },
+  CodeActionKind: { QuickFix: { value: "quickfix" } },
+  WorkspaceEdit: class WorkspaceEdit {
+    constructor() { this._edits = []; }
+    replace(uri, range, text) { this._edits.push({ uri, range, text }); }
+  },
 });

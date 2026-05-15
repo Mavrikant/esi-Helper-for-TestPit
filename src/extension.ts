@@ -13,6 +13,7 @@ import { registerIndexLifecycle } from "./lib/projectIndexCache";
 import { registerEsiCompletionProvider } from "./providers/completion";
 import { registerEsiHoverProvider } from "./providers/hover";
 import { registerEsiSemanticTokensProvider } from "./providers/semanticTokens";
+import { registerEsiCodeActionsProvider } from "./providers/codeActions";
 import { registerComponentDiagnostics } from "./componentDiagnostics";
 
 export function activate(context: vscode.ExtensionContext): void {
@@ -33,6 +34,7 @@ export function activate(context: vscode.ExtensionContext): void {
     registerEsiCompletionProvider(),
     registerEsiHoverProvider(),
     registerEsiSemanticTokensProvider(),
+    registerEsiCodeActionsProvider(),
     registerComponentDiagnostics()
   );
 }
