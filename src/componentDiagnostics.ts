@@ -1,4 +1,5 @@
 import * as vscode from "vscode";
+import * as path from "path";
 import { CONFIG_SECTION } from "./constants";
 import { BUILT_IN_IDS } from "./projects";
 import {
@@ -6,11 +7,16 @@ import {
   validateComponents,
 } from "./lib/componentValidator";
 import { getActiveProjectIndex } from "./lib/projectIndexCache";
+import { getOutputChannel } from "./lib/outputChannel";
 
 const COLLECTION_NAME = "esi-components";
 
 export function registerComponentDiagnostics(): vscode.Disposable {
   const collection = vscode.languages.createDiagnosticCollection(COLLECTION_NAME);
+  // Per-document log throttling — only log to the output channel when the
+  // warning count actually changes, otherwise typing in a 13k-line .esi
+  // would flood the panel.
+  const lastLoggedCount = new Map<string, number>();
 
   const validateAndPublish = (document: vscode.TextDocument): void => {
     if (document.languageId !== "esi") {
@@ -19,10 +25,24 @@ export function registerComponentDiagnostics(): vscode.Disposable {
     const index = getActiveProjectIndex();
     if (!index) {
       collection.delete(document.uri);
+      const key = document.uri.toString();
+      if (lastLoggedCount.get(key) !== -1) {
+        getOutputChannel().appendLine(
+          `[validate] ${path.basename(document.uri.fsPath)}: no active project — diagnostics cleared. Pick a project from the status bar to enable validation.`
+        );
+        lastLoggedCount.set(key, -1);
+      }
       return;
     }
     const issues = validateComponents(document.getText(), index);
     collection.set(document.uri, issues.map(toDiagnostic));
+    const key = document.uri.toString();
+    if (lastLoggedCount.get(key) !== issues.length) {
+      getOutputChannel().appendLine(
+        `[validate] ${path.basename(document.uri.fsPath)}: ${issues.length} component issue(s)`
+      );
+      lastLoggedCount.set(key, issues.length);
+    }
   };
 
   // Initial pass for any .esi files already open.

@@ -22,7 +22,8 @@
     "onCommand:extension.runValidityCheck",
     "onCommand:extension.showProcessedFile",
     "onCommand:extension.gotoStep",
-    "onCommand:extension.selectProject"
+    "onCommand:extension.selectProject",
+    "onCommand:extension.showValidationInfo"
   ],
   "main": "./out/extension.js",
   "contributes": {
@@ -90,6 +91,11 @@
       {
         "command": "extension.selectProject",
         "title": "Select TestPit Project",
+        "category": "ESI Helper"
+      },
+      {
+        "command": "extension.showValidationInfo",
+        "title": "Show Component Validation Info",
         "category": "ESI Helper"
       }
     ],

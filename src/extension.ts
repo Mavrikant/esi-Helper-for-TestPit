@@ -6,6 +6,7 @@ import { registerGotoStep } from "./commands/gotoStep";
 import { registerRefactorDocument } from "./commands/refactorDocument";
 import { registerShowProcessedFile } from "./commands/showProcessedFile";
 import { registerSelectProject } from "./commands/selectProject";
+import { registerShowValidationInfo } from "./commands/showValidationInfo";
 import { registerLiveDiagnostics } from "./diagnostics";
 import { registerProjectStatusBar } from "./statusBar";
 import { registerEsiFormatter, registerFormatOnSave } from "./formatter";
@@ -26,6 +27,7 @@ export function activate(context: vscode.ExtensionContext): void {
     registerRefactorDocument(),
     registerShowProcessedFile(),
     registerSelectProject(),
+    registerShowValidationInfo(),
     registerProjectStatusBar(),
     registerLiveDiagnostics(),
     registerEsiFormatter(),
