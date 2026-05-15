@@ -20,7 +20,7 @@ async function handleDocumentChange(): Promise<void> {
   isUpdating = true;
   try {
     const editor = vscode.window.activeTextEditor;
-    if (!editor) {
+    if (!editor || editor.document.languageId !== "esi") {
       return;
     }
     const project = getActiveProject();
