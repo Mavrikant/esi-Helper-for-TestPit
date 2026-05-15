@@ -14,9 +14,10 @@ describe("projects", () => {
   describe("buildBuiltInProject('RNE')", () => {
     const p = buildBuiltInProject("RNE", RNE_EXE, RNE_CFG);
 
-    it("uses RNE id and label", () => {
-      assert.strictEqual(p.id, "RNE");
+    it("uses the executable path as id and 'RNE' as the label", () => {
+      assert.strictEqual(p.id, RNE_EXE);
       assert.strictEqual(p.label, "RNE");
+      assert.strictEqual(p.executablePath, RNE_EXE);
     });
 
     it("emits all the RNE-specific config flags", () => {
@@ -46,9 +47,10 @@ describe("projects", () => {
   describe("buildBuiltInProject('VORILS')", () => {
     const p = buildBuiltInProject("VORILS", RNE_EXE, VORILS_CFG);
 
-    it("uses VORILS id and label", () => {
-      assert.strictEqual(p.id, "VORILS");
+    it("uses the executable path as id and 'VORILS' as the label", () => {
+      assert.strictEqual(p.id, RNE_EXE);
       assert.strictEqual(p.label, "VORILS");
+      assert.strictEqual(p.executablePath, RNE_EXE);
     });
 
     it("matches the VORILS command shape from the project spec", () => {
