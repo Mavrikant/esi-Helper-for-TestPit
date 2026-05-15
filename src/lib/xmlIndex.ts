@@ -7,7 +7,7 @@ export type Bus = "429" | "1553" | "Discrete" | "Mem";
 /**
  * Single source of truth for bus prefixes used in `.esi` `[NAME]` references.
  *
- * `Discrete` accepts BOTH `Discrete_` and `DIS_` — TestPit's PartitionAliases
+ * `Discrete` accepts  `DIS_` — TestPit's PartitionAliases
  * (commented in MemoryPorts.xml) treat `DIS` as an alias for `Discrete`, and
  * scripts in the wild use both. Connections from MessageConfig
  * `<Device Type="Discrete">` and from DiscreteSignals.xml are dual-registered
@@ -16,7 +16,6 @@ export type Bus = "429" | "1553" | "Discrete" | "Mem";
 export const COMPONENT_TAG_PREFIXES = [
   "429",
   "1553",
-  "Discrete",
   "DIS",
   "Mem",
 ] as const;
@@ -28,7 +27,7 @@ export const COMPONENT_TAG_PATTERN = new RegExp(
 const PREFIXES_BY_BUS: Record<Bus, string[]> = {
   "429": ["429_"],
   "1553": ["1553_"],
-  Discrete: ["Discrete_", "DIS_"],
+  Discrete: ["DIS_"],
   Mem: ["Mem_"],
 };
 
