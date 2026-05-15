@@ -13,6 +13,7 @@ import { registerIndexLifecycle } from "./lib/projectIndexCache";
 import { registerEsiCompletionProvider } from "./providers/completion";
 import { registerEsiHoverProvider } from "./providers/hover";
 import { registerEsiSemanticTokensProvider } from "./providers/semanticTokens";
+import { registerComponentDiagnostics } from "./componentDiagnostics";
 
 export function activate(context: vscode.ExtensionContext): void {
   console.log('Extension "esi Helper for TestPit" is now active.');
@@ -31,7 +32,8 @@ export function activate(context: vscode.ExtensionContext): void {
     registerIndexLifecycle(),
     registerEsiCompletionProvider(),
     registerEsiHoverProvider(),
-    registerEsiSemanticTokensProvider()
+    registerEsiSemanticTokensProvider(),
+    registerComponentDiagnostics()
   );
 }
 

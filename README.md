@@ -24,6 +24,7 @@ The **ESI Helper for TestPit** is a powerful Visual Studio Code extension that e
 - **Open with TestPit** command — opens the active script in the configured `TestPit.exe`
 - **Component data IntelliSense:** auto-completion + hover for connections (`429_…`, `1553_…`, `Discrete_…`, `Mem_…`), their fields, enum values, and `%VARIABLE%` references — driven by the active project's TestPit XMLs. Type `[`, hit Ctrl+Space inside a component block, or hover any identifier. Re-indexes automatically when XMLs change.
 - **Semantic highlighting:** known connection / field / enum / variable identifiers carry a `defaultLibrary` modifier so themes can color resolved-vs-unknown identifiers differently — typos and stale references stand out.
+- **Component validation warnings:** unknown component names, unknown fields, and invalid enum values get squiggle warnings (and Problems-panel entries) on every keystroke — e.g. `SDI = NORMAL_NOPE` flags `NORMAL_NOPE` with the list of valid enum names. Source: `esi Helper`.
 
 ## Configuration
 

@@ -19,6 +19,8 @@ src/
 ├── diagnostics.ts            # onDidChangeTextDocument handler (runs TestPit on .esi files only)
 ├── statusBar.ts              # bottom‑right project picker item
 ├── formatter.ts              # registerEsiFormatter + registerFormatOnSave
+├── componentDiagnostics.ts   # owns the "esi-components" DiagnosticCollection;
+│                             #   warns on unknown connection / field / enum identifiers
 ├── commands/                 # one file per command, each exports register*(): Disposable
 ├── providers/                # IntelliSense providers wired in extension.ts
 │   ├── completion.ts            # CompletionItemProvider — connections / fields / enums / vars
@@ -39,6 +41,7 @@ src/
     ├── xmlIndex.ts              # parses TestPit XMLs → connections / messages / fields / enums
     ├── projectIndexCache.ts     # per‑configFolderpath XmlIndex cache + FileSystemWatcher + config watcher
     ├── esiContext.ts            # cursor → EsiContext (tagName | fieldName | fieldValue | variableRef | other)
+    ├── componentValidator.ts    # pure: text + index → ComponentIssue[] (unknown connection / field / enum)
     └── renderComponent.ts       # MarkdownString rendering for hover + completion docs
 
 test/setup.js                  # mock‑require fake `vscode`; loaded via mocha --require
@@ -109,6 +112,8 @@ A custom entry whose `id` matches a built‑in (`RNE` / `VORILS`) overrides the 
 - **The XML index re-loads automatically** on `esihelper.activeProject` change, on `<id>.configFolderpath` change, and on any XML file change in the active config folder. Don't add a stateful in-provider cache — that would mask updates. Use `getActiveProjectIndex()` from [src/lib/projectIndexCache.ts](src/lib/projectIndexCache.ts) on every request.
 - **Custom projects don't get the XML index** — the per-project `configFolderpath` setting is only declared for built-ins (RNE / VORILS). Custom projects bake their full file paths into `validityArgs`, so the index lookups don't apply. Completion / hover / semantic tokens silently no-op when a custom project is active.
 - **Bus prefixes:** `.esi` references look like `[429_<connName>]` / `[1553_<connName>]` / `[Discrete_<signalName>]` / `[Mem_<portName>]`. The XML index assigns the prefix based on the source file: `MessageConfig` `<Device Type>`, the file containing the message, etc. Don't hardcode prefixes elsewhere — derive from `Bus`.
+- **Two diagnostic collections:** `diagnostics.ts` owns `vscode.languages.createDiagnosticCollection(uri.toString())` (one per file, populated by running TestPit.exe — heavy). `componentDiagnostics.ts` owns a single `"esi-components"` collection (cheap, in-process index lookup). Don't merge them — they have different costs and different freshness expectations.
+- **`componentValidator` skips when no XML index is loaded** (e.g. custom project, missing configFolderpath). That's deliberate: warning every identifier as "unknown" when there's no index would be noise. Don't add a fallback heuristic — let the picker prompt the user to set a project.
 
 ## Testing approach
 
@@ -116,7 +121,7 @@ Pure functions (no `vscode` import) are unit‑tested directly with Node's `asse
 
 `projectRegistry.ts`, `statusBar.ts`, and `selectProject.ts` are deliberately untested — they're thin glue around `workspace.getConfiguration().update`, `createStatusBarItem`, and `showQuickPick`, all of which need a richer mock or an actual integration harness (`@vscode/test-electron`) to exercise meaningfully.
 
-After any change, run `npm test` and `npm run lint`. Current count: 92 passing.
+After any change, run `npm test` and `npm run lint`. Current count: 102 passing.
 
 ## Don't
 
