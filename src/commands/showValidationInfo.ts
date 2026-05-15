@@ -13,6 +13,14 @@ export function registerShowValidationInfo(): vscode.Disposable {
       ch.show(true);
       ch.appendLine("=== esi Helper: validation diagnostics ===");
 
+      // Extension version + build identifier so the user can confirm which
+      // build is actually loaded.
+      const ext = vscode.extensions.getExtension("karamandev.esi-helper-for-testpit");
+      const pkg = ext?.packageJSON ?? {};
+      ch.appendLine(`Extension:    karamandev.esi-helper-for-testpit @ ${pkg.version ?? "<unknown>"}`);
+      ch.appendLine(`Active:       ${ext?.isActive ? "yes" : "no"}`);
+      ch.appendLine(`Install path: ${ext?.extensionPath ?? "<unknown>"}`);
+
       const editor = vscode.window.activeTextEditor;
       ch.appendLine(`Active editor: ${editor?.document.uri.fsPath ?? "<none>"}`);
       ch.appendLine(`Language id:   ${editor?.document.languageId ?? "<none>"}`);
