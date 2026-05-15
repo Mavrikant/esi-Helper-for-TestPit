@@ -7,8 +7,20 @@ if exist "out" rmdir /s /q out
 if exist "*.vsix" del /q *.vsix
 
 echo.
-echo Installing dependencies...
-call npm install
+echo Installing ci...
+call npm ci
+
+echo.
+echo Auditing dependencies...
+call npm audit fix
+
+echo.
+echo Linting code...
+call npm run lint
+
+echo.
+echo Testing code...
+call npm test
 
 echo.
 echo Compiling TypeScript files...

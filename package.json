@@ -3,11 +3,11 @@
   "displayName": "esi Helper for TestPit",
   "description": "Provides syntax highlighting, validation, and code snippets for esi files used in the TestPit tool.",
   "icon": "images/TestPitIcon.ico",
-  "version": "0.2.8",
+  "version": "0.2.9",
   "publisher": "karamandev",
   "repository": "https://github.com/Mavrikant/esi-Helper-for-TestPit",
   "engines": {
-    "vscode": "^1.96.0",
+    "vscode": "^1.120.0",
     "node": ">=22.0.0"
   },
   "categories": [
@@ -110,18 +110,23 @@
     "lint": "eslint . --ext .ts,.tsx",
     "watch": "tsc -watch -p ./",
     "pretest": "npm run compile",
-    "test": "mocha"
+    "test": "mocha --require ./test/setup.js"
+  },
+  "overrides": {
+    "serialize-javascript": "7.0.5",
+    "diff": "9.0.0",
+    "glob": "13.0.6"
   },
   "devDependencies": {
-    "@types/mocha": "^10.0.10",
-    "@types/node": "^22.10.0",
-    "@types/vscode": "^1.96.0",
-    "@typescript-eslint/eslint-plugin": "^5.19.0",
-    "@typescript-eslint/parser": "^5.19.0",
-    "@vscode/test-electron": "^2.3.0",
-    "eslint": "^8.13.0",
-    "mocha": "^11.1.0",
-    "typescript": "^5.7.3",
-    "vscode": "^1.1.37"
+    "@types/mocha": "^10.0.1",
+    "@types/node": "^25.8.0",
+    "@types/vscode": "^1.120.0",
+    "@typescript-eslint/eslint-plugin": "^8.59.3",
+    "@typescript-eslint/parser": "^8.59.3",
+    "@vscode/test-electron": "^2.5.2",
+    "eslint": "^10.3.0",
+    "mocha": "^11.7.5",
+    "mock-require": "^3.0.3",
+    "typescript": "^6.0.3"
   }
 }
