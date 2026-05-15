@@ -1,9 +1,11 @@
 import * as vscode from "vscode";
+import * as fs from "fs";
 import * as path from "path";
 import { CONFIG_SECTION } from "./constants";
 import { BUILT_IN_IDS } from "./projects";
 import {
   ComponentIssue,
+  CsvLookup,
   validateComponents,
 } from "./lib/componentValidator";
 import { getActiveProjectIndex } from "./lib/projectIndexCache";
@@ -34,7 +36,8 @@ export function registerComponentDiagnostics(): vscode.Disposable {
       }
       return;
     }
-    const issues = validateComponents(document.getText(), index);
+    const csvLookup = makeCsvLookup(document.uri.fsPath);
+    const issues = validateComponents(document.getText(), index, csvLookup);
     collection.set(document.uri, issues.map(toDiagnostic));
     const key = document.uri.toString();
     if (lastLoggedCount.get(key) !== issues.length) {
@@ -86,6 +89,48 @@ export function registerComponentDiagnostics(): vscode.Disposable {
     onClose,
     onConfigChange
   );
+}
+
+/**
+ * Build a per-validation-pass CSV cell lookup. CSV files are read at
+ * most once per pass (cached by absolute path). Resolution: filename
+ * is treated as relative to the .esi file's directory.
+ *
+ * Cell parsing is intentionally simple: lines split on \r?\n, cells
+ * split on `,`, both 1-indexed, surrounding whitespace + double-quote
+ * pair stripped. No support for embedded commas inside quoted cells —
+ * if your fixtures need that we can swap in a real CSV parser later.
+ */
+function makeCsvLookup(esiFilePath: string): CsvLookup {
+  const baseDir = path.dirname(esiFilePath);
+  const rowsCache = new Map<string, string[][] | undefined>();
+  return (filename, line, col) => {
+    const fullPath = path.resolve(baseDir, filename);
+    let rows = rowsCache.get(fullPath);
+    if (rows === undefined && !rowsCache.has(fullPath)) {
+      try {
+        const content = fs.readFileSync(fullPath, "utf-8");
+        rows = content.split(/\r?\n/).map((row) =>
+          row.split(",").map(cleanCsvCell)
+        );
+      } catch {
+        rows = undefined;
+      }
+      rowsCache.set(fullPath, rows);
+    }
+    if (!rows) {
+      return undefined;
+    }
+    return rows[line - 1]?.[col - 1];
+  };
+}
+
+function cleanCsvCell(raw: string): string {
+  let s = raw.trim();
+  if (s.length >= 2 && s.startsWith('"') && s.endsWith('"')) {
+    s = s.slice(1, -1).replace(/""/g, '"');
+  }
+  return s;
 }
 
 function toDiagnostic(issue: ComponentIssue): vscode.Diagnostic {

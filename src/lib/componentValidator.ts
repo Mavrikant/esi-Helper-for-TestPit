@@ -3,7 +3,8 @@ import { COMPONENT_TAG_PATTERN, XmlIndex, isKnownComponent } from "./xmlIndex";
 export type IssueKind =
   | "unknownConnection"
   | "unknownField"
-  | "unknownEnum";
+  | "unknownEnum"
+  | "unknownCsvCell";
 
 export interface ComponentIssue {
   line: number;
@@ -14,10 +15,29 @@ export interface ComponentIssue {
   kind: IssueKind;
 }
 
+/**
+ * Looks up a single cell in a CSV file referenced by an .esi script.
+ * Implementation lives in componentDiagnostics.ts (the VS Code wrapper)
+ * because reading the CSV needs fs access + the .esi file's directory
+ * for path resolution; the validator stays pure.
+ *
+ * Returns the cell value (already trimmed and unquoted), or undefined
+ * if the file can't be read or the requested cell doesn't exist.
+ */
+export type CsvLookup = (
+  filename: string,
+  line: number,
+  col: number
+) => string | undefined;
+
 const TAG_RE = /\[(\/?)([A-Za-z0-9_]+)\]/g;
 // Field name may include dots (1553 `Mode.SelectedCourse`).
 const ASSIGNMENT_RE = /^(\s*)([A-Za-z_][A-Za-z0-9_.]*)\s*=\s*(.*)$/;
 const RHS_IDENT_RE = /^[A-Za-z_][A-Za-z0-9_]*/;
+// `<filename>.csv line:<N> col:<M>` — the input-from-CSV pattern that
+// scripts use to pull a value out of a fixture spreadsheet at runtime.
+// Whitespace around `:` is tolerated.
+const CSV_REF_RE = /^([A-Za-z0-9_.\-]+\.csv)\s+line\s*:\s*(\d+)\s+col\s*:\s*(\d+)/i;
 const COMPONENT_TAG = COMPONENT_TAG_PATTERN;
 
 // Built-in scheduling keywords valid inside any component block — never
@@ -41,7 +61,8 @@ interface StackEntry {
  */
 export function validateComponents(
   documentText: string,
-  index: XmlIndex
+  index: XmlIndex,
+  csvLookup?: CsvLookup
 ): ComponentIssue[] {
   const issues: ComponentIssue[] = [];
   // Split on either LF or CRLF — VS Code documents on Windows commonly
@@ -129,6 +150,47 @@ export function validateComponents(
       rhsStart += 1;
     }
     const rhsTail = line.slice(rhsStart);
+
+    // CSV reference form: `myfile.csv line:N col:M`. Look up the actual
+    // cell value and validate THAT against the field's enum table.
+    const csvMatch = CSV_REF_RE.exec(rhsTail);
+    if (csvMatch) {
+      const csvFile = csvMatch[1];
+      const csvLine = parseInt(csvMatch[2], 10);
+      const csvCol = parseInt(csvMatch[3], 10);
+      const refStartCol = rhsStart;
+      const refEndCol = rhsStart + csvMatch[0].length;
+      if (!csvLookup) {
+        continue;
+      }
+      const cellValue = csvLookup(csvFile, csvLine, csvCol);
+      if (cellValue === undefined) {
+        issues.push({
+          line: lineNum,
+          startCol: refStartCol,
+          endCol: refEndCol,
+          message: `CSV cell '${csvFile}' line:${csvLine} col:${csvCol} not found (file unreadable or out-of-range).`,
+          identifier: csvMatch[0],
+          kind: "unknownCsvCell",
+        });
+        continue;
+      }
+      if (field.enums.some((e) => e.name === cellValue)) {
+        continue;
+      }
+      issues.push({
+        line: lineNum,
+        startCol: refStartCol,
+        endCol: refEndCol,
+        message: `Unknown enum value '${cellValue}' (from ${csvFile} line:${csvLine} col:${csvCol}) for field '${fieldName}'. Valid: ${field.enums
+          .map((e) => e.name)
+          .join(", ")}.`,
+        identifier: cellValue,
+        kind: "unknownEnum",
+      });
+      continue;
+    }
+
     const valueMatch = RHS_IDENT_RE.exec(rhsTail);
     if (!valueMatch) {
       continue;

@@ -278,6 +278,64 @@ describe("componentValidator", () => {
     assert.ok(issues.some((i) => i.kind === "unknownConnection"));
   });
 
+  describe("CSV reference values", () => {
+    // SDI is Enum on the SelectedCourseBNR (429) message in the fixtures.
+    const enumLine = (csvCell: string) =>
+      [
+        "[429_L100SelectedCourseBNR_input1]",
+        `    SDI = ${csvCell}`,
+        "[/429_L100SelectedCourseBNR_input1]",
+      ].join("\n");
+
+    it("looks up the cell value via csvLookup and validates that against the enum table", () => {
+      const csvLookup = (file: string, line: number, col: number): string | undefined => {
+        // Mocked CSV: line 4 col 1 contains a valid SDI enum value.
+        if (file === "fix.csv" && line === 4 && col === 1) return "INSTALLATION_NUMBER_ONE";
+        return undefined;
+      };
+      const issues = validateComponents(enumLine("fix.csv line:4 col:1"), idx, csvLookup);
+      assert.deepStrictEqual(issues, []);
+    });
+
+    it("flags an unknown CSV cell value with the file/line/col in the message", () => {
+      const csvLookup = (): string | undefined => "BOGUS_VALUE";
+      const issues = validateComponents(enumLine("fix.csv line:4 col:1"), idx, csvLookup);
+      assert.strictEqual(issues.length, 1);
+      assert.strictEqual(issues[0].kind, "unknownEnum");
+      assert.strictEqual(issues[0].identifier, "BOGUS_VALUE");
+      assert.match(issues[0].message, /BOGUS_VALUE/);
+      assert.match(issues[0].message, /fix\.csv line:4 col:1/);
+    });
+
+    it("emits unknownCsvCell when the lookup returns undefined", () => {
+      const csvLookup = (): string | undefined => undefined;
+      const issues = validateComponents(enumLine("missing.csv line:1 col:1"), idx, csvLookup);
+      assert.strictEqual(issues.length, 1);
+      assert.strictEqual(issues[0].kind, "unknownCsvCell");
+      assert.match(issues[0].message, /missing\.csv/);
+    });
+
+    it("does NOT misfire as unknownEnum when the field is non-Enum", () => {
+      // Course is BNR (Float) — no enum check ever fires. Even with no
+      // csvLookup at all, the CSV reference shouldn't produce a warning.
+      const text = [
+        "[429_L100SelectedCourseBNR_input1]",
+        "    Course = fix.csv line:4 col:1",
+        "[/429_L100SelectedCourseBNR_input1]",
+      ].join("\n");
+      assert.deepStrictEqual(validateComponents(text, idx), []);
+    });
+
+    it("does not warn for a CSV reference when csvLookup is not provided (regression vs the old false-positive)", () => {
+      // Before this change, the validator would match `fix` as the RHS
+      // identifier (RHS_IDENT_RE stops at `.`), look it up as an enum,
+      // and emit unknownEnum: 'fix'. With CSV-aware detection we just
+      // skip when no resolver is wired up.
+      const issues = validateComponents(enumLine("fix.csv line:4 col:1"), idx);
+      assert.deepStrictEqual(issues, []);
+    });
+  });
+
   it("flags bad enums on CRLF-line-ended documents (Windows line endings)", () => {
     // Regression: validator was using text.split("\n") which left a trailing
     // \r on every line. The ASSIGNMENT_RE's $ anchor then couldn't match
