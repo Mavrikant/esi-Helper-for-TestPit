@@ -30,9 +30,20 @@ export function registerEsiCompletionProvider(): vscode.Disposable {
             if (!index) {
               return [];
             }
+            // Explicitly tell VS Code that the partial typed text after
+            // the `[` is what should be replaced. Without this, VS Code's
+            // word-at-cursor heuristic mis-detects the boundary for
+            // digit-leading identifiers (1553_..., 429_...) and the
+            // filter list goes empty.
+            const replaceRange = new vscode.Range(
+              position.line,
+              position.character - ctx.partial.length,
+              position.line,
+              position.character
+            );
             const items: vscode.CompletionItem[] = [];
             for (const conn of index.connections.values()) {
-              items.push(connectionToItem(conn, index));
+              items.push(connectionToItem(conn, index, replaceRange));
             }
             return items;
           }
@@ -129,7 +140,8 @@ export function registerEsiCompletionProvider(): vscode.Disposable {
 
 function connectionToItem(
   conn: ConnectionDef,
-  index: ReturnType<typeof getActiveProjectIndex> & object
+  index: ReturnType<typeof getActiveProjectIndex> & object,
+  range: vscode.Range
 ): vscode.CompletionItem {
   const item = new vscode.CompletionItem(
     conn.fullName,
@@ -137,6 +149,10 @@ function connectionToItem(
   );
   item.detail = conn.messageName ? `→ ${conn.messageName}` : conn.bus;
   item.documentation = renderConnection(conn, index);
+  item.range = range;
+  // filterText spelled out so digit-leading prefixes (1553_…, 429_…) match
+  // even when VS Code's default word-pattern heuristic disagrees.
+  item.filterText = conn.fullName;
   return item;
 }
 
