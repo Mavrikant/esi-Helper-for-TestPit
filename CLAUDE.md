@@ -4,7 +4,7 @@ Guidance for Claude Code sessions working on **esi Helper for TestPit**.
 
 ## What this is
 
-A VS Code extension for editing TestPit `.esi` files — test scripts for avionics hardware testing (DO‑178C). The extension provides syntax highlighting, snippets, a goto‑step picker (Ctrl+G), live validity checking via the local `TestPit.exe`, ESI‑aware auto‑formatting, and a multi‑project model (built‑in RNE / VORILS profiles plus user‑extensible custom projects). Active project shows in a bottom‑left status‑bar item; click to switch.
+A VS Code extension for editing TestPit `.esi` files — test scripts for avionics hardware testing (DO‑178C). The extension provides syntax highlighting, snippets, a goto‑step picker (Ctrl+G), live validity checking via the local `TestPit.exe`, ESI‑aware auto‑formatting, and a multi‑project model (built‑in RNE / VORILS profiles plus user‑extensible custom projects). Active project shows in a right status‑bar item; click to switch.
 
 TestPit only runs on Windows. Test scripts are the only language touched — the extension never auto‑activates on other file types.
 
@@ -17,7 +17,7 @@ src/
 ├── projects.ts               # Project shape + buildBuiltInProject (RNE/VORILS arg templates)
 │                             #   + buildValidityCommand / buildOpenCommand (templating + quoting)
 ├── diagnostics.ts            # onDidChangeTextDocument handler (runs TestPit on .esi files only)
-├── statusBar.ts              # bottom‑left project picker item
+├── statusBar.ts              # bottom‑right project picker item
 ├── formatter.ts              # registerEsiFormatter + registerFormatOnSave
 ├── commands/                 # one file per command, each exports register*(): Disposable
 └── lib/                      # vscode‑free where possible — all unit‑tested

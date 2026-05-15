@@ -20,7 +20,7 @@ The **ESI Helper for TestPit** is a powerful Visual Studio Code extension that e
 - Step renumbering (sequential 10, 20, 30, …) via the **Update Step Numbers** command
 - Live linting / error checking against the local `TestPit.exe` while you type
 - Auto-formatting with ESI-aware indentation: contents of `[TAG]…[/TAG]` blocks are indented at 4-space increments per nesting level; `<pre>…</pre>` blocks (Step Conditions / Step Expected Results) are indented one level past the opener line, with `</pre>` aligned back. Available via **Format Document** (Shift+Alt+F) and on save (`"esihelper.refactorDocumentOnSave": true` or VS Code's `"editor.formatOnSave"`)
-- **Multi-project support:** built-in `RNE` and `VORILS` profiles plus user-defined custom projects. Status-bar item (bottom-left) shows the active project; click to switch via QuickPick
+- **Multi-project support:** built-in `RNE` and `VORILS` profiles plus user-defined custom projects. Status-bar item (bottom-right) shows the active project; click to switch via QuickPick
 - **Open with TestPit** command — opens the active script in the configured `TestPit.exe`
 - Semantic highlighting (TODO)
 - Component Data: auto-completion and hover-information (TODO)
