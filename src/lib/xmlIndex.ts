@@ -7,11 +7,11 @@ export type Bus = "429" | "1553" | "DIS" | "Mem";
 /**
  * Single source of truth for bus prefixes used in `.esi` `[NAME]` references.
  *
- * `DIS` accepts  `DIS_` — TestPit's PartitionAliases
- * (commented in MemoryPorts.xml) treat `DIS` as an alias for `DIS`, and
- * scripts in the wild use both. Connections from MessageConfig
- * `<Device Type="DIS">` and from DiscreteSignals.xml are dual-registered
- * under both prefixes so completion / hover / validation work either way.
+ * `.esi` scripts reference discrete signals under `DIS_` (TestPit's
+ * PartitionAlias for the `Discrete` partition — the alias is documented in
+ * MemoryPorts.xml and is what scripts actually use). The internal `Bus`
+ * value `"DIS"` mirrors the prefix; the source XML attribute
+ * `<Device Type="Discrete">` is mapped to it via BUS_PREFIX below.
  */
 export const COMPONENT_TAG_PREFIXES = [
   "429",
@@ -88,10 +88,13 @@ const parser = new XMLParser({
 });
 
 const CONNECTION_NAME_PATTERN = /^L(\d+)([A-Z][A-Za-z0-9]*?)(?:_\w+)?$/;
+// Maps the `<Device Type="...">` XML attribute on MessageConfig devices to
+// our internal `Bus` value. Note that the XML attribute is "Discrete" but
+// scripts use the "DIS" prefix — internally we use "DIS" everywhere.
 const BUS_PREFIX: Record<string, Bus> = {
   A429: "429",
   "1553": "1553",
-  "DIS": "DIS",
+  Discrete: "DIS",
   Memory: "Mem",
 };
 
@@ -267,7 +270,7 @@ function ingestDiscreteSignals(root: Record<string, unknown>, index: XmlIndex): 
     const enums = parseEnumsBlock(m.Enums);
     if (enums.length > 0) {
       def.fields.push({
-        name: "Value",
+        name: "value",
         dataType: "Enum",
         size: str(m.Size),
         enums,
@@ -275,15 +278,15 @@ function ingestDiscreteSignals(root: Record<string, unknown>, index: XmlIndex): 
       });
     } else {
       def.fields.push({
-        name: "Value",
+        name: "value",
         dataType: "UInt",
         size: str(m.Size),
         parentMessage: name,
       });
     }
     index.messages.set(name, def);
-    // Discrete signals are referenced as connections under both `DIS_<name>`
-    // and `DIS_<name>` (TestPit's PartitionAlias).
+    // Discrete signals are referenced as connections under DIS_<name>
+    // (TestPit's PartitionAlias for the Discrete partition).
     for (const prefix of PREFIXES_BY_BUS["DIS"]) {
       const fullName = `${prefix}${name}`;
       index.connections.set(fullName, {
