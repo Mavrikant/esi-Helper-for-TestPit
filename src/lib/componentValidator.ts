@@ -44,7 +44,9 @@ export function validateComponents(
   index: XmlIndex
 ): ComponentIssue[] {
   const issues: ComponentIssue[] = [];
-  const lines = documentText.split("\n");
+  // Split on either LF or CRLF — VS Code documents on Windows commonly
+  // carry CRLF, and a trailing \r breaks the assignment regex's $ anchor.
+  const lines = documentText.split(/\r?\n/);
   const stack: StackEntry[] = [];
 
   for (let lineNum = 0; lineNum < lines.length; lineNum++) {

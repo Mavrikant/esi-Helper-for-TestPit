@@ -29,7 +29,7 @@ export function registerEsiSemanticTokensProvider(): vscode.Disposable {
       provideDocumentSemanticTokens(document) {
         const builder = new vscode.SemanticTokensBuilder(ESI_LEGEND);
         const index = getActiveProjectIndex();
-        const lines = document.getText().split("\n");
+        const lines = document.getText().split(/\r?\n/);
 
         // Track the enclosing component message as we walk down.
         const stack: string[] = [];

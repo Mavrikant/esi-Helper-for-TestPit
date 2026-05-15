@@ -25,7 +25,7 @@ export function resolveContext(
   lineIndex: number,
   character: number
 ): EsiContext {
-  const lines = documentText.split("\n");
+  const lines = documentText.split(/\r?\n/);
   if (lineIndex < 0 || lineIndex >= lines.length) {
     return { kind: "other" };
   }

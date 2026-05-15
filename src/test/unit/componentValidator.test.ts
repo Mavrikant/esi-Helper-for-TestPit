@@ -278,6 +278,22 @@ describe("componentValidator", () => {
     assert.ok(issues.some((i) => i.kind === "unknownConnection"));
   });
 
+  it("flags bad enums on CRLF-line-ended documents (Windows line endings)", () => {
+    // Regression: validator was using text.split("\n") which left a trailing
+    // \r on every line. The ASSIGNMENT_RE's $ anchor then couldn't match
+    // (`.` doesn't include \r) and field-level validation silently produced
+    // 0 issues for the entire document. This test reproduces that scenario.
+    const text = [
+      "[429_L100SelectedCourseBNR_input1]",
+      "    SDI = INSTALLATION_NUMBER_NOPE",
+      "[/429_L100SelectedCourseBNR_input1]",
+    ].join("\r\n");
+    const issues = validateComponents(text, idx);
+    assert.strictEqual(issues.length, 1);
+    assert.strictEqual(issues[0].kind, "unknownEnum");
+    assert.strictEqual(issues[0].identifier, "INSTALLATION_NUMBER_NOPE");
+  });
+
   it("does not treat [Discrete_*] as a component tag (Discrete_ is not a valid prefix)", () => {
     // Discrete_PowerOnOff isn't recognised as a component tag at all, so the
     // line inside the block is just plain content — no warnings, no field

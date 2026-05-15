@@ -19,7 +19,7 @@ export function parseValidityOutput(
     return [];
   }
   const issues: ValidityIssue[] = [];
-  for (const line of validityOutput.split("\n")) {
+  for (const line of validityOutput.split(/\r?\n/)) {
     const match = line.match(ISSUE_PATTERN);
     if (!match) {
       continue;

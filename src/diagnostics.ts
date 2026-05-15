@@ -35,7 +35,7 @@ async function handleDocumentChange(): Promise<void> {
     await withTempScript(editor.document.uri.fsPath, documentText, async (tempPath) => {
       const command = buildValidityCommand(project, tempPath);
       const output = await runValidityCheckAsync(command);
-      const issues = parseValidityOutput(output, documentText.split("\n"));
+      const issues = parseValidityOutput(output, documentText.split(/\r?\n/));
       collection.set(uri, issues.map(toDiagnostic));
     });
   } catch (error) {

@@ -1,5 +1,5 @@
 export function findStepLine(text: string, stepNumber: string): number {
   const stepRegex = new RegExp(`\\[STEP ${stepNumber}\\]`);
-  const lines = text.split("\n");
+  const lines = text.split(/\r?\n/);
   return lines.findIndex((line) => stepRegex.test(line));
 }

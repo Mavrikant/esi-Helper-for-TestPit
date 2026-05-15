@@ -24,7 +24,7 @@ const PRE_CLOSER_WHOLE_LINE = /^<\/pre>\s*$/i;
 
 export function formatEsi(text: string): string {
   const normalized = refactorWhitespace(text);
-  const lines = normalized.split("\n");
+  const lines = normalized.split(/\r?\n/);
   const out: string[] = [];
   let depth = 0;
 
