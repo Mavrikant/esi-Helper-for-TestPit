@@ -45,6 +45,26 @@ class MarkdownString {
   }
 }
 
+class SemanticTokensLegend {
+  constructor(types, modifiers) {
+    this.types = types;
+    this.modifiers = modifiers;
+  }
+}
+
+class SemanticTokensBuilder {
+  constructor(legend) {
+    this.legend = legend;
+    this._tokens = [];
+  }
+  push(line, start, length, tokenType, tokenModifiers) {
+    this._tokens.push({ line, start, length, tokenType, tokenModifiers });
+  }
+  build() {
+    return { data: this._tokens };
+  }
+}
+
 mock('vscode', {
   window: {
     createOutputChannel(name) {
@@ -57,9 +77,47 @@ mock('vscode', {
         dispose() {},
       };
     },
+    createStatusBarItem(key, alignment, priority) {
+      return {
+        name: "",
+        command: "",
+        text: "",
+        tooltip: "",
+        backgroundColor: undefined,
+        show() {},
+        dispose() {},
+      };
+    },
+  },
+  languages: {
+    registerDocumentSemanticTokensProvider() { return { dispose() {} }; },
+    registerCompletionItemProvider() { return { dispose() {} }; },
+    registerHoverProvider() { return { dispose() {} }; },
+    createDiagnosticCollection() { return { clear() {}, set() {}, delete() {}, dispose() {} }; },
+    registerDocumentFormattingEditProvider() { return { dispose() {} }; },
+  },
+  commands: {
+    registerCommand() { return { dispose() {} }; },
+    registerTextEditorCommand() { return { dispose() {} }; },
   },
   Range,
   Diagnostic,
   DiagnosticSeverity,
   MarkdownString,
+  SemanticTokensLegend,
+  SemanticTokensBuilder,
+  StatusBarAlignment: { Left: 1, Right: 2 },
+  ThemeColor: class ThemeColor { constructor(id) { this.id = id; } },
+  workspace: {
+    textDocuments: [],
+    onDidChangeConfiguration() { return { dispose() {} }; },
+    onDidChangeTextDocument() { return { dispose() {} }; },
+    onDidOpenTextDocument() { return { dispose() {} }; },
+    onDidCloseTextDocument() { return { dispose() {} }; },
+    onWillSaveTextDocument() { return { dispose() {} }; },
+    onDidSaveTextDocument() { return { dispose() {} }; },
+    getConfiguration() { return { get() { return undefined; }, update() { return Promise.resolve(); } }; },
+  },
+  Disposable: { from() { return { dispose() {} }; } },
+  ConfigurationTarget: { Workspace: 1 },
 });

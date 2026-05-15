@@ -345,7 +345,7 @@ function ingestMemoryPorts(root: Record<string, unknown>, index: XmlIndex): void
   }
 }
 
-function parseElementStyleField(
+export function parseElementStyleField(
   f: Record<string, unknown>,
   parentMessage: string
 ): FieldDef {
@@ -365,7 +365,7 @@ function parseElementStyleField(
   };
 }
 
-function parseAttributeStyleField(
+export function parseAttributeStyleField(
   f: Record<string, unknown>,
   parentMessage: string
 ): FieldDef {
@@ -384,7 +384,7 @@ function parseAttributeStyleField(
   };
 }
 
-function parseEnumsBlock(value: unknown): EnumDef[] {
+export function parseEnumsBlock(value: unknown): EnumDef[] {
   if (!value || typeof value !== "object") {
     return [];
   }
@@ -403,7 +403,7 @@ function parseEnumsBlock(value: unknown): EnumDef[] {
   return out;
 }
 
-function parseConnectionName(rawName: string): { messageName?: string; label?: number } {
+export function parseConnectionName(rawName: string): { messageName?: string; label?: number } {
   // 429 connections follow `L<label><MessageName>(_<suffix>)?` (e.g.
   // `L100SelectedCourseBNR_input1` → message `SelectedCourseBNR`, label 100).
   // 1553 / Memory connections use the bare name directly (the connection
@@ -418,14 +418,14 @@ function parseConnectionName(rawName: string): { messageName?: string; label?: n
   return { messageName: rawName, label: undefined };
 }
 
-function asArray<T>(value: T | T[] | undefined): T[] {
+export function asArray<T>(value: T | T[] | undefined): T[] {
   if (value === undefined || value === null) {
     return [];
   }
   return Array.isArray(value) ? value : [value];
 }
 
-function str(value: unknown): string | undefined {
+export function str(value: unknown): string | undefined {
   if (value === undefined || value === null) {
     return undefined;
   }
@@ -442,7 +442,7 @@ function str(value: unknown): string | undefined {
   return undefined;
 }
 
-function numOrUndef(value: unknown): number | undefined {
+export function numOrUndef(value: unknown): number | undefined {
   const s = str(value);
   if (s === undefined || s === "") {
     return undefined;
@@ -451,7 +451,7 @@ function numOrUndef(value: unknown): number | undefined {
   return Number.isFinite(n) ? n : undefined;
 }
 
-function boolOrUndef(value: unknown): boolean | undefined {
+export function boolOrUndef(value: unknown): boolean | undefined {
   const s = str(value);
   if (s === undefined) {
     return undefined;

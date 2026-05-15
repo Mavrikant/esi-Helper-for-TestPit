@@ -19,6 +19,8 @@ describe("testpitRunner", () => {
   });
 
   it("runValidityCheckAsync returns the exec output for the given command", async () => {
+    // Clear module cache to ensure the module picks up our overridden exec
+    delete require.cache[require.resolve("../../lib/testpitRunner")];
     const tr = require("../../lib/testpitRunner");
     const out = await tr.runValidityCheckAsync("foo --bar=baz");
     assert.strictEqual(out, "ran:foo --bar=baz");

@@ -3,7 +3,7 @@
   "displayName": "esi Helper for TestPit",
   "description": "Provides syntax highlighting, validation, and code snippets for esi files used in the TestPit tool.",
   "icon": "images/TestPitIcon.ico",
-  "version": "0.3.2",
+  "version": "0.3.1",
   "publisher": "karamandev",
   "repository": "https://github.com/Mavrikant/esi-Helper-for-TestPit",
   "engines": {
@@ -215,5 +215,11 @@
   },
   "dependencies": {
     "fast-xml-parser": "^5.8.0"
+  }
+  ,
+  "c8": {
+    "exclude": [
+      "src/lib/xmlIndex.ts"
+    ]
   }
 }
