@@ -21,29 +21,10 @@
     "onCommand:extension.refactorDocument",
     "onCommand:extension.runValidityCheck",
     "onCommand:extension.showProcessedFile",
-    "onCommand:extension.serdAI",
     "onCommand:extension.gotoStep"
   ],
   "main": "./out/extension.js",
   "contributes": {
-    "viewsContainers": {
-      "panel": [
-        {
-          "id": "myOutputContainer",
-          "title": "SERDAI",
-          "icon": "media/myIcon.svg"
-        }
-      ]
-    },
-    "views": {
-      "myOutputContainer": [
-        {
-          "type": "webview",
-          "id": "myOutputView",
-          "name": "SERDAI"
-        }
-      ]
-    },
     "languages": [
       {
         "id": "esi",
@@ -95,16 +76,6 @@
         "command": "extension.showProcessedFile",
         "title": "Show Processed File",
         "category": "ESI Helper"
-      },
-      {
-        "command": "extension.serdAI",
-        "title": "Chat with SerdAI",
-        "category": "ESI Helper"
-      },
-      {
-        "command": "extension.generateStepDocumentation",
-        "title": "Generate Step Documentation",
-        "category": "ESI Helper"
       }
     ],
     "keybindings": [
@@ -115,15 +86,6 @@
         "when": "editorLangId == esi"
       }
     ],
-    "menus": {
-      "editor/context": [
-        {
-          "command": "extension.generateStepDocumentation",
-          "when": "editorLangId == 'plaintext' && resourceExtname == '.esi'",
-          "group": "esiHelper"
-        }
-      ]
-    },
     "configuration": {
       "title": "esi Helper for TestPit",
       "properties": {
@@ -138,16 +100,6 @@
           ],
           "default": "D:\\RNE\\product_library\\tools\\TestPit\\Config\\",
           "description": "Path of TestPit Config files."
-        },
-        "esihelper.geminiApiKey": {
-          "type": "string",
-          "default": "AIzaSyBqg0Zo3XVh2Xohh4TABtqi1D4u9cY80A4",
-          "description": "API key for Google Gemini AI"
-        },
-        "esihelper.geminiModelName": {
-          "type": "string",
-          "default": "gemini-2.0-flash-lite",
-          "description": "Model name to use for Gemini AI"
         }
       }
     }
@@ -168,9 +120,6 @@
     "mocha": "^11.1.0",
     "typescript": "^5.7.3",
     "vscode": "^1.1.37"
-  },
-  "dependencies": {
-    "@google/generative-ai": "^0.23.0"
   },
   "overrides": {
     "minimatch": "3.0.5",
