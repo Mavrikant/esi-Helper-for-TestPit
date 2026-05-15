@@ -21,6 +21,11 @@ images/Animation.gif
 **/tests/**
 **/__tests__/**
 scripts/**
+coverage/**
+.nyc_output/**
+.c8rc.json
+.mocharc.json
+eslint.config.cjs
 icons/*.svg
 !syntaxes/**
 !snippets.json

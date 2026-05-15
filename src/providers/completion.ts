@@ -48,12 +48,15 @@ export function registerEsiCompletionProvider(): vscode.Disposable {
             return items;
           }
           case "fieldName": {
+            const fieldRange = computeIdentifierRange(document, position);
             const items: vscode.CompletionItem[] = TIMING_FIELDS.map((name) => {
               const item = new vscode.CompletionItem(
                 name,
                 vscode.CompletionItemKind.Keyword
               );
               item.detail = "TestPit timing field";
+              item.range = fieldRange;
+              item.filterText = name;
               return item;
             });
             if (!index) {
@@ -64,7 +67,7 @@ export function registerEsiCompletionProvider(): vscode.Disposable {
               return items;
             }
             for (const field of message.fields) {
-              items.push(fieldToItem(field, message));
+              items.push(fieldToItem(field, message, fieldRange));
             }
             return items;
           }
@@ -77,6 +80,7 @@ export function registerEsiCompletionProvider(): vscode.Disposable {
             if (!field) {
               return [];
             }
+            const valueRange = computeIdentifierRange(document, position);
             if (field.dataType === "Enum" && field.enums) {
               return field.enums.map((e) => {
                 const item = new vscode.CompletionItem(
@@ -85,34 +89,28 @@ export function registerEsiCompletionProvider(): vscode.Disposable {
                 );
                 item.detail = `= ${e.value}`;
                 item.documentation = renderEnum(e, field, message);
+                item.range = valueRange;
+                item.filterText = e.name;
                 return item;
               });
             }
             const items: vscode.CompletionItem[] = [];
-            if (field.defaultValue !== undefined && field.defaultValue !== "") {
+            const pushNumeric = (value: string | undefined, label: string): void => {
+              if (value === undefined || value === "" || value === "-") {
+                return;
+              }
               const item = new vscode.CompletionItem(
-                field.defaultValue,
+                value,
                 vscode.CompletionItemKind.Value
               );
-              item.detail = "default";
+              item.detail = label;
+              item.range = valueRange;
+              item.filterText = value;
               items.push(item);
-            }
-            if (field.minValue !== undefined && field.minValue !== "-") {
-              const item = new vscode.CompletionItem(
-                field.minValue,
-                vscode.CompletionItemKind.Value
-              );
-              item.detail = "min";
-              items.push(item);
-            }
-            if (field.maxValue !== undefined && field.maxValue !== "-") {
-              const item = new vscode.CompletionItem(
-                field.maxValue,
-                vscode.CompletionItemKind.Value
-              );
-              item.detail = "max";
-              items.push(item);
-            }
+            };
+            pushNumeric(field.defaultValue, "default");
+            pushNumeric(field.minValue, "min");
+            pushNumeric(field.maxValue, "max");
             return items;
           }
           case "variableRef": {
@@ -134,7 +132,8 @@ export function registerEsiCompletionProvider(): vscode.Disposable {
     },
     "[",
     "%",
-    "="
+    "=",
+    "."
   );
 }
 
@@ -158,7 +157,8 @@ function connectionToItem(
 
 function fieldToItem(
   field: FieldDef,
-  message: { name: string }
+  message: { name: string },
+  range: vscode.Range
 ): vscode.CompletionItem {
   const item = new vscode.CompletionItem(
     field.name,
@@ -166,7 +166,29 @@ function fieldToItem(
   );
   item.detail = field.dataType ?? message.name;
   item.documentation = renderField(field, undefined);
+  item.range = range;
+  // Spell out filterText so dotted field names (1553's `Mode.SelectedCourse`)
+  // are matched even when VS Code's word-at-cursor heuristic disagrees.
+  item.filterText = field.name;
   return item;
+}
+
+/**
+ * Compute the range to replace when the user accepts a completion item:
+ * the dotted-identifier word ending at the cursor. Bypasses VS Code's
+ * default word-at-cursor heuristic, which mis-handles digit-leading
+ * (`1553_…`) and dotted (`Mode.SelectedCourse`) tokens depending on
+ * intersecting `wordPattern` and trigger-character defaults.
+ */
+function computeIdentifierRange(
+  document: vscode.TextDocument,
+  position: vscode.Position
+): vscode.Range {
+  const lineText = document.lineAt(position.line).text;
+  const before = lineText.slice(0, position.character);
+  const m = before.match(/[A-Za-z_][A-Za-z0-9_.]*$/);
+  const start = m ? position.character - m[0].length : position.character;
+  return new vscode.Range(position.line, start, position.line, position.character);
 }
 
 function collectInScopeVariables(documentText: string): string[] {
