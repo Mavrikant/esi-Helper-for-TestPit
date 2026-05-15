@@ -94,7 +94,7 @@ A custom entry whose `id` matches a built‑in (`RNE` / `VORILS`) overrides the 
 ### Index a new TestPit XML file type
 1. Add an `ingestXxx` function in [src/lib/xmlIndex.ts](src/lib/xmlIndex.ts) that walks the file's structure and populates `index.connections` / `index.messages`.
 2. Add a `lower.includes(...)` branch in `routeFile` to dispatch the new filename pattern to the new ingester.
-3. Decide which `Bus` value (`429` / `1553` / `Discrete` / `Mem`) — extend the union if needed.
+3. Decide which `Bus` value (`429` / `1553` / `DIS` / `Mem`) — extend the union if needed.
 4. Add a fixture XML under `src/test/fixtures/config/` and an assertion in [src/test/unit/xmlIndex.test.ts](src/test/unit/xmlIndex.test.ts) covering at least one connection + one message + one enum from the new file.
 5. The completion / hover / semantic-tokens providers automatically pick up the new connections — no provider changes needed if the data fits the existing `MessageDef` / `FieldDef` shape.
 

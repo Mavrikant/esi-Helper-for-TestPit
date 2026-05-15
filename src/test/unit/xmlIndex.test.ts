@@ -86,7 +86,7 @@ describe("xmlIndex", () => {
     it("ingests discrete signals as both messages and connections", () => {
       const msg = idx.messages.get("PowerOnOff");
       assert.ok(msg, "expected PowerOnOff message");
-      assert.strictEqual(msg!.bus, "Discrete");
+      assert.strictEqual(msg!.bus, "DIS");
       assert.strictEqual(msg!.fields.length, 1);
       assert.strictEqual(msg!.fields[0].dataType, "Enum");
       assert.strictEqual(msg!.fields[0].enums?.length, 2);

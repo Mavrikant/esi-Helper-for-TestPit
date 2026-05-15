@@ -106,8 +106,8 @@ function busLabel(bus: ConnectionDef["bus"]): string {
       return "ARINC 429";
     case "1553":
       return "MIL-STD-1553";
-    case "Discrete":
-      return "Discrete";
+    case "DIS":
+      return "DIS";
     case "Mem":
       return "Memory";
   }

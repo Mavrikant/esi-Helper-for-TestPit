@@ -2,15 +2,15 @@ import * as fs from "fs";
 import * as path from "path";
 import { XMLParser } from "fast-xml-parser";
 
-export type Bus = "429" | "1553" | "Discrete" | "Mem";
+export type Bus = "429" | "1553" | "DIS" | "Mem";
 
 /**
  * Single source of truth for bus prefixes used in `.esi` `[NAME]` references.
  *
- * `Discrete` accepts  `DIS_` — TestPit's PartitionAliases
- * (commented in MemoryPorts.xml) treat `DIS` as an alias for `Discrete`, and
+ * `DIS` accepts  `DIS_` — TestPit's PartitionAliases
+ * (commented in MemoryPorts.xml) treat `DIS` as an alias for `DIS`, and
  * scripts in the wild use both. Connections from MessageConfig
- * `<Device Type="Discrete">` and from DiscreteSignals.xml are dual-registered
+ * `<Device Type="DIS">` and from DiscreteSignals.xml are dual-registered
  * under both prefixes so completion / hover / validation work either way.
  */
 export const COMPONENT_TAG_PREFIXES = [
@@ -27,7 +27,7 @@ export const COMPONENT_TAG_PATTERN = new RegExp(
 const PREFIXES_BY_BUS: Record<Bus, string[]> = {
   "429": ["429_"],
   "1553": ["1553_"],
-  Discrete: ["DIS_"],
+  "DIS": ["DIS_"],
   Mem: ["Mem_"],
 };
 
@@ -91,7 +91,7 @@ const CONNECTION_NAME_PATTERN = /^L(\d+)([A-Z][A-Za-z0-9]*?)(?:_\w+)?$/;
 const BUS_PREFIX: Record<string, Bus> = {
   A429: "429",
   "1553": "1553",
-  Discrete: "Discrete",
+  "DIS": "DIS",
   Memory: "Mem",
 };
 
@@ -260,7 +260,7 @@ function ingestDiscreteSignals(root: Record<string, unknown>, index: XmlIndex): 
     }
     const def: MessageDef = {
       name,
-      bus: "Discrete",
+      bus: "DIS",
       direction: str(m.Type),
       fields: [],
     };
@@ -284,11 +284,11 @@ function ingestDiscreteSignals(root: Record<string, unknown>, index: XmlIndex): 
     index.messages.set(name, def);
     // Discrete signals are referenced as connections under both `DIS_<name>`
     // and `DIS_<name>` (TestPit's PartitionAlias).
-    for (const prefix of PREFIXES_BY_BUS["Discrete"]) {
+    for (const prefix of PREFIXES_BY_BUS["DIS"]) {
       const fullName = `${prefix}${name}`;
       index.connections.set(fullName, {
         fullName,
-        bus: "Discrete",
+        bus: "DIS",
         rawName: name,
         messageName: name,
       });
