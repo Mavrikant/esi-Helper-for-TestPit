@@ -1,11 +1,9 @@
 import * as vscode from "vscode";
-import * as fs from "fs";
 import { CONFIG_SECTION } from "./constants";
-import {
-  ValidityIssue,
-  parseValidityOutput,
-} from "./lib/parseValidityOutput";
+import { parseValidityOutput } from "./lib/parseValidityOutput";
 import { runValidityCheckAsync } from "./lib/testpitRunner";
+import { toDiagnostic } from "./lib/toDiagnostic";
+import { withTempScript } from "./lib/withTempScript";
 
 const diagnosticCollections = new Map<string, vscode.DiagnosticCollection>();
 let isUpdating = false;
@@ -35,19 +33,12 @@ async function handleDocumentChange(): Promise<void> {
       return;
     }
 
-    const tempFilePath = editor.document.uri.fsPath + ".temp";
-    fs.writeFileSync(tempFilePath, editor.document.getText());
-    try {
-      const output = await runValidityCheckAsync(configFolderpath, tempFilePath);
-      const issues = parseValidityOutput(output, editor.document.getText().split("\n"));
+    const documentText = editor.document.getText();
+    await withTempScript(editor.document.uri.fsPath, documentText, async (tempPath) => {
+      const output = await runValidityCheckAsync(configFolderpath, tempPath);
+      const issues = parseValidityOutput(output, documentText.split("\n"));
       collection.set(uri, issues.map(toDiagnostic));
-    } finally {
-      try {
-        fs.unlinkSync(tempFilePath);
-      } catch {
-        // ignore
-      }
-    }
+    });
   } catch (error) {
     console.error("Error in onDidChangeTextDocument:", error);
   } finally {
@@ -63,18 +54,4 @@ function getOrCreateCollection(uri: vscode.Uri): vscode.DiagnosticCollection {
     diagnosticCollections.set(key, collection);
   }
   return collection;
-}
-
-function toDiagnostic(issue: ValidityIssue): vscode.Diagnostic {
-  const range = new vscode.Range(
-    issue.lineNumber,
-    issue.startCol,
-    issue.lineNumber,
-    issue.endCol
-  );
-  const severity =
-    issue.severity === "warning"
-      ? vscode.DiagnosticSeverity.Warning
-      : vscode.DiagnosticSeverity.Error;
-  return new vscode.Diagnostic(range, issue.message, severity);
 }

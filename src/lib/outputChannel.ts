@@ -1,13 +1,14 @@
+import type * as vscode from "vscode";
 import { OUTPUT_CHANNEL_NAME } from "../constants";
 
-let instance: any;
+let instance: vscode.OutputChannel | undefined;
 
-export function getOutputChannel(): any {
+export function getOutputChannel(): vscode.OutputChannel {
   if (!instance) {
-    // require vscode lazily so tests can stub or mock the module
-    // without failing at module import time
-    const vscode = require("vscode");
-    instance = vscode.window.createOutputChannel(OUTPUT_CHANNEL_NAME);
+    // Late require so tests can stub or mock the 'vscode' module
+    // before this code runs.
+    const vsc: typeof vscode = require("vscode");
+    instance = vsc.window.createOutputChannel(OUTPUT_CHANNEL_NAME);
   }
   return instance;
 }
