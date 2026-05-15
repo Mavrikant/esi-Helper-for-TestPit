@@ -93,22 +93,19 @@ describe("xmlIndex", () => {
       assert.ok(idx.connections.has("DIS_PowerOnOff"));
     });
 
-    it("registers each discrete signal under both Discrete_ and DIS_ prefixes", () => {
-      assert.ok(
-        idx.connections.has("Discrete_PowerOnOff"),
-        "expected Discrete_PowerOnOff"
-      );
+    it("registers each discrete signal under the DIS_ prefix (Discrete_ is not a valid tag)", () => {
       assert.ok(
         idx.connections.has("DIS_PowerOnOff"),
-        "expected DIS_PowerOnOff (TestPit PartitionAlias)"
+        "expected DIS_PowerOnOff"
       );
-      // Both prefixes resolve to the same underlying message.
-      const fromLong = idx.resolveConnectionMessage("Discrete_PowerOnOff");
-      const fromShort = idx.resolveConnectionMessage("DIS_PowerOnOff");
-      assert.ok(fromLong);
-      assert.ok(fromShort);
-      assert.strictEqual(fromLong!.name, "PowerOnOff");
-      assert.strictEqual(fromLong!.name, fromShort!.name);
+      assert.strictEqual(
+        idx.connections.has("Discrete_PowerOnOff"),
+        false,
+        "Discrete_ should NOT be registered — DIS_ is the only valid prefix"
+      );
+      const resolved = idx.resolveConnectionMessage("DIS_PowerOnOff");
+      assert.ok(resolved);
+      assert.strictEqual(resolved!.name, "PowerOnOff");
     });
 
     it("resolveConnectionMessage maps a connection to its A429 message", () => {

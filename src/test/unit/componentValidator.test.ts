@@ -138,30 +138,34 @@ describe("componentValidator", () => {
     assert.deepStrictEqual(validateComponents("", idx), []);
   });
 
-  it("recognises DIS_ as a valid alias for Discrete_ on validation", () => {
-    // Both prefixes should be treated as known component tags; field validation
-    // (Value here is an Enum on PowerOnOff) should kick in for both.
-    const goodLong = [
-      "[Discrete_PowerOnOff]",
-      "    Value = POWER_ON",
-      "[/Discrete_PowerOnOff]",
-    ].join("\n");
-    const goodShort = [
+  it("recognises DIS_ as the discrete-signal prefix and validates enums under it", () => {
+    const good = [
       "[DIS_PowerOnOff]",
       "    Value = POWER_ON",
       "[/DIS_PowerOnOff]",
     ].join("\n");
-    const badShort = [
+    const bad = [
       "[DIS_PowerOnOff]",
       "    Value = POWER_NOPE",
       "[/DIS_PowerOnOff]",
     ].join("\n");
 
-    assert.deepStrictEqual(validateComponents(goodLong, idx), []);
-    assert.deepStrictEqual(validateComponents(goodShort, idx), []);
-    const issues = validateComponents(badShort, idx);
+    assert.deepStrictEqual(validateComponents(good, idx), []);
+    const issues = validateComponents(bad, idx);
     assert.strictEqual(issues.length, 1);
     assert.strictEqual(issues[0].kind, "unknownEnum");
     assert.strictEqual(issues[0].identifier, "POWER_NOPE");
+  });
+
+  it("does not treat [Discrete_*] as a component tag (Discrete_ is not a valid prefix)", () => {
+    // Discrete_PowerOnOff isn't recognised as a component tag at all, so the
+    // line inside the block is just plain content — no warnings, no field
+    // validation.
+    const text = [
+      "[Discrete_PowerOnOff]",
+      "    Value = POWER_NOPE",
+      "[/Discrete_PowerOnOff]",
+    ].join("\n");
+    assert.deepStrictEqual(validateComponents(text, idx), []);
   });
 });
