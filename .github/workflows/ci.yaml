@@ -33,8 +33,32 @@ jobs:
         run: npm run lint
       - name: Compile
         run: npm run compile
-      - name: Run tests
-        run: npm test
+      - name: Run tests with coverage
+        shell: bash
+        run: |
+          set -o pipefail
+          npm run coverage 2>&1 | tee coverage-output.txt
+      - name: Post coverage to job summary
+        if: always() && runner.os == 'Linux'
+        shell: bash
+        run: |
+          {
+            echo "## Coverage report"
+            echo
+            echo '```'
+            # Skip the mocha output (everything before the c8 table) and
+            # keep the file-by-file table c8 prints last.
+            awk '/^-+\|/{found=1} found{print}' coverage-output.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload HTML coverage report
+        if: always() && runner.os == 'Linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-html
+          path: coverage/
+          if-no-files-found: warn
+          retention-days: 14
 
   release:
     name: Release extension
