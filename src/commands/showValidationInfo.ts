@@ -1,9 +1,11 @@
 import * as vscode from "vscode";
+import * as fs from "fs";
+import * as path from "path";
 import { CONFIG_SECTION } from "../constants";
 import { getOutputChannel } from "../lib/outputChannel";
 import { getActiveProjectIndex } from "../lib/projectIndexCache";
 import { getActiveProjectId, getActiveProject } from "../lib/projectRegistry";
-import { validateComponents } from "../lib/componentValidator";
+import { CsvLookup, validateComponents } from "../lib/componentValidator";
 
 export function registerShowValidationInfo(): vscode.Disposable {
   return vscode.commands.registerCommand(
@@ -55,7 +57,10 @@ export function registerShowValidationInfo(): vscode.Disposable {
         return;
       }
 
-      const issues = validateComponents(editor.document.getText(), index);
+      // Use the same csvLookup that componentDiagnostics uses, so the
+      // numbers in this report match what the user sees as live squiggles.
+      const csvLookup = makeCsvLookup(editor.document.uri.fsPath);
+      const issues = validateComponents(editor.document.getText(), index, csvLookup);
       ch.appendLine(`Validation result on this file: ${issues.length} issue(s).`);
       for (const issue of issues.slice(0, 20)) {
         ch.appendLine(
@@ -82,4 +87,36 @@ export function registerShowValidationInfo(): vscode.Disposable {
       }
     }
   );
+}
+
+/** Same per-call CSV cache used by componentDiagnostics — duplicated here
+ *  so the diagnostic command's report matches live squiggles for files
+ *  that pull values from .csv fixtures. Trivial enough not to extract. */
+function makeCsvLookup(esiFilePath: string): CsvLookup {
+  const baseDir = path.dirname(esiFilePath);
+  const cache = new Map<string, string[][] | undefined>();
+  return (filename, line, col) => {
+    const fullPath = path.resolve(baseDir, filename);
+    if (!cache.has(fullPath)) {
+      try {
+        const content = fs.readFileSync(fullPath, "utf-8");
+        cache.set(
+          fullPath,
+          content.split(/\r?\n/).map((row) =>
+            row.split(",").map((cell) => {
+              let s = cell.trim();
+              if (s.length >= 2 && s.startsWith('"') && s.endsWith('"')) {
+                s = s.slice(1, -1).replace(/""/g, '"');
+              }
+              return s;
+            })
+          )
+        );
+      } catch {
+        cache.set(fullPath, undefined);
+      }
+    }
+    const rows = cache.get(fullPath);
+    return rows ? rows[line - 1]?.[col - 1] : undefined;
+  };
 }
