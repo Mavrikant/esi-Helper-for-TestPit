@@ -21,6 +21,9 @@ images/Animation.gif
 **/test/**
 **/tests/**
 **/__tests__/**
+scripts/**
+icons/*.svg
 !syntaxes/**
 !snippets.json
 !language-configuration.json
+!icons/*.woff
