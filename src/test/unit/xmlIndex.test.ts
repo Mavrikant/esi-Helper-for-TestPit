@@ -118,6 +118,22 @@ describe("xmlIndex", () => {
       assert.strictEqual(idx.resolveConnectionMessage("429_NopeNope"), undefined);
     });
 
+    it("resolveConnectionMessage works for bare-named 1553 connections (no L<digits> prefix)", () => {
+      // Real-world 1553 / Memory connections in MessageConfig don't follow
+      // the `L<label><Name>_<suffix>` pattern that 429 connections use —
+      // their names ARE the message name directly. Bug fix: when the
+      // L-pattern doesn't match, parseConnectionName falls back to using
+      // the raw name as messageName.
+      assert.ok(idx.connections.has("1553_TACANDMEOutput1"));
+      const conn = idx.connections.get("1553_TACANDMEOutput1")!;
+      assert.strictEqual(conn.messageName, "TACANDMEOutput1");
+      assert.strictEqual(conn.label, undefined);
+      const msg = idx.resolveConnectionMessage("1553_TACANDMEOutput1");
+      assert.ok(msg, "expected resolveConnectionMessage to return a MessageDef");
+      assert.strictEqual(msg!.name, "TACANDMEOutput1");
+      assert.strictEqual(msg!.fields.length, 3);
+    });
+
     it("ingests 1553 messages with their flattened Word > Field children", () => {
       const msg = idx.messages.get("TACANDMEOutput1");
       assert.ok(msg, "expected TACANDMEOutput1 message");

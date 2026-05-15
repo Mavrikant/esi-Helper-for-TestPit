@@ -13,6 +13,10 @@
             <Connection Name="L042TACANDMEOutput1_1">
                 <Parameter Card="2" Core="0" Channel="3"/>
             </Connection>
+            <!-- Bare-named 1553 connection: matches the message name directly -->
+            <Connection Name="TACANDMEOutput1">
+                <Parameter Card="2" Core="0" Channel="3"/>
+            </Connection>
         </Device>
     </Devices>
 </Root>

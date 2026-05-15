@@ -395,11 +395,18 @@ function parseEnumsBlock(value: unknown): EnumDef[] {
 }
 
 function parseConnectionName(rawName: string): { messageName?: string; label?: number } {
+  // 429 connections follow `L<label><MessageName>(_<suffix>)?` (e.g.
+  // `L100SelectedCourseBNR_input1` → message `SelectedCourseBNR`, label 100).
+  // 1553 / Memory connections use the bare name directly (the connection
+  // name IS the message name — e.g. `TACANDMEOutput1`, `ADFCommand`,
+  // `RNEGeneralWriteLedStatus`). When the L-pattern doesn't match, fall
+  // back to the raw name so resolveConnectionMessage can still find the
+  // matching MessageDef.
   const match = CONNECTION_NAME_PATTERN.exec(rawName);
-  if (!match) {
-    return { messageName: undefined, label: undefined };
+  if (match) {
+    return { messageName: match[2], label: Number(match[1]) };
   }
-  return { messageName: match[2], label: Number(match[1]) };
+  return { messageName: rawName, label: undefined };
 }
 
 function asArray<T>(value: T | T[] | undefined): T[] {
