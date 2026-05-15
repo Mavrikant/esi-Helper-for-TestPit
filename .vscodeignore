@@ -11,7 +11,6 @@ tsconfig.json
 **/*.ts
 .vscodeignore
 node_modules/**
-!node_modules/@google/generative-ai/**
 test.esi
 Desktop.ini
 images/Problems.png
