@@ -248,7 +248,7 @@ export function activate(context: vscode.ExtensionContext) {
       const lineNumber = lines.findIndex((line) => stepRegex.test(line));
       if (lineNumber === -1) {
         return vscode.window.showInformationMessage(
-          'ðŸ˜” Step "' + stepNumberStr + '" not found!'
+          '😔 Step "' + stepNumberStr + '" not found!'
         );
       }
       const range = editor.document.lineAt(lineNumber).range;
