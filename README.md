@@ -14,16 +14,73 @@ The **ESI Helper for TestPit** is a powerful Visual Studio Code extension that e
 ![Problmes](/images/Problems.png)
 ## Features
 
-- Snippet
-- Syntax-highlighting
-- Step number update
-- Bracket control
-- Goto step number (Ctrl + G)
-- Linting / Error Checking
-- Undefined macro usage control
-- Auto-formatting (Format Document via Shift+Alt+F; opt in to format-on-save with `"esihelper.refactorDocumentOnSave": true` or VS Code's `"editor.formatOnSave"`)
+- Snippets for `[STEP]`, `[STEP DEFINITION]`, `[STEP INPUTS]`, `[STEP OUTPUTS]`, `[VARIABLES]`, `[FUNC_*]`, `[PART_*]`, `[CMD_EXECUTE]`, `[MANUAL_VERIFY]`, `[EXTERNAL_VERIFY]`, `[STEP GET_DUMP]`
+- Syntax highlighting and bracket matching
+- Goto step number (`Ctrl+G` → enter step number)
+- Step renumbering (sequential 10, 20, 30, …) via the **Update Step Numbers** command
+- Live linting / error checking against the local `TestPit.exe` while you type
+- Auto-formatting with ESI-aware indentation: contents of `[TAG]…[/TAG]` blocks are indented at 4-space increments per nesting level; `<pre>…</pre>` blocks (Step Conditions / Step Expected Results) are indented one level past the opener line, with `</pre>` aligned back. Available via **Format Document** (Shift+Alt+F) and on save (`"esihelper.refactorDocumentOnSave": true` or VS Code's `"editor.formatOnSave"`)
+- **Multi-project support:** built-in `RNE` and `VORILS` profiles plus user-defined custom projects. Status-bar item (bottom-left) shows the active project; click to switch via QuickPick
+- **Open with TestPit** command — opens the active script in the configured `TestPit.exe`
 - Semantic highlighting (TODO)
 - Component Data: auto-completion and hover-information (TODO)
+
+## Configuration
+
+Set in VS Code Settings (or `.vscode/settings.json`):
+
+| Setting | Purpose |
+|---|---|
+| `esihelper.activeProject` | ID of the active TestPit project. Stored at workspace scope; set via the status-bar picker. |
+| `esihelper.RNE.executablePath` / `esihelper.VORILS.executablePath` | Path to the project's `TestPit.exe`. |
+| `esihelper.RNE.configFolderpath` / `esihelper.VORILS.configFolderpath` | Folder containing the project's TestPit XML configs (must end with a path separator). |
+| `esihelper.customProjects` | Array of user-defined projects. Each entry is `{ id, label, executablePath, validityArgs[], openArgs[] }`. Use `{scriptPath}` and `{filePath}` placeholders in the args — both are substituted and double-quoted at runtime. |
+| `esihelper.refactorDocumentOnSave` | When `true`, runs the ESI formatter on save. |
+
+A custom-project entry whose `id` matches a built-in (`RNE` / `VORILS`) overrides the built-in.
+
+### Example custom project
+
+```json
+"esihelper.customProjects": [{
+  "id": "MYPROJ",
+  "label": "My Project",
+  "executablePath": "C:\\Tools\\custom.exe",
+  "validityArgs": [
+    "--cfg=foo",
+    "--sf={scriptPath}",
+    "--validate=true"
+  ],
+  "openArgs": ["--ow={filePath}"]
+}]
+```
+
+## Commands
+
+| Command | Default keybinding |
+|---|---|
+| ESI Helper: Run Validity Check | — |
+| ESI Helper: Open with TestPit | — |
+| ESI Helper: Update Step Numbers | — |
+| ESI Helper: Refactor Document | — |
+| ESI Helper: Show Processed File | — |
+| ESI Helper: Select TestPit Project | — |
+| Goto step number | `Ctrl+G` (when editing `.esi`) |
+| Format Document (built-in) | `Shift+Alt+F` (when editing `.esi`) |
+
+## Development
+
+```bash
+npm install
+npm run compile     # tsc → out/
+npm run lint        # ESLint (flat config)
+npm test            # mocha unit tests (71 currently)
+npm run build-icons # regenerate the status-bar icon font from icons/testpit.svg
+```
+
+Press `F5` in VS Code to launch the Extension Development Host. CI runs lint + compile + test on Ubuntu / macOS / Windows × Node 22 for every push to `main` and every PR.
+
+See [CLAUDE.md](CLAUDE.md) for an architecture overview and contribution conventions, [CHANGELOG.md](CHANGELOG.md) for release history.
 
 # Developers
 
