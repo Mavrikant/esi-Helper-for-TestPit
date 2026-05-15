@@ -108,10 +108,13 @@
     "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",
     "lint": "eslint . --ext .ts,.tsx",
-    "watch": "tsc -watch -p ./"
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile",
+    "test": "mocha"
   },
   "devDependencies": {
-    "@types/node": "^16.18.125",
+    "@types/mocha": "^10.0.10",
+    "@types/node": "^22.10.0",
     "@types/vscode": "^1.96.0",
     "@typescript-eslint/eslint-plugin": "^5.19.0",
     "@typescript-eslint/parser": "^5.19.0",
@@ -120,10 +123,5 @@
     "mocha": "^11.1.0",
     "typescript": "^5.7.3",
     "vscode": "^1.1.37"
-  },
-  "overrides": {
-    "minimatch": "3.0.5",
-    "minimist": "1.2.8",
-    "mkdirp": "2.1.3"
   }
 }
