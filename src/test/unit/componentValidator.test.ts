@@ -141,12 +141,12 @@ describe("componentValidator", () => {
   it("recognises DIS_ as the discrete-signal prefix and validates enums under it", () => {
     const good = [
       "[DIS_PowerOnOff]",
-      "    Value = POWER_ON",
+      "    value = POWER_ON",
       "[/DIS_PowerOnOff]",
     ].join("\n");
     const bad = [
       "[DIS_PowerOnOff]",
-      "    Value = POWER_NOPE",
+      "    value = POWER_NOPE",
       "[/DIS_PowerOnOff]",
     ].join("\n");
 
@@ -163,7 +163,7 @@ describe("componentValidator", () => {
     // validation.
     const text = [
       "[Discrete_PowerOnOff]",
-      "    Value = POWER_NOPE",
+      "    value = POWER_NOPE",
       "[/Discrete_PowerOnOff]",
     ].join("\n");
     assert.deepStrictEqual(validateComponents(text, idx), []);
