@@ -189,6 +189,7 @@
     "watch": "tsc -watch -p ./",
     "pretest": "npm run compile",
     "test": "mocha --require ./test/setup.js",
+    "coverage": "c8 npm test",
     "build-icons": "node scripts/build-icons.js"
   },
   "overrides": {
@@ -203,6 +204,7 @@
     "@typescript-eslint/eslint-plugin": "^8.59.3",
     "@typescript-eslint/parser": "^8.59.3",
     "@vscode/test-electron": "^2.5.2",
+    "c8": "^11.0.0",
     "eslint": "^10.3.0",
     "mocha": "^11.7.5",
     "mock-require": "^3.0.3",

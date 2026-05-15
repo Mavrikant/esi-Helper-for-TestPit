@@ -157,6 +157,27 @@ describe("componentValidator", () => {
     assert.strictEqual(issues[0].identifier, "POWER_NOPE");
   });
 
+  it("ignores a field-name line with no '=' (e.g. mid-edit)", () => {
+    // Edge case: user is mid-typing — a field name on a line with no `=` yet.
+    // Validator should not crash or warn.
+    const text = [
+      "[429_L100SelectedCourseBNR_input1]",
+      "    SDI",
+      "[/429_L100SelectedCourseBNR_input1]",
+    ].join("\n");
+    assert.deepStrictEqual(validateComponents(text, idx), []);
+  });
+
+  it("ignores an Enum-field assignment whose RHS is a numeric literal (no enum check fires)", () => {
+    const text = [
+      "[429_L100SelectedCourseBNR_input1]",
+      "    SDI = 0",
+      "[/429_L100SelectedCourseBNR_input1]",
+    ].join("\n");
+    // RHS doesn't start with an identifier char, so no unknownEnum is raised.
+    assert.deepStrictEqual(validateComponents(text, idx), []);
+  });
+
   it("does not treat [Discrete_*] as a component tag (Discrete_ is not a valid prefix)", () => {
     // Discrete_PowerOnOff isn't recognised as a component tag at all, so the
     // line inside the block is just plain content — no warnings, no field

@@ -29,6 +29,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Fixed
 - **`.vscodeignore` no longer excludes `node_modules/**`.** The blanket exclusion stopped `vsce` from packaging the new `fast-xml-parser` runtime dependency, so installed `.vsix` builds threw `Cannot find module 'fast-xml-parser'` at activation and the extension silently failed to load. `vsce`'s production-dep walker now includes the runtime modules; devDependencies are still left out.
 
+### Tests
+- **Code coverage** via `c8`. New `npm run coverage` script writes a text summary plus HTML report (`coverage/index.html`) and lcov (`coverage/lcov.info`). Configured via `.c8rc.json` with vscode-touching glue (extension, statusBar, providers, command files, registry/cache layers) excluded — they need integration tests, not unit. Pure-logic modules under `src/lib/` and `src/projects.ts` count for **94.76%** statements / **100%** functions.
+- **+15 new tests** (105 → 120):
+  - `xmlIndex.test.ts`: 1553 message ingest (Word > Field flattening, attribute-style fields with enums) + MemoryPorts ingest (Mem_-prefixed connections, attribute-style fields with `Type`/`BitSize`).
+  - `renderComponent.test.ts`: connection / field / enum MarkdownString rendering — bus labels, label / card / channel / speed lines, enum tables, parent message references. Required adding `MarkdownString` to `test/setup.js`.
+  - `componentValidator.test.ts`: mid-edit cases — field name on a line with no `=` yet, Enum field assigned a numeric literal (no enum check fires).
+  - `esiContext.test.ts`: out-of-range `lineIndex`, cursor on a non-component-tag line.
+- New XML fixtures: `1553MessageFields.xml`, `MemoryPorts.xml`.
+
 ### Documentation
 - Added `CHANGELOG.md` (this file).
 - Added `CLAUDE.md` — architecture overview, common tasks, conventions, and gotchas for future contributors and Claude Code sessions.

@@ -58,6 +58,7 @@ scripts/build-icons.js         # SVG → SVG‑font → TTF → WOFF; behind `np
 | `npm run compile` | `tsc -p ./` → `out/` |
 | `npm run lint` | ESLint (flat config in [eslint.config.cjs](eslint.config.cjs)) |
 | `npm test` | runs `compile` then `mocha` (uses `out/test/unit/**/*.test.js` per [.mocharc.json](.mocharc.json)) |
+| `npm run coverage` | `c8 npm test` — text summary + `coverage/index.html` + `coverage/lcov.info` (config in [.c8rc.json](.c8rc.json), vscode-touching glue excluded) |
 | `npm run watch` | TS in watch mode |
 | `npm run build-icons` | regenerate `icons/testpit-icons.woff` after editing `icons/testpit.svg` |
 | F5 in VS Code | launch Extension Development Host |
@@ -121,7 +122,7 @@ Pure functions (no `vscode` import) are unit‑tested directly with Node's `asse
 
 `projectRegistry.ts`, `statusBar.ts`, and `selectProject.ts` are deliberately untested — they're thin glue around `workspace.getConfiguration().update`, `createStatusBarItem`, and `showQuickPick`, all of which need a richer mock or an actual integration harness (`@vscode/test-electron`) to exercise meaningfully.
 
-After any change, run `npm test` and `npm run lint`. Current count: 102 passing.
+After any change, run `npm test` and `npm run lint`. Current count: 120 passing. `npm run coverage` reports 94.76% statement coverage / 100% function coverage on the included pure-logic modules; the excluded glue files (extension, statusBar, providers, command files, registry / cache layers) need integration tests rather than unit tests.
 
 ## Don't
 

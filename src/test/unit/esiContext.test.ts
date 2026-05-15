@@ -94,4 +94,17 @@ describe("esiContext.resolveContext", () => {
     const text = "just some text";
     assert.strictEqual(resolveContext(text, 0, 5).kind, "other");
   });
+
+  it("returns 'other' for an out-of-range lineIndex", () => {
+    const text = "single line";
+    assert.strictEqual(resolveContext(text, 99, 0).kind, "other");
+    assert.strictEqual(resolveContext(text, -1, 0).kind, "other");
+  });
+
+  it("does not pick up a non-component tag on the same line as the cursor", () => {
+    // [STEP 10] is on line 0, cursor is on line 0 — but [STEP 10] isn't a
+    // component tag, so it shouldn't be returned as the enclosing message.
+    const text = "[STEP 10]\n";
+    assert.strictEqual(resolveContext(text, 0, 9).kind, "other");
+  });
 });

@@ -1,0 +1,26 @@
+{
+  "all": true,
+  "include": [
+    "out/**/*.js"
+  ],
+  "exclude": [
+    "out/test/**",
+    "out/extension.js",
+    "out/statusBar.js",
+    "out/componentDiagnostics.js",
+    "out/diagnostics.js",
+    "out/formatter.js",
+    "out/commands/**",
+    "out/providers/**",
+    "out/lib/projectIndexCache.js",
+    "out/lib/projectRegistry.js",
+    "out/lib/outputChannel.js"
+  ],
+  "reporter": [
+    "text",
+    "html",
+    "lcov"
+  ],
+  "report-dir": "coverage",
+  "skip-full": false
+}

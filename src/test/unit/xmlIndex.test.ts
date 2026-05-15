@@ -117,5 +117,39 @@ describe("xmlIndex", () => {
     it("resolveConnectionMessage returns undefined for unknown names", () => {
       assert.strictEqual(idx.resolveConnectionMessage("429_NopeNope"), undefined);
     });
+
+    it("ingests 1553 messages with their flattened Word > Field children", () => {
+      const msg = idx.messages.get("TACANDMEOutput1");
+      assert.ok(msg, "expected TACANDMEOutput1 message");
+      assert.strictEqual(msg!.bus, "1553");
+      assert.strictEqual(msg!.direction, "Output");
+      // 2 fields from word "DataValidity" + 1 from word "Range" = 3 total
+      assert.strictEqual(msg!.fields.length, 3);
+      const tx = msg!.fields.find((f) => f.name === "TransmitReceive");
+      assert.ok(tx);
+      assert.strictEqual(tx!.dataType, "Enum");
+      assert.strictEqual(tx!.defaultValue, "RECEIVE");
+      assert.strictEqual(tx!.enums?.length, 2);
+      const range = msg!.fields.find((f) => f.name === "RangeValue");
+      assert.ok(range);
+      assert.strictEqual(range!.dataType, "UInt16");
+      assert.strictEqual(range!.unit, "nm");
+    });
+
+    it("ingests memory ports as Mem_-prefixed connections + messages", () => {
+      assert.ok(idx.connections.has("Mem_RNEGeneralWriteLedStatus"));
+      const conn = idx.connections.get("Mem_RNEGeneralWriteLedStatus")!;
+      assert.strictEqual(conn.bus, "Mem");
+      assert.strictEqual(conn.rawName, "RNEGeneralWriteLedStatus");
+      const msg = idx.resolveConnectionMessage("Mem_RNEGeneralWriteLedStatus");
+      assert.ok(msg);
+      assert.strictEqual(msg!.fields.length, 2);
+      const led = msg!.fields.find((f) => f.name === "LedStatus");
+      assert.ok(led);
+      // attribute-style fields use `Type` (not `DataType`) and `BitSize` (not `Size`)
+      assert.strictEqual(led!.dataType, "UInt32");
+      assert.strictEqual(led!.size, "1");
+      assert.strictEqual(led!.startBit, "0");
+    });
   });
 });

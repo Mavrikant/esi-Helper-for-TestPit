@@ -26,6 +26,25 @@ const DiagnosticSeverity = {
   Hint: 3,
 };
 
+class MarkdownString {
+  constructor(value, supportThemeIcons) {
+    this.value = value || '';
+    this.supportThemeIcons = !!supportThemeIcons;
+  }
+  appendMarkdown(s) {
+    this.value += s;
+    return this;
+  }
+  appendText(s) {
+    this.value += s;
+    return this;
+  }
+  appendCodeblock(s, lang) {
+    this.value += '\n```' + (lang || '') + '\n' + s + '\n```\n';
+    return this;
+  }
+}
+
 mock('vscode', {
   window: {
     createOutputChannel(name) {
@@ -42,4 +61,5 @@ mock('vscode', {
   Range,
   Diagnostic,
   DiagnosticSeverity,
+  MarkdownString,
 });

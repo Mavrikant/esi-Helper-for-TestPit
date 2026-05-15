@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<MilStd1553Messages>
+    <Message Name="TACANDMEOutput1" Sub-Address="3" MessageId="TCN03-BC" Direction="Output">
+        <Word Name="DataValidity" StartWord="1" WordSize="1" WordType="TACANOutputDataValidity">
+            <Field Name="TransmitReceive" Default="RECEIVE" DataType="Enum" StartBit="1" Size="1" MinValue="-" MaxValue="-" Resolution="-" Unit="-">
+                <Enums Kind="0">
+                    <Enum Name="RECEIVE">0</Enum>
+                    <Enum Name="TRANSMITRECEIVE">1</Enum>
+                </Enums>
+            </Field>
+            <Field Name="RangeValid" Default="INVALID" DataType="Enum" StartBit="3" Size="1" MinValue="-" MaxValue="-" Resolution="-" Unit="-">
+                <Enums Kind="0">
+                    <Enum Name="INVALID">0</Enum>
+                    <Enum Name="VALID">1</Enum>
+                </Enums>
+            </Field>
+        </Word>
+        <Word Name="Range" StartWord="2" WordSize="1" WordType="UInt16">
+            <Field Name="RangeValue" Default="0" DataType="UInt16" StartBit="0" Size="16" MinValue="0" MaxValue="65535" Resolution="1" Unit="nm"/>
+        </Word>
+    </Message>
+</MilStd1553Messages>

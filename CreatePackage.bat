@@ -16,5 +16,5 @@ dir /b *.vsix
 echo.
 for %%f in (*.vsix) do (
   echo Installing %%f into VS Code...
-  call code --install-extension "%%f" --force || exit /b 1
+  call "C:\Program Files\Microsoft VS Code Insiders\Code - Insiders.exe" --install-extension "%%f" --force || exit /b 1
 )

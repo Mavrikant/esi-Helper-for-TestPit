@@ -3,6 +3,8 @@ node_modules/*
 .vscode/*
 .vs/*
 out/*
+coverage/
+.nyc_output/
 .DS_Store
 *.db
 *.lsif
