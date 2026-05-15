@@ -10,7 +10,6 @@ tsconfig.json
 **/*.map
 **/*.ts
 .vscodeignore
-node_modules/**
 test.esi
 Desktop.ini
 images/Problems.png
