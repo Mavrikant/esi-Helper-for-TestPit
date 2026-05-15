@@ -1,0 +1,23 @@
+<?xml version="1.0"?>
+<DiscreteMessages>
+    <Message>
+        <Name>PowerOnOff</Name>
+        <Type>Input</Type>
+        <Count>1</Count>
+        <Size>1</Size>
+        <Enums>
+            <Enum Name="POWER_OFF">0</Enum>
+            <Enum Name="POWER_ON">1</Enum>
+        </Enums>
+    </Message>
+    <Message>
+        <Name>FunctionalTest</Name>
+        <Type>Input</Type>
+        <Count>1</Count>
+        <Size>1</Size>
+        <Enums>
+            <Enum Name="TEST_OFF">0</Enum>
+            <Enum Name="TEST_ON">1</Enum>
+        </Enums>
+    </Message>
+</DiscreteMessages>

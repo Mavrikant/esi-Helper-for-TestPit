@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Root>
+    <Devices>
+        <Device Type="A429">
+            <Connection Name="L100SelectedCourseBNR_input1">
+                <Parameter Card="1" Core="0" Channel="16" Speed="100000"/>
+            </Connection>
+            <Connection Name="L100SelectedCourseBNR_input2">
+                <Parameter Card="1" Core="0" Channel="18" Speed="100000"/>
+            </Connection>
+        </Device>
+        <Device Type="1553">
+            <Connection Name="L042TACANDMEOutput1_1">
+                <Parameter Card="2" Core="0" Channel="3"/>
+            </Connection>
+        </Device>
+    </Devices>
+</Root>

@@ -22,8 +22,8 @@ The **ESI Helper for TestPit** is a powerful Visual Studio Code extension that e
 - Auto-formatting with ESI-aware indentation: contents of `[TAG]…[/TAG]` blocks are indented at 4-space increments per nesting level; `<pre>…</pre>` blocks (Step Conditions / Step Expected Results) are indented one level past the opener line, with `</pre>` aligned back. Available via **Format Document** (Shift+Alt+F) and on save (`"esihelper.refactorDocumentOnSave": true` or VS Code's `"editor.formatOnSave"`)
 - **Multi-project support:** built-in `RNE` and `VORILS` profiles plus user-defined custom projects. Status-bar item (bottom-right) shows the active project; click to switch via QuickPick
 - **Open with TestPit** command — opens the active script in the configured `TestPit.exe`
-- Semantic highlighting (TODO)
-- Component Data: auto-completion and hover-information (TODO)
+- **Component data IntelliSense:** auto-completion + hover for connections (`429_…`, `1553_…`, `Discrete_…`, `Mem_…`), their fields, enum values, and `%VARIABLE%` references — driven by the active project's TestPit XMLs. Type `[`, hit Ctrl+Space inside a component block, or hover any identifier. Re-indexes automatically when XMLs change.
+- **Semantic highlighting:** known connection / field / enum / variable identifiers carry a `defaultLibrary` modifier so themes can color resolved-vs-unknown identifiers differently — typos and stale references stand out.
 
 ## Configuration
 

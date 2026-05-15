@@ -20,6 +20,10 @@ src/
 ├── statusBar.ts              # bottom‑right project picker item
 ├── formatter.ts              # registerEsiFormatter + registerFormatOnSave
 ├── commands/                 # one file per command, each exports register*(): Disposable
+├── providers/                # IntelliSense providers wired in extension.ts
+│   ├── completion.ts            # CompletionItemProvider — connections / fields / enums / vars
+│   ├── hover.ts                 # HoverProvider — same lookups, MarkdownString output
+│   └── semanticTokens.ts        # DocumentSemanticTokensProvider — known/unknown coloring
 └── lib/                      # vscode‑free where possible — all unit‑tested
     ├── parseValidityOutput.ts   # TestPit stdout → ValidityIssue[]
     ├── renumberSteps.ts         # [STEP N] → [STEP 10] [STEP 20] …
@@ -30,10 +34,15 @@ src/
     ├── toDiagnostic.ts          # ValidityIssue → vscode.Diagnostic
     ├── testpitRunner.ts         # cp.exec / execSync wrappers, take a built command
     ├── withTempScript.ts        # write content → fn(tempPath) → cleanup
-    └── projectRegistry.ts       # merge built‑ins + esihelper.customProjects;
-                                 #   getActiveProject (silent), getOrPromptForProject (interactive)
+    ├── projectRegistry.ts       # merge built‑ins + esihelper.customProjects;
+    │                            #   getActiveProject (silent), getOrPromptForProject (interactive)
+    ├── xmlIndex.ts              # parses TestPit XMLs → connections / messages / fields / enums
+    ├── projectIndexCache.ts     # per‑configFolderpath XmlIndex cache + FileSystemWatcher + config watcher
+    ├── esiContext.ts            # cursor → EsiContext (tagName | fieldName | fieldValue | variableRef | other)
+    └── renderComponent.ts       # MarkdownString rendering for hover + completion docs
 
 test/setup.js                  # mock‑require fake `vscode`; loaded via mocha --require
+src/test/fixtures/config/      # tiny XML fixtures used by xmlIndex.test.ts (path-resolved relative to out/test/unit)
 icons/testpit.svg              # source for the status‑bar multimeter glyph
 icons/testpit-icons.woff       # generated font; ships in the .vsix
 scripts/build-icons.js         # SVG → SVG‑font → TTF → WOFF; behind `npm run build-icons`
@@ -79,6 +88,13 @@ A custom entry whose `id` matches a built‑in (`RNE` / `VORILS`) overrides the 
 2. Push `registerMyCommand()` into `context.subscriptions` in [src/extension.ts](src/extension.ts).
 3. Declare the command in `contributes.commands` and add `onCommand:extension.myCommand` to `activationEvents` in [package.json](package.json).
 
+### Index a new TestPit XML file type
+1. Add an `ingestXxx` function in [src/lib/xmlIndex.ts](src/lib/xmlIndex.ts) that walks the file's structure and populates `index.connections` / `index.messages`.
+2. Add a `lower.includes(...)` branch in `routeFile` to dispatch the new filename pattern to the new ingester.
+3. Decide which `Bus` value (`429` / `1553` / `Discrete` / `Mem`) — extend the union if needed.
+4. Add a fixture XML under `src/test/fixtures/config/` and an assertion in [src/test/unit/xmlIndex.test.ts](src/test/unit/xmlIndex.test.ts) covering at least one connection + one message + one enum from the new file.
+5. The completion / hover / semantic-tokens providers automatically pick up the new connections — no provider changes needed if the data fits the existing `MessageDef` / `FieldDef` shape.
+
 ## Conventions & gotchas
 
 - **`<pre>…</pre>` blocks are depth‑affecting** in the formatter (since 0.3.1). A line ending with `<pre>` increments depth; a whole‑line `</pre>` decrements. **Don't restore verbatim pass‑through** — it shipped in 0.3.0 and produced misaligned output when surrounding tag depth shifted.
@@ -90,6 +106,9 @@ A custom entry whose `id` matches a built‑in (`RNE` / `VORILS`) overrides the 
 - **`refactorDocument` command intentionally uses `refactorWhitespace`, not `formatEsi`** — it's language‑agnostic, runs on whatever's open. The full ESI indenter is reachable only through the formatter provider (Shift+Alt+F / format‑on‑save).
 - **`package.json` `overrides` block** is for security pins. The historical `minimatch: 3.0.5` pin broke modern mocha — don't add it back without verifying the test runner.
 - **Worktree at `.claude/worktrees/confident-swanson-81eac4/` is an unregistered orphan** the Claude Code harness keeps locking as CWD. Operate on `D:\esi-Helper-for-TestPit\` via absolute paths and `git -C` / PowerShell `Set-Location`. Don't `npm install` inside the orphan dir.
+- **The XML index re-loads automatically** on `esihelper.activeProject` change, on `<id>.configFolderpath` change, and on any XML file change in the active config folder. Don't add a stateful in-provider cache — that would mask updates. Use `getActiveProjectIndex()` from [src/lib/projectIndexCache.ts](src/lib/projectIndexCache.ts) on every request.
+- **Custom projects don't get the XML index** — the per-project `configFolderpath` setting is only declared for built-ins (RNE / VORILS). Custom projects bake their full file paths into `validityArgs`, so the index lookups don't apply. Completion / hover / semantic tokens silently no-op when a custom project is active.
+- **Bus prefixes:** `.esi` references look like `[429_<connName>]` / `[1553_<connName>]` / `[Discrete_<signalName>]` / `[Mem_<portName>]`. The XML index assigns the prefix based on the source file: `MessageConfig` `<Device Type>`, the file containing the message, etc. Don't hardcode prefixes elsewhere — derive from `Bus`.
 
 ## Testing approach
 
@@ -97,7 +116,7 @@ Pure functions (no `vscode` import) are unit‑tested directly with Node's `asse
 
 `projectRegistry.ts`, `statusBar.ts`, and `selectProject.ts` are deliberately untested — they're thin glue around `workspace.getConfiguration().update`, `createStatusBarItem`, and `showQuickPick`, all of which need a richer mock or an actual integration harness (`@vscode/test-electron`) to exercise meaningfully.
 
-After any change, run `npm test` and `npm run lint`. Current count: 71 passing.
+After any change, run `npm test` and `npm run lint`. Current count: 92 passing.
 
 ## Don't
 

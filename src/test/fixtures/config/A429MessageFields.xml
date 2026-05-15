@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<A429Messages>
+    <Message>
+        <Name>SelectedCourseBNR</Name>
+        <Label>100</Label>
+        <Direction>Output</Direction>
+        <Type>BNR</Type>
+        <MinPeriod>45.000000</MinPeriod>
+        <MaxPeriod>55.000000</MaxPeriod>
+        <Fields>
+            <Field>
+                <FieldName>SDI</FieldName>
+                <DataType>Enum</DataType>
+                <StartBit>9</StartBit>
+                <Size>2</Size>
+                <Enums>
+                    <Enum Name="INSTALLATION_NUMBER_ALL_CALL">0</Enum>
+                    <Enum Name="INSTALLATION_NUMBER_ONE">1</Enum>
+                </Enums>
+                <DefaultValue>INSTALLATION_NUMBER_ALL_CALL</DefaultValue>
+                <VC>False</VC>
+            </Field>
+            <Field>
+                <FieldName>Course</FieldName>
+                <DataType>BNR</DataType>
+                <StartBit>11</StartBit>
+                <Size>16</Size>
+                <MinValue>0</MinValue>
+                <MaxValue>359.9</MaxValue>
+                <Resolution>0.0055</Resolution>
+                <DefaultValue>0</DefaultValue>
+                <Unit>deg</Unit>
+            </Field>
+            <Field>
+                <FieldName>Label1</FieldName>
+                <DataType>UInt8</DataType>
+                <StartBit>1</StartBit>
+                <Size>2</Size>
+                <DefaultValue>1</DefaultValue>
+            </Field>
+        </Fields>
+    </Message>
+</A429Messages>

@@ -9,6 +9,10 @@ import { registerSelectProject } from "./commands/selectProject";
 import { registerLiveDiagnostics } from "./diagnostics";
 import { registerProjectStatusBar } from "./statusBar";
 import { registerEsiFormatter, registerFormatOnSave } from "./formatter";
+import { registerIndexLifecycle } from "./lib/projectIndexCache";
+import { registerEsiCompletionProvider } from "./providers/completion";
+import { registerEsiHoverProvider } from "./providers/hover";
+import { registerEsiSemanticTokensProvider } from "./providers/semanticTokens";
 
 export function activate(context: vscode.ExtensionContext): void {
   console.log('Extension "esi Helper for TestPit" is now active.');
@@ -23,7 +27,11 @@ export function activate(context: vscode.ExtensionContext): void {
     registerProjectStatusBar(),
     registerLiveDiagnostics(),
     registerEsiFormatter(),
-    registerFormatOnSave()
+    registerFormatOnSave(),
+    registerIndexLifecycle(),
+    registerEsiCompletionProvider(),
+    registerEsiHoverProvider(),
+    registerEsiSemanticTokensProvider()
   );
 }
 
