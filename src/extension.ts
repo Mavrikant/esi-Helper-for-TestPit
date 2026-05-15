@@ -8,6 +8,7 @@ import { registerShowProcessedFile } from "./commands/showProcessedFile";
 import { registerSelectProject } from "./commands/selectProject";
 import { registerLiveDiagnostics } from "./diagnostics";
 import { registerProjectStatusBar } from "./statusBar";
+import { registerEsiFormatter, registerFormatOnSave } from "./formatter";
 
 export function activate(context: vscode.ExtensionContext): void {
   console.log('Extension "esi Helper for TestPit" is now active.');
@@ -20,7 +21,9 @@ export function activate(context: vscode.ExtensionContext): void {
     registerShowProcessedFile(),
     registerSelectProject(),
     registerProjectStatusBar(),
-    registerLiveDiagnostics()
+    registerLiveDiagnostics(),
+    registerEsiFormatter(),
+    registerFormatOnSave()
   );
 }
 

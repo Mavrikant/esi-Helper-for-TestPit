@@ -21,7 +21,7 @@ The **ESI Helper for TestPit** is a powerful Visual Studio Code extension that e
 - Goto step number (Ctrl + G)
 - Linting / Error Checking
 - Undefined macro usage control
-- Auto-formatting (TODO)
+- Auto-formatting (Format Document via Shift+Alt+F; opt in to format-on-save with `"esihelper.refactorDocumentOnSave": true` or VS Code's `"editor.formatOnSave"`)
 - Semantic highlighting (TODO)
 - Component Data: auto-completion and hover-information (TODO)
 
