@@ -76,7 +76,7 @@ export function registerEsiSemanticTokensProvider(): vscode.Disposable {
             const message = index?.resolveConnectionMessage(enclosing);
             const field = message?.fields.find((f) => f.name === fieldName);
             const fieldKnown =
-              !!field || ["time", "delay", "interval", "occurrence", "period"].includes(fieldName);
+              !!field || ["time", "interval", "occurrence", "period"].includes(fieldName);
             builder.push(
               lineNum,
               fieldStart,

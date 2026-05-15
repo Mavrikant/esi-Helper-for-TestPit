@@ -77,11 +77,10 @@ describe("componentValidator", () => {
     );
   });
 
-  it("does not warn about timing fields (time, delay, interval, occurrence, period)", () => {
+  it("does not warn about timing fields (time, interval, occurrence, period)", () => {
     const text = [
       "[429_L100SelectedCourseBNR_input1]",
       "    time = 100",
-      "    delay = 200",
       "    interval = 50",
       "    occurrence = 1",
       "    period = 1000",

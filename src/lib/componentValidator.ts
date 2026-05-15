@@ -42,7 +42,7 @@ const COMPONENT_TAG = COMPONENT_TAG_PATTERN;
 
 // Built-in scheduling keywords valid inside any component block — never
 // flagged as unknown fields.
-const TIMING_FIELDS = new Set(["time", "delay", "interval", "occurrence", "period"]);
+const TIMING_FIELDS = new Set(["time", "interval", "occurrence", "period"]);
 
 interface StackEntry {
   name: string;

@@ -10,12 +10,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - **TestPit XML index** — parses `<configFolderpath>/*.xml` (MessageConfig, A429MessageFields, 1553MessageFields, DiscreteSignals, MemoryPorts, plus VORILS variants) into an in-memory model of connections / messages / fields / enums. Re-loads on `esihelper.activeProject` change, on `<id>.configFolderpath` change, and on any XML file change via a `FileSystemWatcher`. Cached per `configFolderpath` so switching projects back-and-forth is instant.
 - **Auto-completion** for `.esi` files (triggers on `[`, `=`, `%`, plus Ctrl+Space):
   - Inside `[…]`, suggests bus-prefixed connection names (`429_L100SelectedCourseBNR_input1`, `1553_…`, `DIS_…`, `Mem_…`) from the index.
-  - At the start of a line inside an open component block, suggests the message's field names (plus the timing fields `time` and `delay`).
+  - At the start of a line inside an open component block, suggests the message's field names (plus the timing fields `time`).
   - On the RHS of `field = `, suggests enum values for `DataType=Enum` fields, or the `defaultValue` / `minValue` / `maxValue` for numeric fields.
   - After `%`, suggests variable names declared in the file's `[VARIABLES]` blocks.
 - **Hover** information for connections (bus, label, card / channel / speed, message name, fields), fields (DataType, range, default, bit position, unit, enum table, parent message), and enum values (numeric value, parent field, parent message).
 - **Semantic highlighting** for connection names (`class`), field names (`property`), enum values (`enumMember`), and variable references (`variable`). Identifiers resolved against the index get the `defaultLibrary` modifier so themes can render unknown / stale references differently.
-- **Component validation diagnostics** — warnings (squigglies + Problems-panel entries) for: unknown component names (`[429_L999_NotReal]`), unknown field names inside a known message (`UnknownField = 5`), and unknown enum values for known Enum-typed fields (`SDI = NORMAL_NOPE`). Re-runs on every text change and on `esihelper.activeProject` / `customProjects` / `RNE.*` / `VORILS.*` setting changes. Skips timing fields (`time`, `delay`) and silently no-ops when no project is active. Source: `esi Helper`.
+- **Component validation diagnostics** — warnings (squigglies + Problems-panel entries) for: unknown component names (`[429_L999_NotReal]`), unknown field names inside a known message (`UnknownField = 5`), and unknown enum values for known Enum-typed fields (`SDI = NORMAL_NOPE`). Re-runs on every text change and on `esihelper.activeProject` / `customProjects` / `RNE.*` / `VORILS.*` setting changes. Skips timing field `time` and silently no-ops when no project is active. Source: `esi Helper`.
 - Runtime dependency: `fast-xml-parser` for XML parsing.
 
 ### Changed
