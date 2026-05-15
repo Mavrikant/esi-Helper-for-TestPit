@@ -213,6 +213,40 @@ describe("componentValidator", () => {
     assert.deepStrictEqual(validateComponents(text, idx), []);
   });
 
+  it("validates VORILS<N>_ tags for any unit number (matches the user's [VORILS1_VORILSDataMsg] sample)", () => {
+    const text = [
+      "[VORILS1_VORILSDataMsg]",
+      "    time = 2145-2200",
+      "    period = 200",
+      "    interval = 36000",
+      "    VORILSFrequency = 117000",
+      "    VOROmnibearing = 100",
+      "    VOROmnibearingValidity = VALID",
+      "    VORLOCStatus = OK",
+      "[/VORILS1_VORILSDataMsg]",
+    ].join("\n");
+    assert.deepStrictEqual(validateComponents(text, idx), []);
+  });
+
+  it("treats VORILS2_ (non-canonical unit) as a known component too", () => {
+    const text = [
+      "[VORILS2_VORILSDataMsg]",
+      "    VOROmnibearingValidity = VALID",
+      "[/VORILS2_VORILSDataMsg]",
+    ].join("\n");
+    assert.deepStrictEqual(validateComponents(text, idx), []);
+  });
+
+  it("flags an unknown VORILS message name as unknownConnection", () => {
+    const text = [
+      "[VORILS1_NotARealVORILSMsg]",
+      "    foo = bar",
+      "[/VORILS1_NotARealVORILSMsg]",
+    ].join("\n");
+    const issues = validateComponents(text, idx);
+    assert.ok(issues.some((i) => i.kind === "unknownConnection"));
+  });
+
   it("does not treat [Discrete_*] as a component tag (Discrete_ is not a valid prefix)", () => {
     // Discrete_PowerOnOff isn't recognised as a component tag at all, so the
     // line inside the block is just plain content — no warnings, no field

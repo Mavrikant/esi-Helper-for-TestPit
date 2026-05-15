@@ -154,6 +154,57 @@ describe("xmlIndex", () => {
       assert.strictEqual(range!.unit, "nm");
     });
 
+    it("ingests VORILS messages and registers them under canonical VORILS1_ prefix", () => {
+      // VORILSMessageFields uses Messages > InputMessages/OutputMessages > Message
+      // structure, distinct from A429 / 1553 / Discrete shapes.
+      const dataMsg = idx.messages.get("VORILSDataMsg");
+      assert.ok(dataMsg, "expected VORILSDataMsg message");
+      assert.strictEqual(dataMsg!.bus, "VORILS");
+      assert.strictEqual(dataMsg!.direction, "Output");
+      assert.strictEqual(dataMsg!.fields.length, 4);
+
+      const cmdMsg = idx.messages.get("VORILSCommandMsg");
+      assert.ok(cmdMsg, "expected VORILSCommandMsg message");
+      assert.strictEqual(cmdMsg!.direction, "Input");
+
+      // Canonical VORILS1_<name> connection registered for completion.
+      assert.ok(idx.connections.has("VORILS1_VORILSDataMsg"));
+      assert.ok(idx.connections.has("VORILS1_VORILSCommandMsg"));
+    });
+
+    it("parses VORILS Enum fields with their enums and numeric fields with <Encoding>", () => {
+      const msg = idx.messages.get("VORILSDataMsg")!;
+      const validity = msg.fields.find((f) => f.name === "VOROmnibearingValidity");
+      assert.ok(validity);
+      assert.strictEqual(validity!.dataType, "Enum");
+      assert.deepStrictEqual(
+        validity!.enums?.map((e) => e.name),
+        ["INVALID", "VALID"]
+      );
+      const bearing = msg.fields.find((f) => f.name === "VOROmnibearing");
+      assert.ok(bearing);
+      assert.strictEqual(bearing!.dataType, "DoubleDegree");
+      // Encoding metadata flattened onto the field
+      assert.strictEqual(bearing!.minValue, "0.0");
+      assert.strictEqual(bearing!.maxValue, "359.99");
+      assert.strictEqual(bearing!.resolution, "0.005");
+    });
+
+    it("resolveConnectionMessage handles VORILS<N>_ for any unit number, not just N=1", () => {
+      // VORILS1 is canonical (registered)
+      const m1 = idx.resolveConnectionMessage("VORILS1_VORILSDataMsg");
+      assert.ok(m1);
+      assert.strictEqual(m1!.name, "VORILSDataMsg");
+      // VORILS2/3/etc. are NOT registered as connections, but resolve via
+      // the unit-number-stripping fallback to the same message.
+      const m2 = idx.resolveConnectionMessage("VORILS2_VORILSDataMsg");
+      assert.ok(m2, "expected VORILS2_ to resolve via fallback");
+      assert.strictEqual(m2!.name, "VORILSDataMsg");
+      const m99 = idx.resolveConnectionMessage("VORILS99_VORILSDataMsg");
+      assert.ok(m99);
+      assert.strictEqual(m99!.name, "VORILSDataMsg");
+    });
+
     it("ingests memory ports as Mem_-prefixed connections + messages", () => {
       assert.ok(idx.connections.has("Mem_RNEGeneralWriteLedStatus"));
       const conn = idx.connections.get("Mem_RNEGeneralWriteLedStatus")!;

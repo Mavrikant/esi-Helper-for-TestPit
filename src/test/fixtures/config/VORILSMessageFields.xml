@@ -1,0 +1,37 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<Messages>
+    <InputMessages>
+        <Message Name="VORILSCommandMsg" Id="1" Size="7">
+            <Field Name="VORILSFrequency" Type="UInt32" StartBit="1" BitSize="32"/>
+            <Field Name="SelectedCourse" Type="DoubleDegree" StartBit="33" BitSize="16">
+                <Encoding Type="BNR" MinValue="0.0" MaxValue="359.9945068359375" Resolution="0.0054931640625"/>
+            </Field>
+            <Field Name="MBSensitivitySelection" Type="Enum" StartBit="49" BitSize="1">
+                <Enums>
+                    <Enum Name="LOW">0</Enum>
+                    <Enum Name="HIGH">1</Enum>
+                </Enums>
+            </Field>
+        </Message>
+    </InputMessages>
+    <OutputMessages>
+        <Message Name="VORILSDataMsg" Id="128" Period="50" PeriodTol="1" MinSize="19" MaxSize="19">
+            <Field Name="VOROmnibearingValidity" Type="Enum" StartBit="1" BitSize="1">
+                <Enums>
+                    <Enum Name="INVALID">0</Enum>
+                    <Enum Name="VALID">1</Enum>
+                </Enums>
+            </Field>
+            <Field Name="VORLOCStatus" Type="Enum" StartBit="2" BitSize="1">
+                <Enums>
+                    <Enum Name="OK">0</Enum>
+                    <Enum Name="FAIL">1</Enum>
+                </Enums>
+            </Field>
+            <Field Name="VORILSFrequency" Type="UInt32" StartBit="3" BitSize="32"/>
+            <Field Name="VOROmnibearing" Type="DoubleDegree" StartBit="35" BitSize="16">
+                <Encoding Type="BNR" MinValue="0.0" MaxValue="359.99" Resolution="0.005"/>
+            </Field>
+        </Message>
+    </OutputMessages>
+</Messages>

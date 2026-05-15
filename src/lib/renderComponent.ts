@@ -110,5 +110,7 @@ function busLabel(bus: ConnectionDef["bus"]): string {
       return "DIS";
     case "Mem":
       return "Memory";
+    case "VORILS":
+      return "VORILS";
   }
 }

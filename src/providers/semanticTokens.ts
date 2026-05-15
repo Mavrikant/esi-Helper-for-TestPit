@@ -1,6 +1,10 @@
 import * as vscode from "vscode";
 import { getActiveProjectIndex } from "../lib/projectIndexCache";
-import { COMPONENT_TAG_PATTERN, XmlIndex } from "../lib/xmlIndex";
+import {
+  COMPONENT_TAG_PATTERN,
+  XmlIndex,
+  isKnownComponent,
+} from "../lib/xmlIndex";
 
 const TOKEN_TYPES = ["class", "property", "enumMember", "variable"] as const;
 const TOKEN_MODIFIERS = ["defaultLibrary"] as const;
@@ -42,7 +46,7 @@ export function registerEsiSemanticTokensProvider(): vscode.Disposable {
             const tokenStart = tagMatch.index + 1 + (isClosing ? 1 : 0);
             const tokenLen = name.length;
             if (isComponentTag(name)) {
-              const known = index?.connections.has(name) ?? false;
+              const known = index ? isKnownComponent(index, name) : false;
               builder.push(
                 lineNum,
                 tokenStart,

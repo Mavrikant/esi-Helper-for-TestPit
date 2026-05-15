@@ -2,33 +2,46 @@ import * as fs from "fs";
 import * as path from "path";
 import { XMLParser } from "fast-xml-parser";
 
-export type Bus = "429" | "1553" | "DIS" | "Mem";
+export type Bus = "429" | "1553" | "DIS" | "Mem" | "VORILS";
 
 /**
  * Single source of truth for bus prefixes used in `.esi` `[NAME]` references.
  *
- * `.esi` scripts reference discrete signals under `DIS_` (TestPit's
- * PartitionAlias for the `Discrete` partition — the alias is documented in
- * MemoryPorts.xml and is what scripts actually use). The internal `Bus`
- * value `"DIS"` mirrors the prefix; the source XML attribute
- * `<Device Type="Discrete">` is mapped to it via BUS_PREFIX below.
+ * `.esi` scripts reference:
+ *   - Discrete signals under `DIS_` (TestPit's PartitionAlias for the
+ *     `Discrete` partition — the alias is in MemoryPorts.xml).
+ *   - VORILS messages under `VORILS<N>_` where N is the unit number
+ *     (e.g. `VORILS1_VORILSDataMsg`). The canonical prefix exposed by
+ *     completion is `VORILS1_`, but resolveConnectionMessage strips
+ *     any unit number when looking up the underlying message.
+ *
+ * The XML attribute `<Device Type="Discrete">` is mapped to internal
+ * Bus "DIS" via BUS_PREFIX below.
  */
 export const COMPONENT_TAG_PREFIXES = [
   "429",
   "1553",
   "DIS",
   "Mem",
+  "VORILS\\d+",
 ] as const;
 
 export const COMPONENT_TAG_PATTERN = new RegExp(
   `^(${COMPONENT_TAG_PREFIXES.join("|")})_`
 );
 
+/** Matches a `VORILS<N>_` prefix; capture group 1 = the rest of the name. */
+export const VORILS_UNIT_PREFIX = /^VORILS\d+_(.+)$/;
+
 const PREFIXES_BY_BUS: Record<Bus, string[]> = {
   "429": ["429_"],
   "1553": ["1553_"],
   "DIS": ["DIS_"],
   Mem: ["Mem_"],
+  // Canonical: connections are registered under VORILS1_. Other unit
+  // numbers (VORILS2_, etc.) are accepted via the resolveConnectionMessage
+  // fallback that strips the unit number.
+  VORILS: ["VORILS1_"],
 };
 
 export interface ConnectionDef {
@@ -79,6 +92,23 @@ export interface XmlIndex {
   resolveConnectionMessage(fullName: string): MessageDef | undefined;
 }
 
+/**
+ * True if `name` is a recognised connection in the index. Handles the
+ * VORILS<N>_ unit-number suffix as a special case — only VORILS1 is
+ * registered as a canonical connection, but other unit numbers
+ * resolve to the same underlying message.
+ */
+export function isKnownComponent(index: XmlIndex, name: string): boolean {
+  if (index.connections.has(name)) {
+    return true;
+  }
+  const m = VORILS_UNIT_PREFIX.exec(name);
+  if (m) {
+    return index.messages.has(m[1]);
+  }
+  return false;
+}
+
 const parser = new XMLParser({
   ignoreAttributes: false,
   attributeNamePrefix: "@_",
@@ -104,10 +134,21 @@ export function parseConfigFolder(configFolderpath: string): XmlIndex {
     messages: new Map(),
     resolveConnectionMessage(fullName) {
       const conn = this.connections.get(fullName);
-      if (!conn || !conn.messageName) {
-        return undefined;
+      if (conn?.messageName) {
+        const direct = this.messages.get(conn.messageName);
+        if (direct) {
+          return direct;
+        }
       }
-      return this.messages.get(conn.messageName);
+      // VORILS<N>_<MsgName> fallback: VORILSMessageFields registers a
+      // canonical VORILS1_<MsgName> connection, but scripts may use
+      // VORILS2_…, VORILS3_…, etc. for additional units. Strip the unit
+      // number and look up the message directly.
+      const m = VORILS_UNIT_PREFIX.exec(fullName);
+      if (m) {
+        return this.messages.get(m[1]);
+      }
+      return undefined;
     },
   };
 
@@ -146,7 +187,9 @@ function routeFile(filename: string, parsed: unknown, index: XmlIndex): void {
   const root = parsed as Record<string, unknown>;
   if (lower.startsWith("messageconfig") || lower.includes("_cable")) {
     ingestMessageConfig(root, index);
-  } else if (lower.includes("a429messagefields") || lower.includes("vorilsmessagefields")) {
+  } else if (lower.includes("vorilsmessagefields")) {
+    ingestVORILSMessageFields(root, index);
+  } else if (lower.includes("a429messagefields")) {
     ingestA429MessageFields(root, index);
   } else if (lower.includes("1553messagefields") || lower.includes("milstd1553")) {
     ingestMilStd1553Fields(root, index);
@@ -191,6 +234,83 @@ function ingestMessageConfig(root: Record<string, unknown>, index: XmlIndex): vo
       }
     }
   }
+}
+
+function ingestVORILSMessageFields(root: Record<string, unknown>, index: XmlIndex): void {
+  // VORILSMessageFields.xml has a different shape than A429/1553:
+  //   <Messages>
+  //     <InputMessages>
+  //       <Message Name="..." Id="..." Size="...">
+  //         <Field Name="..." Type="Enum|UInt32|DoubleDegree|..." StartBit="..." BitSize="...">
+  //           <Enums>...</Enums>             # for Enum
+  //           <Encoding Type="BNR" MinValue="..." MaxValue="..." Resolution="..."/>  # for numeric
+  //         </Field>
+  //       </Message>
+  //     </InputMessages>
+  //     <OutputMessages> ... </OutputMessages>
+  //   </Messages>
+  const container = (root.Messages as Record<string, unknown> | undefined) ?? root;
+  for (const groupKey of ["InputMessages", "OutputMessages"]) {
+    const group = container[groupKey] as Record<string, unknown> | undefined;
+    if (!group) {
+      continue;
+    }
+    const messages = asArray(group.Message);
+    const direction = groupKey === "InputMessages" ? "Input" : "Output";
+    for (const msg of messages) {
+      const m = msg as Record<string, unknown>;
+      const name = str(m["@_Name"]);
+      if (!name) {
+        continue;
+      }
+      const def: MessageDef = {
+        name,
+        bus: "VORILS",
+        direction,
+        fields: [],
+      };
+      const fields = asArray(m.Field);
+      for (const f of fields) {
+        def.fields.push(parseVORILSField(f as Record<string, unknown>, name));
+      }
+      index.messages.set(name, def);
+      // Synthesize a canonical VORILS1_<MessageName> connection so completion
+      // suggests it. Other unit numbers (VORILS2, VORILS3, …) are accepted
+      // via the resolveConnectionMessage / isKnownComponent fallback that
+      // strips the unit-number prefix.
+      for (const prefix of PREFIXES_BY_BUS["VORILS"]) {
+        const fullName = `${prefix}${name}`;
+        index.connections.set(fullName, {
+          fullName,
+          bus: "VORILS",
+          rawName: name,
+          messageName: name,
+        });
+      }
+    }
+  }
+}
+
+function parseVORILSField(
+  f: Record<string, unknown>,
+  parentMessage: string
+): FieldDef {
+  const field: FieldDef = {
+    name: str(f["@_Name"]) ?? "",
+    dataType: str(f["@_Type"]),
+    startBit: str(f["@_StartBit"]),
+    size: str(f["@_BitSize"]),
+    enums: parseEnumsBlock(f.Enums),
+    parentMessage,
+  };
+  // Numeric-typed fields carry a nested <Encoding> with min/max/resolution.
+  const encoding = f.Encoding as Record<string, unknown> | undefined;
+  if (encoding) {
+    field.minValue = str(encoding["@_MinValue"]);
+    field.maxValue = str(encoding["@_MaxValue"]);
+    field.resolution = str(encoding["@_Resolution"]);
+  }
+  return field;
 }
 
 function ingestA429MessageFields(root: Record<string, unknown>, index: XmlIndex): void {

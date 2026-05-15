@@ -1,4 +1,4 @@
-import { COMPONENT_TAG_PATTERN, XmlIndex } from "./xmlIndex";
+import { COMPONENT_TAG_PATTERN, XmlIndex, isKnownComponent } from "./xmlIndex";
 
 export type IssueKind =
   | "unknownConnection"
@@ -68,7 +68,7 @@ export function validateComponents(
       }
       const isComponent = COMPONENT_TAG.test(name);
       stack.push({ name, isComponent });
-      if (isComponent && !index.connections.has(name)) {
+      if (isComponent && !isKnownComponent(index, name)) {
         const startCol = tagMatch.index + 1; // skip the [
         issues.push({
           line: lineNum,
