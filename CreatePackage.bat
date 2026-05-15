@@ -1,37 +1,14 @@
 @echo off
-echo ===== ESI Helper for TestPit - Clean Build Package Script =====
+setlocal
+echo === ESI Helper for TestPit: clean build + package ===
 
-echo.
-echo Cleaning previous build artifacts...
 if exist "out" rmdir /s /q out
 if exist "*.vsix" del /q *.vsix
 
-echo.
-echo Installing ci...
-call npm ci
+call npm ci                           || exit /b 1
+call npm run lint                     || exit /b 1
+call npm test                         || exit /b 1
+call npx --yes @vscode/vsce package   || exit /b 1
 
 echo.
-echo Auditing dependencies...
-call npm audit fix
-
-echo.
-echo Linting code...
-call npm run lint
-
-echo.
-echo Testing code...
-call npm test
-
-echo.
-echo Compiling TypeScript files...
-call npm run compile
-
-echo.
-echo Creating extension package...
-call npx vsce package
-
-echo.
-echo Package creation complete!
-echo.
-
-dir *.vsix -h
+dir /b *.vsix
