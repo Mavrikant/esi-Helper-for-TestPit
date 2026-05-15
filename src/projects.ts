@@ -4,6 +4,13 @@ export interface Project {
   executablePath: string;
   validityArgs: string[];
   openArgs: string[];
+  /**
+   * Folder containing this project's TestPit XML configs. Set on built-in
+   * projects (RNE / VORILS) so the component-data index can locate the
+   * XMLs without needing to know the project's BuiltInId. Custom projects
+   * leave this undefined; they don't participate in the XML index.
+   */
+  configFolderpath?: string;
 }
 
 export type BuiltInId = "RNE" | "VORILS";
@@ -22,6 +29,7 @@ export function buildBuiltInProject(
         id: executablePath,
         label: "RNE",
         executablePath,
+        configFolderpath,
         validityArgs: [
           `--cf=${configFolderpath}MessageConfig_RNESystemTestCable.xml`,
           `--ac=${configFolderpath}A429MessageFields.xml`,
@@ -38,6 +46,7 @@ export function buildBuiltInProject(
         id: executablePath,
         label: "VORILS",
         executablePath,
+        configFolderpath,
         validityArgs: [
           "--sf={scriptPath}",
           "--pt=VORILS",

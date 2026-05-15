@@ -1,7 +1,7 @@
 import type * as vscode from "vscode";
 import { CONFIG_SECTION } from "../constants";
 import { BUILT_IN_IDS } from "../projects";
-import { getActiveProjectId } from "./projectRegistry";
+import { getActiveProject } from "./projectRegistry";
 import { XmlIndex, parseConfigFolder } from "./xmlIndex";
 import { getOutputChannel } from "./outputChannel";
 
@@ -99,16 +99,11 @@ function rebuild(folderpath: string): XmlIndex {
 }
 
 function getActiveConfigFolderpath(): string | undefined {
-  const vsc: typeof vscode = require("vscode");
-  const id = getActiveProjectId();
-  if (!id) {
-    return undefined;
-  }
-  const config = vsc.workspace.getConfiguration(CONFIG_SECTION);
-  // Built-in projects get their folderpath from `<id>.configFolderpath`.
-  // Custom projects don't have one — they bake the full path into their
-  // validityArgs templates, so component-data lookups don't apply to them
-  // for now.
-  const builtInPath = config.get<string>(`${id}.configFolderpath`);
-  return builtInPath && builtInPath.length > 0 ? builtInPath : undefined;
+  // Read it off the resolved Project rather than re-deriving from settings.
+  // Built-in projects (RNE / VORILS) get configFolderpath populated by
+  // buildBuiltInProject; custom projects leave it undefined and are
+  // skipped (they bake full paths into their validityArgs instead).
+  const project = getActiveProject();
+  const folderpath = project?.configFolderpath;
+  return folderpath && folderpath.length > 0 ? folderpath : undefined;
 }
