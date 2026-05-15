@@ -1,6 +1,6 @@
 import * as vscode from "vscode";
 import { CONFIG_SECTION } from "./constants";
-import { refactorWhitespace } from "./lib/refactorWhitespace";
+import { formatEsi } from "./lib/formatEsi";
 
 const ESI_LANGUAGE = "esi";
 
@@ -32,7 +32,7 @@ export function registerFormatOnSave(): vscode.Disposable {
 
 function computeFormatEdits(document: vscode.TextDocument): vscode.TextEdit[] {
   const original = document.getText();
-  const formatted = refactorWhitespace(original);
+  const formatted = formatEsi(original);
   if (formatted === original) {
     return [];
   }
