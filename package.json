@@ -107,7 +107,7 @@
         },
         "esihelper.RNE.executablePath": {
           "type": "string",
-          "default": "C:\\Program Files (x86)\\TestPit\\Tools\\bin\\TestPit.exe",
+          "default": "D:\\RNE\\product_library\\tools\\TestPit\\Publish\\Bin\\win32\\TestPit.exe",
           "description": "Path to the TestPit.exe used for the RNE project."
         },
         "esihelper.RNE.configFolderpath": {
@@ -117,7 +117,7 @@
         },
         "esihelper.VORILS.executablePath": {
           "type": "string",
-          "default": "C:\\Program Files (x86)\\TestPit\\Tools\\bin\\TestPit.exe",
+          "default": "D:\\263_VORILS\\product_library\\tools\\TestPit\\Publish\\Bin\\x64\\TestPit.exe",
           "description": "Path to the TestPit.exe used for the VORILS project."
         },
         "esihelper.VORILS.configFolderpath": {

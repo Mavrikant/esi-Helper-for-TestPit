@@ -17,7 +17,7 @@ const STATUS_BAR_PRIORITY = 10000;
 export function registerProjectStatusBar(): vscode.Disposable {
   const item = vscode.window.createStatusBarItem(
     "esihelper.activeProject",
-    vscode.StatusBarAlignment.Left,
+    vscode.StatusBarAlignment.Right,
     STATUS_BAR_PRIORITY
   );
   item.name = "TestPit Project";
