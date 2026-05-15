@@ -1,15 +1,27 @@
 <?xml version = "1.0"?>
 <Partitions>
-    <Partition Name="HSI">
-        <Port Type="Memory" Name="RNEGeneralWritePSAlive">
-            <Message Name="RNEGeneralWritePSAlive">
-                <Field Name="Value" Type="UInt32"/>
+    <Partition Name = "HSI">
+        <Port Type = "Memory" Name = "RNEGeneralWritePSAlive">
+            <Message Name = "RNEGeneralWritePSAlive">
+                <Field Name = "Value" Type = "UInt32"/>
             </Message>
         </Port>
-        <Port Type="Memory" Name="RNEGeneralWriteLedStatus">
-            <Message Name="RNEGeneralWriteLedStatus">
-                <Field Name="LedStatus" Type="UInt32" StartBit="0" BitSize="1"/>
-                <Field Name="Pad" Type="UInt32" StartBit="1" BitSize="31"/>
+        <Port Type = "Memory" Name = "RNEGeneralWriteLedStatus">
+            <Message Name = "RNEGeneralWriteLedStatus">
+                <Field Name = "LedStatus" Type = "UInt32" StartBit = "0" BitSize = "1"/>
+                <Field Name = "Pad" Type = "UInt32" StartBit = "1" BitSize = "31"/>
+            </Message>
+        </Port>
+    </Partition>
+    <Partition Name = "TEST">
+        <Port Type = "Memory" Name = "MBPBITStatus">
+            <Message Name = "MBPBITStatus">
+                <Field Name = "Value" Type = "Enum">
+                    <Enums>
+                        <Enum Name = "FAILURE">0</Enum>
+                        <Enum Name = "SUCCESS">1</Enum>
+                    </Enums>
+                </Field>
             </Message>
         </Port>
     </Partition>

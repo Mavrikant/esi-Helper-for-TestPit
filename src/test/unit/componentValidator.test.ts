@@ -247,6 +247,37 @@ describe("componentValidator", () => {
     assert.ok(issues.some((i) => i.kind === "unknownConnection"));
   });
 
+  it("validates PART_<partition>_<port> as a known memory-port reference", () => {
+    // Good — PART_TEST_MBPBITStatus has an Enum field "Value" with FAILURE/SUCCESS.
+    const good = [
+      "[PART_TEST_MBPBITStatus]",
+      "    Value = SUCCESS",
+      "[/PART_TEST_MBPBITStatus]",
+    ].join("\n");
+    assert.deepStrictEqual(validateComponents(good, idx), []);
+
+    // Bad enum on the same port.
+    const bad = [
+      "[PART_TEST_MBPBITStatus]",
+      "    Value = NOPE_VALUE",
+      "[/PART_TEST_MBPBITStatus]",
+    ].join("\n");
+    const issues = validateComponents(bad, idx);
+    assert.strictEqual(issues.length, 1);
+    assert.strictEqual(issues[0].kind, "unknownEnum");
+    assert.strictEqual(issues[0].identifier, "NOPE_VALUE");
+  });
+
+  it("flags an unknown PART_<partition>_<port> as unknownConnection", () => {
+    const text = [
+      "[PART_HSI_NoSuchPort]",
+      "    foo = bar",
+      "[/PART_HSI_NoSuchPort]",
+    ].join("\n");
+    const issues = validateComponents(text, idx);
+    assert.ok(issues.some((i) => i.kind === "unknownConnection"));
+  });
+
   it("does not treat [Discrete_*] as a component tag (Discrete_ is not a valid prefix)", () => {
     // Discrete_PowerOnOff isn't recognised as a component tag at all, so the
     // line inside the block is just plain content — no warnings, no field

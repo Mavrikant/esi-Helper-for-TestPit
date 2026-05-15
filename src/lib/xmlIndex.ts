@@ -24,6 +24,12 @@ export const COMPONENT_TAG_PREFIXES = [
   "DIS",
   "Mem",
   "VORILS\\d+",
+  // PART_<PartitionName>_ — fully-qualified memory-port reference
+  // (e.g. PART_HSI_RNEGeneralWritePSAlive, PART_TEST_MBPBITStatus).
+  // Partitions in MemoryPorts.xml: HSI, DD, TEST, A429, M1553, Discrete,
+  // DMETACAN. The trailing `_` between partition and port is matched by
+  // the `_` at the end of COMPONENT_TAG_PATTERN.
+  "PART_[A-Za-z][A-Za-z0-9]*",
 ] as const;
 
 export const COMPONENT_TAG_PATTERN = new RegExp(
@@ -428,11 +434,25 @@ function ingestDiscreteSignals(root: Record<string, unknown>, index: XmlIndex): 
   }
 }
 
+// Maps a `<Port Type="…">` XML attribute to our internal Bus value.
+// MemoryPorts.xml lumps every partition's ports into one file; the port's
+// Type attribute is what tells us which bus it belongs to.
+const PORT_TYPE_TO_BUS: Record<string, Bus> = {
+  Memory: "Mem",
+  IndexMemory: "Mem",
+  A429Sim: "429",
+  M1553Sim: "1553",
+  DiscreteSim: "DIS",
+  // Catch-all (PulseDataInjector, ServerWakeUpMessage, DMETACANPBIT, …)
+  // gets bucketed as Mem since they're partition-scoped, not bus-scoped.
+};
+
 function ingestMemoryPorts(root: Record<string, unknown>, index: XmlIndex): void {
   const container = (root.Partitions as Record<string, unknown> | undefined) ?? root;
   const partitions = asArray(container.Partition);
   for (const part of partitions) {
     const p = part as Record<string, unknown>;
+    const partitionName = str(p["@_Name"]);
     const ports = asArray(p.Port);
     for (const port of ports) {
       const portObj = port as Record<string, unknown>;
@@ -440,11 +460,14 @@ function ingestMemoryPorts(root: Record<string, unknown>, index: XmlIndex): void
       if (!portName) {
         continue;
       }
+      const portType = str(portObj["@_Type"]);
+      const bus: Bus =
+        (portType && PORT_TYPE_TO_BUS[portType]) || "Mem";
       const message = portObj.Message as Record<string, unknown> | undefined;
       const messageName = message ? str(message["@_Name"]) ?? portName : portName;
       const def: MessageDef = {
         name: messageName,
-        bus: "Mem",
+        bus,
         fields: [],
       };
       const fields = asArray(message?.Field);
@@ -452,14 +475,35 @@ function ingestMemoryPorts(root: Record<string, unknown>, index: XmlIndex): void
         def.fields.push(parseAttributeStyleField(f as Record<string, unknown>, messageName));
       }
       index.messages.set(messageName, def);
-      for (const prefix of PREFIXES_BY_BUS["Mem"]) {
-        const fullName = `${prefix}${portName}`;
-        index.connections.set(fullName, {
-          fullName,
-          bus: "Mem",
+
+      // PART_<partitionName>_<portName> — the canonical fully-qualified
+      // form used in scripts (e.g. PART_HSI_VORILSMBReadBITResult,
+      // PART_TEST_MBPBITStatus). Always registered when we have a partition
+      // name, regardless of port type.
+      if (partitionName) {
+        const partFullName = `PART_${partitionName}_${portName}`;
+        index.connections.set(partFullName, {
+          fullName: partFullName,
+          bus,
           rawName: portName,
           messageName,
         });
+      }
+
+      // Also register the bus's short prefix for Memory-typed ports
+      // (Mem_<portName>). For A429/M1553/Discrete-typed ports, the
+      // canonical bus-prefixed connection comes from MessageConfig.xml's
+      // <Connection> elements, so we don't double-register here.
+      if (bus === "Mem") {
+        for (const prefix of PREFIXES_BY_BUS["Mem"]) {
+          const fullName = `${prefix}${portName}`;
+          index.connections.set(fullName, {
+            fullName,
+            bus: "Mem",
+            rawName: portName,
+            messageName,
+          });
+        }
       }
     }
   }

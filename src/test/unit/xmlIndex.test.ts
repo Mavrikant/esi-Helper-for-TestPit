@@ -205,12 +205,19 @@ describe("xmlIndex", () => {
       assert.strictEqual(m99!.name, "VORILSDataMsg");
     });
 
-    it("ingests memory ports as Mem_-prefixed connections + messages", () => {
+    it("ingests memory ports under both Mem_ and PART_<partition>_ forms", () => {
+      // Short Mem_ prefix
       assert.ok(idx.connections.has("Mem_RNEGeneralWriteLedStatus"));
-      const conn = idx.connections.get("Mem_RNEGeneralWriteLedStatus")!;
-      assert.strictEqual(conn.bus, "Mem");
-      assert.strictEqual(conn.rawName, "RNEGeneralWriteLedStatus");
-      const msg = idx.resolveConnectionMessage("Mem_RNEGeneralWriteLedStatus");
+      // Fully-qualified PART_<partition>_ prefix
+      assert.ok(idx.connections.has("PART_HSI_RNEGeneralWriteLedStatus"));
+
+      const memConn = idx.connections.get("Mem_RNEGeneralWriteLedStatus")!;
+      const partConn = idx.connections.get("PART_HSI_RNEGeneralWriteLedStatus")!;
+      assert.strictEqual(memConn.bus, "Mem");
+      assert.strictEqual(partConn.bus, "Mem");
+      assert.strictEqual(memConn.messageName, partConn.messageName);
+
+      const msg = idx.resolveConnectionMessage("PART_HSI_RNEGeneralWriteLedStatus");
       assert.ok(msg);
       assert.strictEqual(msg!.fields.length, 2);
       const led = msg!.fields.find((f) => f.name === "LedStatus");
@@ -219,6 +226,22 @@ describe("xmlIndex", () => {
       assert.strictEqual(led!.dataType, "UInt32");
       assert.strictEqual(led!.size, "1");
       assert.strictEqual(led!.startBit, "0");
+    });
+
+    it("registers PART_<partition>_<port> for ports across multiple partitions", () => {
+      // Port in HSI partition
+      assert.ok(idx.connections.has("PART_HSI_RNEGeneralWritePSAlive"));
+      // Port in TEST partition (with its own Enum field)
+      assert.ok(idx.connections.has("PART_TEST_MBPBITStatus"));
+      const msg = idx.resolveConnectionMessage("PART_TEST_MBPBITStatus");
+      assert.ok(msg);
+      const value = msg!.fields.find((f) => f.name === "Value");
+      assert.ok(value);
+      assert.strictEqual(value!.dataType, "Enum");
+      assert.deepStrictEqual(
+        value!.enums?.map((e) => e.name),
+        ["FAILURE", "SUCCESS"]
+      );
     });
   });
 });
