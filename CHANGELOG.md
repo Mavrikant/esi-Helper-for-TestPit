@@ -25,6 +25,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   - `<pre>…</pre>` blocks are passed through verbatim — hand-aligned content (Step Conditions / Step Expected Results) isn't disturbed.
   - Mid-line tags (`foo = [bar]`, `Step Conditions = <pre>`) stay as content; only whole-line tags drive depth.
 
+### Fixed
+- **`.vscodeignore` no longer excludes `node_modules/**`.** The blanket exclusion stopped `vsce` from packaging the new `fast-xml-parser` runtime dependency, so installed `.vsix` builds threw `Cannot find module 'fast-xml-parser'` at activation and the extension silently failed to load. `vsce`'s production-dep walker now includes the runtime modules; devDependencies are still left out.
+
 ### Documentation
 - Added `CHANGELOG.md` (this file).
 - Added `CLAUDE.md` — architecture overview, common tasks, conventions, and gotchas for future contributors and Claude Code sessions.
