@@ -19,7 +19,7 @@ export function buildBuiltInProject(
   switch (id) {
     case "RNE":
       return {
-        id: "RNE",
+        id: executablePath,
         label: "RNE",
         executablePath,
         validityArgs: [
@@ -35,7 +35,7 @@ export function buildBuiltInProject(
       };
     case "VORILS":
       return {
-        id: "VORILS",
+        id: executablePath,
         label: "VORILS",
         executablePath,
         validityArgs: [
