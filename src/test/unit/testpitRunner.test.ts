@@ -4,37 +4,33 @@ describe("testpitRunner", () => {
   const childProcess = require("child_process");
 
   beforeEach(() => {
-    childProcess._lastCmd = undefined;
     childProcess.execSync = (cmd: string) => Buffer.from(`ran:${cmd}`);
-    childProcess.exec = (cmd: string, cb: any) => cb(null, { stdout: `ran:${cmd}` });
+    childProcess.exec = (cmd: string, cb?: (err: Error | null, res: { stdout: string }) => void) => {
+      if (cb) {
+        cb(null, { stdout: `ran:${cmd}` });
+      }
+    };
   });
 
-  it("buildValidityCommand includes expected flags", () => {
+  it("runValidityCheckSync returns the exec output for the given command", () => {
     const tr = require("../../lib/testpitRunner");
-    const cmd = tr.buildValidityCommand("C:\\cfg\\", "script.esi");
-    assert.ok(cmd.includes("--cf=C:\\cfg\\MessageConfig_RNESystemTestCable.xml"));
-    assert.ok(cmd.includes('--sf="script.esi"'));
+    const out = tr.runValidityCheckSync("foo --bar=baz");
+    assert.strictEqual(out, "ran:foo --bar=baz");
   });
 
-  it("runValidityCheckSync returns exec output", () => {
+  it("runValidityCheckAsync returns the exec output for the given command", async () => {
     const tr = require("../../lib/testpitRunner");
-    const out = tr.runValidityCheckSync("C:\\cfg\\", "script.esi");
-    assert.ok(out.startsWith("ran:"));
+    const out = await tr.runValidityCheckAsync("foo --bar=baz");
+    assert.strictEqual(out, "ran:foo --bar=baz");
   });
 
-  it("runValidityCheckAsync returns exec output", async () => {
-    const tr = require("../../lib/testpitRunner");
-    const out = await tr.runValidityCheckAsync("C:\\cfg\\", "script.esi");
-    assert.ok(out.startsWith("ran:"));
-  });
-
-  it("openInTestPit calls exec with --ow=", () => {
-    let calledCmd = "";
+  it("runCommandDetached calls exec with the verbatim command and does not block", () => {
+    let observed = "";
     childProcess.exec = (cmd: string) => {
-      calledCmd = cmd;
+      observed = cmd;
     };
     const tr = require("../../lib/testpitRunner");
-    tr.openInTestPit("somefile.esi");
-    assert.ok(calledCmd.includes("--ow=somefile.esi"));
+    tr.runCommandDetached("te.exe --ow=somefile.esi");
+    assert.strictEqual(observed, "te.exe --ow=somefile.esi");
   });
 });

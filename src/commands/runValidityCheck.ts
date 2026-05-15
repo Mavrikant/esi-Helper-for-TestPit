@@ -1,8 +1,9 @@
 import * as vscode from "vscode";
-import { CONFIG_SECTION } from "../constants";
 import { runValidityCheckSync } from "../lib/testpitRunner";
 import { getOutputChannel } from "../lib/outputChannel";
 import { withTempScript } from "../lib/withTempScript";
+import { getOrPromptForProject } from "../lib/projectRegistry";
+import { buildValidityCommand } from "../projects";
 
 export function registerRunValidityCheck(): vscode.Disposable {
   return vscode.commands.registerCommand(
@@ -12,16 +13,16 @@ export function registerRunValidityCheck(): vscode.Disposable {
       if (!editor) {
         return;
       }
-      const configFolderpath =
-        vscode.workspace
-          .getConfiguration(CONFIG_SECTION)
-          .get<string>("testpitConfigFolderpath") ?? "";
-
+      const project = await getOrPromptForProject();
+      if (!project) {
+        return;
+      }
       await withTempScript(
         editor.document.uri.fsPath,
         editor.document.getText(),
         (tempPath) => {
-          const output = runValidityCheckSync(configFolderpath, tempPath);
+          const command = buildValidityCommand(project, tempPath);
+          const output = runValidityCheckSync(command);
           const channel = getOutputChannel();
           channel.clear();
           channel.appendLine(output);

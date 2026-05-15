@@ -21,7 +21,8 @@
     "onCommand:extension.refactorDocument",
     "onCommand:extension.runValidityCheck",
     "onCommand:extension.showProcessedFile",
-    "onCommand:extension.gotoStep"
+    "onCommand:extension.gotoStep",
+    "onCommand:extension.selectProject"
   ],
   "main": "./out/extension.js",
   "contributes": {
@@ -76,6 +77,11 @@
         "command": "extension.showProcessedFile",
         "title": "Show Processed File",
         "category": "ESI Helper"
+      },
+      {
+        "command": "extension.selectProject",
+        "title": "Select TestPit Project",
+        "category": "ESI Helper"
       }
     ],
     "keybindings": [
@@ -94,12 +100,64 @@
           "default": false,
           "description": "Refactor document on save by cleaning whitespaces and turning tabs to spaces."
         },
-        "esihelper.testpitConfigFolderpath": {
-          "type": [
-            "string"
-          ],
+        "esihelper.activeProject": {
+          "type": "string",
+          "scope": "resource",
+          "description": "ID of the active TestPit project. Set via the status bar or the 'Select TestPit Project' command. Accepts any built-in id (RNE, VORILS) or a custom id from esihelper.customProjects."
+        },
+        "esihelper.RNE.executablePath": {
+          "type": "string",
+          "default": "C:\\Program Files (x86)\\TestPit\\Tools\\bin\\TestPit.exe",
+          "description": "Path to the TestPit.exe used for the RNE project."
+        },
+        "esihelper.RNE.configFolderpath": {
+          "type": "string",
           "default": "D:\\RNE\\product_library\\tools\\TestPit\\Config\\",
-          "description": "Path of TestPit Config files."
+          "description": "Folder containing TestPit XML configs for the RNE project. Must end with a trailing path separator."
+        },
+        "esihelper.VORILS.executablePath": {
+          "type": "string",
+          "default": "C:\\Program Files (x86)\\TestPit\\Tools\\bin\\TestPit.exe",
+          "description": "Path to the TestPit.exe used for the VORILS project."
+        },
+        "esihelper.VORILS.configFolderpath": {
+          "type": "string",
+          "default": "D:\\263_VORILS\\product_library\\tools\\TestPit\\Config\\",
+          "description": "Folder containing TestPit XML configs for the VORILS project. Must end with a trailing path separator."
+        },
+        "esihelper.customProjects": {
+          "type": "array",
+          "default": [],
+          "description": "Custom TestPit project definitions. Each entry adds a new project to the status-bar picker. Use {scriptPath} as a placeholder in validityArgs and {filePath} in openArgs; both get substituted at runtime and double-quoted. An entry with id equal to a built-in (RNE/VORILS) overrides the built-in.",
+          "items": {
+            "type": "object",
+            "required": ["id", "label", "executablePath", "validityArgs"],
+            "properties": {
+              "id": {
+                "type": "string",
+                "description": "Unique project identifier; stored in esihelper.activeProject when selected."
+              },
+              "label": {
+                "type": "string",
+                "description": "Human-readable name shown in the status bar and picker."
+              },
+              "executablePath": {
+                "type": "string",
+                "description": "Absolute path to the TestPit.exe (or wrapper) used for this project."
+              },
+              "validityArgs": {
+                "type": "array",
+                "items": { "type": "string" },
+                "description": "Command-line arguments for 'Run Validity Check'. {scriptPath} is replaced with the (quoted) temp script path."
+              },
+              "openArgs": {
+                "type": "array",
+                "items": { "type": "string" },
+                "default": ["--ow={filePath}"],
+                "description": "Command-line arguments for 'Open with TestPit'. {filePath} is replaced with the (quoted) open-file path."
+              }
+            }
+          }
         }
       }
     }

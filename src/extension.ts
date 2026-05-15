@@ -5,7 +5,9 @@ import { registerUpdateStepNumbers } from "./commands/updateStepNumbers";
 import { registerGotoStep } from "./commands/gotoStep";
 import { registerRefactorDocument } from "./commands/refactorDocument";
 import { registerShowProcessedFile } from "./commands/showProcessedFile";
+import { registerSelectProject } from "./commands/selectProject";
 import { registerLiveDiagnostics } from "./diagnostics";
+import { registerProjectStatusBar } from "./statusBar";
 
 export function activate(context: vscode.ExtensionContext): void {
   console.log('Extension "esi Helper for TestPit" is now active.');
@@ -16,6 +18,8 @@ export function activate(context: vscode.ExtensionContext): void {
     registerGotoStep(),
     registerRefactorDocument(),
     registerShowProcessedFile(),
+    registerSelectProject(),
+    registerProjectStatusBar(),
     registerLiveDiagnostics()
   );
 }
