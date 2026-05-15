@@ -37,6 +37,19 @@ describe("esiContext.resolveContext", () => {
     }
   });
 
+  it("returns 'fieldValue' for dotted field names (Mode.SelectedCourse)", () => {
+    const text = [
+      "[1553_VORILSOutput]",
+      "    Mode.SelectedCourse = ",
+      "[/1553_VORILSOutput]",
+    ].join("\n");
+    const ctx = resolveContext(text, 1, "    Mode.SelectedCourse = ".length);
+    assert.strictEqual(ctx.kind, "fieldValue");
+    if (ctx.kind === "fieldValue") {
+      assert.strictEqual(ctx.fieldName, "Mode.SelectedCourse");
+    }
+  });
+
   it("returns 'fieldValue' on the RHS of an = inside an open component block", () => {
     const text = [
       "[429_L100SelectedCourseBNR_input1]",

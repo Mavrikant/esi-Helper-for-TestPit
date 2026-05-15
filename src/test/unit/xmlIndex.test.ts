@@ -134,20 +134,22 @@ describe("xmlIndex", () => {
       assert.strictEqual(msg!.fields.length, 3);
     });
 
-    it("ingests 1553 messages with their flattened Word > Field children", () => {
+    it("ingests 1553 messages with Word.Field dot-qualified field names", () => {
       const msg = idx.messages.get("TACANDMEOutput1");
       assert.ok(msg, "expected TACANDMEOutput1 message");
       assert.strictEqual(msg!.bus, "1553");
       assert.strictEqual(msg!.direction, "Output");
       // 2 fields from word "DataValidity" + 1 from word "Range" = 3 total
       assert.strictEqual(msg!.fields.length, 3);
-      const tx = msg!.fields.find((f) => f.name === "TransmitReceive");
-      assert.ok(tx);
+      // Field names are qualified by their parent Word (1553 .esi scripts
+      // address them as `WordName.FieldName`).
+      const tx = msg!.fields.find((f) => f.name === "DataValidity.TransmitReceive");
+      assert.ok(tx, "expected DataValidity.TransmitReceive field");
       assert.strictEqual(tx!.dataType, "Enum");
       assert.strictEqual(tx!.defaultValue, "RECEIVE");
       assert.strictEqual(tx!.enums?.length, 2);
-      const range = msg!.fields.find((f) => f.name === "RangeValue");
-      assert.ok(range);
+      const range = msg!.fields.find((f) => f.name === "Range.RangeValue");
+      assert.ok(range, "expected Range.RangeValue field");
       assert.strictEqual(range!.dataType, "UInt16");
       assert.strictEqual(range!.unit, "nm");
     });

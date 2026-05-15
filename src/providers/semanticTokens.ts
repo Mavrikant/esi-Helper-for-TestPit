@@ -12,7 +12,8 @@ export const ESI_LEGEND = new vscode.SemanticTokensLegend(
 
 const TAG_RE = /\[(\/?)([A-Za-z0-9_]+)\]/g;
 const VAR_RE = /%([A-Za-z_][A-Za-z0-9_]*)%/g;
-const ASSIGNMENT_RE = /^(\s*)([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/;
+// Field name may include dots (1553 `Mode.SelectedCourse`).
+const ASSIGNMENT_RE = /^(\s*)([A-Za-z_][A-Za-z0-9_.]*)\s*=\s*(.*)$/;
 const IDENT_RE = /[A-Za-z_][A-Za-z0-9_]*/g;
 
 const KNOWN_MODIFIER = 1 << 0;
@@ -71,7 +72,7 @@ export function registerEsiSemanticTokensProvider(): vscode.Disposable {
             const message = index?.resolveConnectionMessage(enclosing);
             const field = message?.fields.find((f) => f.name === fieldName);
             const fieldKnown =
-              !!field || ["time", "delay"].includes(fieldName);
+              !!field || ["time", "delay", "interval", "occurrence", "period"].includes(fieldName);
             builder.push(
               lineNum,
               fieldStart,

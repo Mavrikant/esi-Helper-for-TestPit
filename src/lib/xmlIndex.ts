@@ -239,12 +239,21 @@ function ingestMilStd1553Fields(root: Record<string, unknown>, index: XmlIndex):
       direction: str(m["@_Direction"]),
       fields: [],
     };
+    // 1553 fields are nested under <Word> elements and are referenced in
+    // .esi scripts with dot notation: `Mode.SelectedCourse = …` (the word
+    // is `Mode`, the field is `SelectedCourse`). Qualify each parsed
+    // field name with its parent word so lookups by the dotted form work.
     const words = asArray(m.Word);
     for (const word of words) {
       const w = word as Record<string, unknown>;
+      const wordName = str(w["@_Name"]);
       const fields = asArray(w.Field);
       for (const f of fields) {
-        def.fields.push(parseAttributeStyleField(f as Record<string, unknown>, name));
+        const field = parseAttributeStyleField(f as Record<string, unknown>, name);
+        if (wordName) {
+          field.name = `${wordName}.${field.name}`;
+        }
+        def.fields.push(field);
       }
     }
     index.messages.set(name, def);

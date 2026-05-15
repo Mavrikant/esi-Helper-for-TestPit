@@ -59,9 +59,10 @@ export function resolveContext(
   if (enclosingMessage) {
     const eqIndex = before.indexOf("=");
     if (eqIndex !== -1 && character > eqIndex) {
-      // Cursor is on the RHS of `=`
+      // Cursor is on the RHS of `=`. Field name may include dots
+      // (e.g. 1553's `Mode.SelectedCourse = …`).
       const fieldName = before.slice(0, eqIndex).trim();
-      if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(fieldName)) {
+      if (/^[A-Za-z_][A-Za-z0-9_.]*$/.test(fieldName)) {
         return {
           kind: "fieldValue",
           messageName: enclosingMessage,
@@ -69,9 +70,9 @@ export function resolveContext(
         };
       }
     } else {
-      // Cursor is on the LHS — likely typing a field name
+      // Cursor is on the LHS — likely typing a field name (possibly dotted).
       const trimmedBefore = before.trimStart();
-      if (/^[A-Za-z_]?[A-Za-z0-9_]*$/.test(trimmedBefore)) {
+      if (/^[A-Za-z_]?[A-Za-z0-9_.]*$/.test(trimmedBefore)) {
         return { kind: "fieldName", messageName: enclosingMessage };
       }
     }

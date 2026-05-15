@@ -77,14 +77,49 @@ describe("componentValidator", () => {
     );
   });
 
-  it("does not warn about timing fields like 'time' or 'delay'", () => {
+  it("does not warn about timing fields (time, delay, interval, occurrence, period)", () => {
     const text = [
       "[429_L100SelectedCourseBNR_input1]",
       "    time = 100",
       "    delay = 200",
+      "    interval = 50",
+      "    occurrence = 1",
+      "    period = 1000",
       "[/429_L100SelectedCourseBNR_input1]",
     ].join("\n");
     assert.deepStrictEqual(validateComponents(text, idx), []);
+  });
+
+  it("validates 1553 dot-notation fields (Word.Field) inside an open block", () => {
+    // Good: TACANDMEOutput1 has DataValidity.TransmitReceive (Enum: RECEIVE/TRANSMITRECEIVE).
+    const good = [
+      "[1553_L042TACANDMEOutput1_1]",
+      "    DataValidity.TransmitReceive = RECEIVE",
+      "[/1553_L042TACANDMEOutput1_1]",
+    ].join("\n");
+    assert.deepStrictEqual(validateComponents(good, idx), []);
+
+    // Bad enum: DataValidity.TransmitReceive doesn't have a NOPE value.
+    const badEnum = [
+      "[1553_L042TACANDMEOutput1_1]",
+      "    DataValidity.TransmitReceive = NOPE",
+      "[/1553_L042TACANDMEOutput1_1]",
+    ].join("\n");
+    const enumIssues = validateComponents(badEnum, idx);
+    assert.strictEqual(enumIssues.length, 1);
+    assert.strictEqual(enumIssues[0].kind, "unknownEnum");
+    assert.strictEqual(enumIssues[0].identifier, "NOPE");
+
+    // Bad field: Word.NotAField doesn't exist on TACANDMEOutput1.
+    const badField = [
+      "[1553_L042TACANDMEOutput1_1]",
+      "    DataValidity.NotAField = 1",
+      "[/1553_L042TACANDMEOutput1_1]",
+    ].join("\n");
+    const fieldIssues = validateComponents(badField, idx);
+    assert.strictEqual(fieldIssues.length, 1);
+    assert.strictEqual(fieldIssues[0].kind, "unknownField");
+    assert.strictEqual(fieldIssues[0].identifier, "DataValidity.NotAField");
   });
 
   it("does not warn about non-component tags ([STEP 10] etc.)", () => {

@@ -8,7 +8,7 @@ import {
 } from "../lib/renderComponent";
 import { ConnectionDef, FieldDef } from "../lib/xmlIndex";
 
-const TIMING_FIELDS = ["time", "delay"];
+const TIMING_FIELDS = ["time", "delay", "interval", "occurrence", "period"];
 
 const VARIABLE_BLOCK = /\[VARIABLES\]([\s\S]*?)\[\/VARIABLES\]/g;
 const VARIABLE_DECL = /%([A-Za-z_][A-Za-z0-9_]*)%/g;
