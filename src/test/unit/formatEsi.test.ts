@@ -72,23 +72,60 @@ describe("formatEsi", () => {
     assert.strictEqual(formatEsi(input), expected);
   });
 
-  it("preserves <pre> block contents verbatim (no re-indent inside)", () => {
+  it("treats <pre>/</pre> as a depth-affecting block: content one indent deeper, </pre> back to pre's level", () => {
     const input = [
       "[A]",
       "cond = <pre>",
-      "          some manually aligned text",
-      "          <br/> more",
-      "       </pre>",
+      "<br/> step 1",
+      "<br/> step 2",
+      "</pre>",
       "[/A]",
     ].join("\n");
     const expected = [
       "[A]",
       "    cond = <pre>",
-      "          some manually aligned text",
-      "          <br/> more",
-      "       </pre>",
+      "        <br/> step 1",
+      "        <br/> step 2",
+      "    </pre>",
       "[/A]",
     ].join("\n");
+    assert.strictEqual(formatEsi(input), expected);
+  });
+
+  it("re-aligns misaligned <pre> block content from the source", () => {
+    // Mirrors the real-world Step Conditions screenshot: the `<br/>` and
+    // `</pre>` lines were at random columns far to the right; the formatter
+    // pulls them in to depth+1 / depth respectively.
+    const input = [
+      "[STEP 20]",
+      "[STEP DEFINITION]",
+      "Step Conditions = <pre>",
+      "                                <br/> Go to 'vorIlsMbPerformFunction'",
+      "                            </pre>",
+      "Step Expected Results = <pre>",
+      "                                    <br/> * Verify that inside the X is Y",
+      "                                </pre>",
+      "[/STEP DEFINITION]",
+      "[/STEP 20]",
+    ].join("\n");
+    const expected = [
+      "[STEP 20]",
+      "    [STEP DEFINITION]",
+      "        Step Conditions = <pre>",
+      "            <br/> Go to 'vorIlsMbPerformFunction'",
+      "        </pre>",
+      "        Step Expected Results = <pre>",
+      "            <br/> * Verify that inside the X is Y",
+      "        </pre>",
+      "    [/STEP DEFINITION]",
+      "[/STEP 20]",
+    ].join("\n");
+    assert.strictEqual(formatEsi(input), expected);
+  });
+
+  it("leaves a single-line <pre>foo</pre> alone (depth-neutral)", () => {
+    const input = "[A]\ncond = <pre>foo</pre>\n[/A]";
+    const expected = "[A]\n    cond = <pre>foo</pre>\n[/A]";
     assert.strictEqual(formatEsi(input), expected);
   });
 

@@ -10,29 +10,25 @@ const INDENT = "    ";
 const OPENING_TAG_LINE = /^\[[^/\]][^\]]*\]\s*(?:#.*)?$/;
 const CLOSING_TAG_LINE = /^\[\/[^\]]+\]\s*(?:#.*)?$/;
 
-// `<pre>...</pre>` blocks contain hand-aligned text (e.g. "Step Conditions"
-// fields). When a `<pre>` opens without closing on the same line, we leave
-// every subsequent line untouched until we see `</pre>` so the visual
-// alignment isn't destroyed by re-indentation.
-const PRE_OPEN = /<pre[^>]*>/i;
-const PRE_CLOSE = /<\/pre>/i;
+// `<pre>...</pre>` blocks (used by Step Conditions / Step Expected Results)
+// participate in depth tracking just like [TAG]/[/TAG]:
+//   - A line ending with `<pre>` (and not also closing it on the same line)
+//     opens a block — content on subsequent lines indents one level deeper.
+//   - A line that IS just `</pre>` closes the block.
+// This produces clean output where `<br/>` lines sit one indent past the
+// `Step Conditions = <pre>` line and `</pre>` aligns back with it, instead
+// of preserving whatever (often misaligned) column the source happened to
+// use.
+const PRE_OPENER_AT_END = /<pre[^>]*>\s*$/i;
+const PRE_CLOSER_WHOLE_LINE = /^<\/pre>\s*$/i;
 
 export function formatEsi(text: string): string {
   const normalized = refactorWhitespace(text);
   const lines = normalized.split("\n");
   const out: string[] = [];
   let depth = 0;
-  let inPre = false;
 
   for (const line of lines) {
-    if (inPre) {
-      out.push(line);
-      if (PRE_CLOSE.test(line)) {
-        inPre = false;
-      }
-      continue;
-    }
-
     const stripped = line.trim();
 
     if (stripped === "") {
@@ -40,21 +36,19 @@ export function formatEsi(text: string): string {
       continue;
     }
 
-    const closing = CLOSING_TAG_LINE.test(stripped);
-    const opening = !closing && OPENING_TAG_LINE.test(stripped);
+    const tagClosing = CLOSING_TAG_LINE.test(stripped);
+    const tagOpening = !tagClosing && OPENING_TAG_LINE.test(stripped);
+    const preCloser = PRE_CLOSER_WHOLE_LINE.test(stripped);
+    const preOpener = !preCloser && PRE_OPENER_AT_END.test(stripped);
 
-    if (closing) {
+    if (tagClosing || preCloser) {
       depth = Math.max(0, depth - 1);
     }
 
     out.push(INDENT.repeat(depth) + stripped);
 
-    if (opening) {
+    if (tagOpening || preOpener) {
       depth += 1;
-    }
-
-    if (PRE_OPEN.test(stripped) && !PRE_CLOSE.test(stripped)) {
-      inPre = true;
     }
   }
 
