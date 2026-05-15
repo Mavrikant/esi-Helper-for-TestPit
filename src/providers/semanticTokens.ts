@@ -1,6 +1,6 @@
 import * as vscode from "vscode";
 import { getActiveProjectIndex } from "../lib/projectIndexCache";
-import { XmlIndex } from "../lib/xmlIndex";
+import { COMPONENT_TAG_PATTERN, XmlIndex } from "../lib/xmlIndex";
 
 const TOKEN_TYPES = ["class", "property", "enumMember", "variable"] as const;
 const TOKEN_MODIFIERS = ["defaultLibrary"] as const;
@@ -121,7 +121,7 @@ export function registerEsiSemanticTokensProvider(): vscode.Disposable {
 }
 
 function isComponentTag(name: string): boolean {
-  return /^(429|1553|Discrete|Mem)_/.test(name);
+  return COMPONENT_TAG_PATTERN.test(name);
 }
 
 function topComponent(stack: string[]): string | undefined {

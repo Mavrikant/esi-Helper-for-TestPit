@@ -4,6 +4,34 @@ import { XMLParser } from "fast-xml-parser";
 
 export type Bus = "429" | "1553" | "Discrete" | "Mem";
 
+/**
+ * Single source of truth for bus prefixes used in `.esi` `[NAME]` references.
+ *
+ * `Discrete` accepts BOTH `Discrete_` and `DIS_` — TestPit's PartitionAliases
+ * (commented in MemoryPorts.xml) treat `DIS` as an alias for `Discrete`, and
+ * scripts in the wild use both. Connections from MessageConfig
+ * `<Device Type="Discrete">` and from DiscreteSignals.xml are dual-registered
+ * under both prefixes so completion / hover / validation work either way.
+ */
+export const COMPONENT_TAG_PREFIXES = [
+  "429",
+  "1553",
+  "Discrete",
+  "DIS",
+  "Mem",
+] as const;
+
+export const COMPONENT_TAG_PATTERN = new RegExp(
+  `^(${COMPONENT_TAG_PREFIXES.join("|")})_`
+);
+
+const PREFIXES_BY_BUS: Record<Bus, string[]> = {
+  "429": ["429_"],
+  "1553": ["1553_"],
+  Discrete: ["Discrete_", "DIS_"],
+  Mem: ["Mem_"],
+};
+
 export interface ConnectionDef {
   fullName: string;          // bus-prefixed, e.g. "429_L100SelectedCourseBNR_input1"
   bus: Bus;
@@ -146,17 +174,19 @@ function ingestMessageConfig(root: Record<string, unknown>, index: XmlIndex): vo
       }
       const param = c.Parameter as Record<string, unknown> | undefined;
       const { messageName, label } = parseConnectionName(rawName);
-      const fullName = `${bus}_${rawName}`;
-      index.connections.set(fullName, {
-        fullName,
-        bus,
-        rawName,
-        messageName,
-        label,
-        card: param ? str(param["@_Card"]) : undefined,
-        channel: param ? str(param["@_Channel"]) : undefined,
-        speed: param ? str(param["@_Speed"]) : undefined,
-      });
+      for (const prefix of PREFIXES_BY_BUS[bus]) {
+        const fullName = `${prefix}${rawName}`;
+        index.connections.set(fullName, {
+          fullName,
+          bus,
+          rawName,
+          messageName,
+          label,
+          card: param ? str(param["@_Card"]) : undefined,
+          channel: param ? str(param["@_Channel"]) : undefined,
+          speed: param ? str(param["@_Speed"]) : undefined,
+        });
+      }
     }
   }
 }
@@ -253,14 +283,17 @@ function ingestDiscreteSignals(root: Record<string, unknown>, index: XmlIndex): 
       });
     }
     index.messages.set(name, def);
-    // Discrete signals can also be referenced as connections under Discrete_<name>
-    const fullName = `Discrete_${name}`;
-    index.connections.set(fullName, {
-      fullName,
-      bus: "Discrete",
-      rawName: name,
-      messageName: name,
-    });
+    // Discrete signals are referenced as connections under both `DIS_<name>`
+    // and `DIS_<name>` (TestPit's PartitionAlias).
+    for (const prefix of PREFIXES_BY_BUS["Discrete"]) {
+      const fullName = `${prefix}${name}`;
+      index.connections.set(fullName, {
+        fullName,
+        bus: "Discrete",
+        rawName: name,
+        messageName: name,
+      });
+    }
   }
 }
 
@@ -288,13 +321,15 @@ function ingestMemoryPorts(root: Record<string, unknown>, index: XmlIndex): void
         def.fields.push(parseAttributeStyleField(f as Record<string, unknown>, messageName));
       }
       index.messages.set(messageName, def);
-      const fullName = `Mem_${portName}`;
-      index.connections.set(fullName, {
-        fullName,
-        bus: "Mem",
-        rawName: portName,
-        messageName,
-      });
+      for (const prefix of PREFIXES_BY_BUS["Mem"]) {
+        const fullName = `${prefix}${portName}`;
+        index.connections.set(fullName, {
+          fullName,
+          bus: "Mem",
+          rawName: portName,
+          messageName,
+        });
+      }
     }
   }
 }

@@ -1,4 +1,4 @@
-import { XmlIndex } from "./xmlIndex";
+import { COMPONENT_TAG_PATTERN, XmlIndex } from "./xmlIndex";
 
 export type IssueKind =
   | "unknownConnection"
@@ -17,7 +17,7 @@ export interface ComponentIssue {
 const TAG_RE = /\[(\/?)([A-Za-z0-9_]+)\]/g;
 const ASSIGNMENT_RE = /^(\s*)([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/;
 const RHS_IDENT_RE = /^[A-Za-z_][A-Za-z0-9_]*/;
-const COMPONENT_TAG = /^(429|1553|Discrete|Mem)_/;
+const COMPONENT_TAG = COMPONENT_TAG_PATTERN;
 
 const TIMING_FIELDS = new Set(["time", "delay"]);
 

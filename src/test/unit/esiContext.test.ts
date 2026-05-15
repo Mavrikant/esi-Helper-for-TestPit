@@ -67,7 +67,7 @@ describe("esiContext.resolveContext", () => {
   });
 
   it("ignores non-component enclosing tags like [STEP 10]", () => {
-    // [STEP 10] doesn't match a 429_/1553_/Discrete_/Mem_ prefix → no fieldName context
+    // [STEP 10] doesn't match a 429_/1553_/DIS_/Mem_ prefix → no fieldName context
     const text = ["[STEP 10]", "    ", "[/STEP 10]"].join("\n");
     const ctx = resolveContext(text, 1, 4);
     assert.strictEqual(ctx.kind, "other");

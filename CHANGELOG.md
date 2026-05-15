@@ -9,7 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Added
 - **TestPit XML index** — parses `<configFolderpath>/*.xml` (MessageConfig, A429MessageFields, 1553MessageFields, DiscreteSignals, MemoryPorts, plus VORILS variants) into an in-memory model of connections / messages / fields / enums. Re-loads on `esihelper.activeProject` change, on `<id>.configFolderpath` change, and on any XML file change via a `FileSystemWatcher`. Cached per `configFolderpath` so switching projects back-and-forth is instant.
 - **Auto-completion** for `.esi` files (triggers on `[`, `=`, `%`, plus Ctrl+Space):
-  - Inside `[…]`, suggests bus-prefixed connection names (`429_L100SelectedCourseBNR_input1`, `1553_…`, `Discrete_…`, `Mem_…`) from the index.
+  - Inside `[…]`, suggests bus-prefixed connection names (`429_L100SelectedCourseBNR_input1`, `1553_…`, `DIS_…`, `Mem_…`) from the index.
   - At the start of a line inside an open component block, suggests the message's field names (plus the timing fields `time` and `delay`).
   - On the RHS of `field = `, suggests enum values for `DataType=Enum` fields, or the `defaultValue` / `minValue` / `maxValue` for numeric fields.
   - After `%`, suggests variable names declared in the file's `[VARIABLES]` blocks.

@@ -137,4 +137,31 @@ describe("componentValidator", () => {
   it("returns no issues for an empty document", () => {
     assert.deepStrictEqual(validateComponents("", idx), []);
   });
+
+  it("recognises DIS_ as a valid alias for Discrete_ on validation", () => {
+    // Both prefixes should be treated as known component tags; field validation
+    // (Value here is an Enum on PowerOnOff) should kick in for both.
+    const goodLong = [
+      "[Discrete_PowerOnOff]",
+      "    Value = POWER_ON",
+      "[/Discrete_PowerOnOff]",
+    ].join("\n");
+    const goodShort = [
+      "[DIS_PowerOnOff]",
+      "    Value = POWER_ON",
+      "[/DIS_PowerOnOff]",
+    ].join("\n");
+    const badShort = [
+      "[DIS_PowerOnOff]",
+      "    Value = POWER_NOPE",
+      "[/DIS_PowerOnOff]",
+    ].join("\n");
+
+    assert.deepStrictEqual(validateComponents(goodLong, idx), []);
+    assert.deepStrictEqual(validateComponents(goodShort, idx), []);
+    const issues = validateComponents(badShort, idx);
+    assert.strictEqual(issues.length, 1);
+    assert.strictEqual(issues[0].kind, "unknownEnum");
+    assert.strictEqual(issues[0].identifier, "POWER_NOPE");
+  });
 });

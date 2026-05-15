@@ -90,7 +90,25 @@ describe("xmlIndex", () => {
       assert.strictEqual(msg!.fields.length, 1);
       assert.strictEqual(msg!.fields[0].dataType, "Enum");
       assert.strictEqual(msg!.fields[0].enums?.length, 2);
-      assert.ok(idx.connections.has("Discrete_PowerOnOff"));
+      assert.ok(idx.connections.has("DIS_PowerOnOff"));
+    });
+
+    it("registers each discrete signal under both Discrete_ and DIS_ prefixes", () => {
+      assert.ok(
+        idx.connections.has("Discrete_PowerOnOff"),
+        "expected Discrete_PowerOnOff"
+      );
+      assert.ok(
+        idx.connections.has("DIS_PowerOnOff"),
+        "expected DIS_PowerOnOff (TestPit PartitionAlias)"
+      );
+      // Both prefixes resolve to the same underlying message.
+      const fromLong = idx.resolveConnectionMessage("Discrete_PowerOnOff");
+      const fromShort = idx.resolveConnectionMessage("DIS_PowerOnOff");
+      assert.ok(fromLong);
+      assert.ok(fromShort);
+      assert.strictEqual(fromLong!.name, "PowerOnOff");
+      assert.strictEqual(fromLong!.name, fromShort!.name);
     });
 
     it("resolveConnectionMessage maps a connection to its A429 message", () => {

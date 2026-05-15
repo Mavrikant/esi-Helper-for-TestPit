@@ -7,8 +7,10 @@ import {
   renderField,
 } from "../lib/renderComponent";
 
+import { COMPONENT_TAG_PREFIXES } from "../lib/xmlIndex";
+
 const WORD_PATTERN = /[A-Za-z0-9_]+/;
-const BUS_PREFIXES = ["429", "1553", "Discrete", "Mem"];
+const BUS_PREFIXES = COMPONENT_TAG_PREFIXES;
 
 export function registerEsiHoverProvider(): vscode.Disposable {
   return vscode.languages.registerHoverProvider("esi", {

@@ -1,3 +1,5 @@
+import { COMPONENT_TAG_PATTERN } from "./xmlIndex";
+
 export type EsiContext =
   | { kind: "tagName"; partial: string }
   | { kind: "fieldName"; messageName: string }
@@ -108,7 +110,7 @@ function findEnclosingMessage(lines: string[], lineIndex: number): string | unde
       // Skip standalone container tags like STEP, STEP DEFINITION,
       // STEP INPUTS, STEP OUTPUTS, VARIABLES — these don't have field
       // assignments of bus components inside them; we want bus-prefixed
-      // tags (429_*, 1553_*, Discrete_*, Mem_*).
+      // tags (429_*, 1553_*, DIS_*, Mem_*).
       if (isComponentTag(lastOpenOnLine)) {
         return lastOpenOnLine;
       }
@@ -123,5 +125,5 @@ function findEnclosingMessage(lines: string[], lineIndex: number): string | unde
 }
 
 function isComponentTag(name: string): boolean {
-  return /^(429|1553|Discrete|Mem)_/.test(name);
+  return COMPONENT_TAG_PATTERN.test(name);
 }
