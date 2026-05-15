@@ -109,4 +109,32 @@ describe("formatEsi", () => {
     const input = "[A]\n    [B]\n        foo\n    [/B]\n[/A]";
     assert.strictEqual(formatEsi(input), input);
   });
+
+  it("treats a tag with a trailing # comment as a tag (depth still increments)", () => {
+    const input = [
+      "[STEP INPUTS]",
+      "[429_L100SelectedCourseBNR_input1]          # Scenario 1",
+      "time = 5600",
+      "SDI = INSTALLATION_NUMBER_ONE",
+      "Course = 179.6484375",
+      "[/429_L100SelectedCourseBNR_input1]",
+      "[/STEP INPUTS]",
+    ].join("\n");
+    const expected = [
+      "[STEP INPUTS]",
+      "    [429_L100SelectedCourseBNR_input1]          # Scenario 1",
+      "        time = 5600",
+      "        SDI = INSTALLATION_NUMBER_ONE",
+      "        Course = 179.6484375",
+      "    [/429_L100SelectedCourseBNR_input1]",
+      "[/STEP INPUTS]",
+    ].join("\n");
+    assert.strictEqual(formatEsi(input), expected);
+  });
+
+  it("recognizes a closing tag with a trailing # comment", () => {
+    const input = "[A]\nfoo\n[/A]   # done";
+    const expected = "[A]\n    foo\n[/A]   # done";
+    assert.strictEqual(formatEsi(input), expected);
+  });
 });

@@ -4,9 +4,11 @@ const INDENT = "    ";
 
 // Lines that ARE just an opening tag, e.g. "[STEP 10]" or "[STEP INPUTS]".
 // Mid-line tags (e.g. `Step Conditions = <pre>` or `foo [BAR]`) are treated
-// as regular content so their depth isn't disturbed.
-const OPENING_TAG_LINE = /^\[[^/\]][^\]]*\]\s*$/;
-const CLOSING_TAG_LINE = /^\[\/[^\]]+\]\s*$/;
+// as regular content so their depth isn't disturbed. A trailing "# comment"
+// after the tag (with any amount of whitespace before the #) is allowed —
+// e.g. `[429_FOO_input1]          # Scenario 1`.
+const OPENING_TAG_LINE = /^\[[^/\]][^\]]*\]\s*(?:#.*)?$/;
+const CLOSING_TAG_LINE = /^\[\/[^\]]+\]\s*(?:#.*)?$/;
 
 // `<pre>...</pre>` blocks contain hand-aligned text (e.g. "Step Conditions"
 // fields). When a `<pre>` opens without closing on the same line, we leave
