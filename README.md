@@ -1,55 +1,54 @@
-<p>
-  <h1 align="center">esi Helper for TestPit</h1>
-</p>
+<h1 align="center">esi Helper for TestPit</h1>
+
 <p align="center">
-    <a href="https://marketplace.visualstudio.com/items?itemName=karamandev.esi-helper-for-testpit">
-        <img src="https://vsmarketplacebadges.dev/version-short/karamandev.esi-helper-for-testpit.svg" alt="Marketplace Version">
-    </a>
-    <a href="https://marketplace.visualstudio.com/items?itemName=karamandev.esi-helper-for-testpit">
-        <img src="https://vsmarketplacebadges.dev/installs-short/karamandev.esi-helper-for-testpit.svg" alt="Installs">
-    </a>
-    <a href="https://marketplace.visualstudio.com/items?itemName=karamandev.esi-helper-for-testpit">
-        <img src="https://vsmarketplacebadges.dev/downloads-short/karamandev.esi-helper-for-testpit.svg" alt="Downloads">
-    </a>
-    <a href="https://marketplace.visualstudio.com/items?itemName=karamandev.esi-helper-for-testpit&ssr=false#review-details">
-        <img src="https://vsmarketplacebadges.dev/rating-short/karamandev.esi-helper-for-testpit.svg" alt="Rating">
-    </a>
-    <a href="https://github.com/Mavrikant/esi-Helper-for-TestPit/actions/workflows/ci.yaml">
-        <img src="https://img.shields.io/github/actions/workflow/status/Mavrikant/esi-Helper-for-TestPit/ci.yaml?branch=main&label=CI" alt="CI Status">
-    </a>
-    <a href="https://github.com/Mavrikant/esi-Helper-for-TestPit/releases">
-        <img src="https://img.shields.io/github/v/release/Mavrikant/esi-Helper-for-TestPit" alt="Latest Release">
-    </a>
-    <a href="https://github.com/Mavrikant/esi-Helper-for-TestPit/blob/main/LICENSE">
-        <img src="https://img.shields.io/github/license/Mavrikant/esi-Helper-for-TestPit" alt="License">
-    </a>
-    <a href="https://github.com/Mavrikant/esi-Helper-for-TestPit">
-        <img src="https://img.shields.io/github/stars/Mavrikant/esi-Helper-for-TestPit?style=social" alt="GitHub Stars">
-    </a>
+  <em>Syntax highlighting, validation, IntelliSense, and refactoring for TestPit <code>.esi</code> test scripts.</em>
 </p>
 
-The **ESI Helper for TestPit** is a powerful Visual Studio Code extension that enhances the test script development process. It provides real-time feedback by checking the validity of test scripts, allowing for reliable and accurate debugging of errors. With its powerful syntax highlighter, the extension makes test scripts easy to read and understand. Additionally, the library of snippets enables developers to quickly and easily complete tests, while the refactoring feature speeds up the code maintenance process. Overall, the ESI Helper for TestPit improves developer productivity, saves time, and ensures the creation of faster and error-free tests.
+<p align="center">
+  <a href="https://marketplace.visualstudio.com/items?itemName=karamandev.esi-helper-for-testpit"><img src="https://vsmarketplacebadges.dev/version-short/karamandev.esi-helper-for-testpit.svg" alt="Marketplace Version"></a>
+  <a href="https://marketplace.visualstudio.com/items?itemName=karamandev.esi-helper-for-testpit"><img src="https://vsmarketplacebadges.dev/installs-short/karamandev.esi-helper-for-testpit.svg" alt="Installs"></a>
+  <a href="https://marketplace.visualstudio.com/items?itemName=karamandev.esi-helper-for-testpit"><img src="https://vsmarketplacebadges.dev/downloads-short/karamandev.esi-helper-for-testpit.svg" alt="Downloads"></a>
+  <a href="https://marketplace.visualstudio.com/items?itemName=karamandev.esi-helper-for-testpit&ssr=false#review-details"><img src="https://vsmarketplacebadges.dev/rating-short/karamandev.esi-helper-for-testpit.svg" alt="Rating"></a>
+  <a href="https://github.com/Mavrikant/esi-Helper-for-TestPit/actions/workflows/ci.yaml"><img src="https://img.shields.io/github/actions/workflow/status/Mavrikant/esi-Helper-for-TestPit/ci.yaml?branch=main&label=CI" alt="CI Status"></a>
+  <a href="https://github.com/Mavrikant/esi-Helper-for-TestPit/releases"><img src="https://img.shields.io/github/v/release/Mavrikant/esi-Helper-for-TestPit" alt="Latest Release"></a>
+  <a href="https://github.com/Mavrikant/esi-Helper-for-TestPit/blob/main/LICENSE"><img src="https://img.shields.io/github/license/Mavrikant/esi-Helper-for-TestPit" alt="License"></a>
+  <a href="https://github.com/Mavrikant/esi-Helper-for-TestPit"><img src="https://img.shields.io/github/stars/Mavrikant/esi-Helper-for-TestPit?style=social" alt="GitHub Stars"></a>
+</p>
 
-![Animation](/images/Animation.gif)
+---
 
-![Problmes](/images/Problems.png)
-## Features
+**esi Helper for TestPit** turns VS Code into a first-class editor for TestPit test scripts. It validates scripts as you type, highlights unknown identifiers, autocompletes connections / fields / enums from your project's TestPit XML configs, and formats `.esi` files with bus-aware indentation — so you spend less time chasing typos and more time writing tests.
 
-- Snippets for `[STEP]`, `[STEP DEFINITION]`, `[STEP INPUTS]`, `[STEP OUTPUTS]`, `[VARIABLES]`, `[FUNC_*]`, `[PART_*]`, `[CMD_EXECUTE]`, `[MANUAL_VERIFY]`, `[EXTERNAL_VERIFY]`, `[STEP GET_DUMP]`
-- Syntax highlighting and bracket matching
-- Goto step number (`Ctrl+G` → enter step number)
-- Step renumbering (sequential 10, 20, 30, …) via the **Update Step Numbers** command
-- Live linting / error checking against the local `TestPit.exe` while you type
-- Auto-formatting with ESI-aware indentation: contents of `[TAG]…[/TAG]` blocks are indented at 4-space increments per nesting level; `<pre>…</pre>` blocks (Step Conditions / Step Expected Results) are indented one level past the opener line, with `</pre>` aligned back. Available via **Format Document** (Shift+Alt+F) and on save (`"esihelper.refactorDocumentOnSave": true` or VS Code's `"editor.formatOnSave"`)
-- **Multi-project support:** built-in `RNE` and `VORILS` profiles plus user-defined custom projects. Status-bar item (bottom-right) shows the active project; click to switch via QuickPick
-- **Open with TestPit** command — opens the active script in the configured `TestPit.exe`
-- **Component data IntelliSense:** auto-completion + hover for connections (`429_…`, `1553_…`, `DIS_…`, `Mem_…`), their fields, enum values, and `%VARIABLE%` references — driven by the active project's TestPit XMLs. Type `[`, hit Ctrl+Space inside a component block, or hover any identifier. Re-indexes automatically when XMLs change.
-- **Semantic highlighting:** known connection / field / enum / variable identifiers carry a `defaultLibrary` modifier so themes can color resolved-vs-unknown identifiers differently — typos and stale references stand out.
-- **Component validation warnings:** unknown component names, unknown fields, and invalid enum values get squiggle warnings (and Problems-panel entries) on every keystroke — e.g. `SDI = NORMAL_NOPE` flags `NORMAL_NOPE` with the list of valid enum names. Source: `esi Helper`.
+<p align="center">
+  <img src="images/Animation.gif" alt="Demo">
+</p>
+
+<p align="center">
+  <img src="images/Problems.png" alt="Problems panel">
+</p>
+
+## Highlights
+
+- **Live validity check** against the configured `TestPit.exe` — errors surface in the Problems panel while you type.
+- **Component IntelliSense** for `429_…`, `1553_…`, `DIS_…`, `Mem_…`, `VORILS<N>_…`, and `PART_<partition>_<port>` tags. Connections, fields, enum values, and `%VARIABLE%` references are completed and hover-documented from the active project's XML configs. Re-indexes automatically when the XMLs change.
+- **CSV-cell validation:** `field = file.csv line:N col:M` reads the referenced cell and validates its value against the field's enum table.
+- **Semantic highlighting:** resolved identifiers carry a `defaultLibrary` modifier so themes can dim unknown ones — typos and stale references stand out at a glance.
+- **Auto-formatting** with ESI-aware indentation: contents of `[TAG]…[/TAG]` blocks are indented in 4-space steps per nesting level; `<pre>…</pre>` blocks (Step Conditions / Step Expected Results) are indented one level past the opener line with `</pre>` aligned back. Runs via **Format Document** (`Shift+Alt+F`), on save (`editor.formatOnSave`), or via `esihelper.refactorDocumentOnSave`.
+- **Quick-fix code actions** for unknown enum values — pick the right one from a lightbulb menu.
+- **Multi-project support:** built-in `RNE` and `VORILS` profiles plus user-defined custom projects. Status-bar item (bottom-right) shows the active project; click to switch via QuickPick.
+- **Snippets** for `[STEP]`, `[STEP DEFINITION]`, `[STEP INPUTS]`, `[STEP OUTPUTS]`, `[VARIABLES]`, `[FUNC_*]`, `[PART_*]`, `[CMD_EXECUTE]`, `[MANUAL_VERIFY]`, `[EXTERNAL_VERIFY]`, `[STEP GET_DUMP]`.
+- **Step renumbering** (sequential 10, 20, 30, …) and **Goto step** (`Ctrl+G`).
+- **Open with TestPit** — launches the active script in the configured `TestPit.exe`.
+
+## Getting started
+
+1. Install the extension from the [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=karamandev.esi-helper-for-testpit).
+2. Open any `.esi` file. The status bar shows the active TestPit project (bottom-right) — click it to switch between `RNE`, `VORILS`, or a custom project.
+3. Point each project at its `TestPit.exe` and its `Config` folder via VS Code Settings (see below). Validation and IntelliSense activate as soon as the config path resolves.
 
 ## Configuration
 
-Set in VS Code Settings (or `.vscode/settings.json`):
+Set in VS Code Settings or `.vscode/settings.json`:
 
 | Setting | Purpose |
 |---|---|
@@ -87,6 +86,7 @@ A custom-project entry whose `id` matches a built-in (`RNE` / `VORILS`) override
 | ESI Helper: Refactor Document | — |
 | ESI Helper: Show Processed File | — |
 | ESI Helper: Select TestPit Project | — |
+| ESI Helper: Show Component Validation Info | — |
 | Goto step number | `Ctrl+G` (when editing `.esi`) |
 | Format Document (built-in) | `Shift+Alt+F` (when editing `.esi`) |
 
@@ -96,22 +96,21 @@ A custom-project entry whose `id` matches a built-in (`RNE` / `VORILS`) override
 npm install
 npm run compile     # tsc → out/
 npm run lint        # ESLint (flat config)
-npm test            # mocha unit tests (71 currently)
+npm test            # mocha unit tests
+npm run coverage    # c8 coverage report
 npm run build-icons # regenerate the status-bar icon font from icons/testpit.svg
 ```
 
 Press `F5` in VS Code to launch the Extension Development Host. CI runs lint + compile + test on Ubuntu / macOS / Windows × Node 22 for every push to `main` and every PR.
 
-See [CLAUDE.md](CLAUDE.md) for an architecture overview and contribution conventions, [CHANGELOG.md](CHANGELOG.md) for release history.
+See [CLAUDE.md](CLAUDE.md) for an architecture overview and contribution conventions, and [CHANGELOG.md](CHANGELOG.md) for release history.
 
-# Developers
+## Author
 
-- M. Serdar Karaman (<a href="https://github.com/Mavrikant" alt="Github"><img src="https://cdn-icons-png.flaticon.com/512/25/25231.png" alt="Github" width="15" height="15"></a>, <a href="https://www.linkedin.com/in/mserdarkaraman/" alt="linkedin"><img src="https://raw.githubusercontent.com/MartinHeinz/MartinHeinz/master/linkedin-3-16.png" alt="linkedin" width="15" height="15"></a>, https://karaman.dev/)
+**M. Serdar Karaman** — [GitHub](https://github.com/Mavrikant) · [LinkedIn](https://www.linkedin.com/in/mserdarkaraman/) · [karaman.dev](https://karaman.dev/)
 
 ## License
-This project is licensed under the terms of the GNU General Public License v3.0
+
+Licensed under the [GNU General Public License v3.0](LICENSE).
 
 Copyright © 2020 M. Serdar Karaman
-
-[3.2]: https://raw.githubusercontent.com/MartinHeinz/MartinHeinz/master/linkedin-3-16.png (LinkedIn)
-[2]: https://www.linkedin.com/in/mserdarkaraman/
