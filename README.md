@@ -2,8 +2,29 @@
   <h1 align="center">esi Helper for TestPit</h1>
 </p>
 <p align="center">
+    <a href="https://marketplace.visualstudio.com/items?itemName=karamandev.esi-helper-for-testpit">
+        <img src="https://vsmarketplacebadges.dev/version-short/karamandev.esi-helper-for-testpit.svg" alt="Marketplace Version">
+    </a>
+    <a href="https://marketplace.visualstudio.com/items?itemName=karamandev.esi-helper-for-testpit">
+        <img src="https://vsmarketplacebadges.dev/installs-short/karamandev.esi-helper-for-testpit.svg" alt="Installs">
+    </a>
+    <a href="https://marketplace.visualstudio.com/items?itemName=karamandev.esi-helper-for-testpit">
+        <img src="https://vsmarketplacebadges.dev/downloads-short/karamandev.esi-helper-for-testpit.svg" alt="Downloads">
+    </a>
+    <a href="https://marketplace.visualstudio.com/items?itemName=karamandev.esi-helper-for-testpit&ssr=false#review-details">
+        <img src="https://vsmarketplacebadges.dev/rating-short/karamandev.esi-helper-for-testpit.svg" alt="Rating">
+    </a>
+    <a href="https://github.com/Mavrikant/esi-Helper-for-TestPit/actions/workflows/ci.yaml">
+        <img src="https://img.shields.io/github/actions/workflow/status/Mavrikant/esi-Helper-for-TestPit/ci.yaml?branch=main&label=CI" alt="CI Status">
+    </a>
+    <a href="https://github.com/Mavrikant/esi-Helper-for-TestPit/releases">
+        <img src="https://img.shields.io/github/v/release/Mavrikant/esi-Helper-for-TestPit" alt="Latest Release">
+    </a>
+    <a href="https://github.com/Mavrikant/esi-Helper-for-TestPit/blob/main/LICENSE">
+        <img src="https://img.shields.io/github/license/Mavrikant/esi-Helper-for-TestPit" alt="License">
+    </a>
     <a href="https://github.com/Mavrikant/esi-Helper-for-TestPit">
-        <img src="https://img.shields.io/github/stars/Mavrikant/esi-Helper-for-TestPit?style=social">
+        <img src="https://img.shields.io/github/stars/Mavrikant/esi-Helper-for-TestPit?style=social" alt="GitHub Stars">
     </a>
 </p>
 
