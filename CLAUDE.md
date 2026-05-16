@@ -20,12 +20,15 @@ src/
 ├── statusBar.ts              # bottom‑right project picker item
 ├── formatter.ts              # registerEsiFormatter + registerFormatOnSave
 ├── componentDiagnostics.ts   # owns the "esi-components" DiagnosticCollection;
-│                             #   warns on unknown connection / field / enum identifiers
+│                             #   warns on unknown connection / field / enum identifiers;
+│                             #   resolves `<file>.csv line:N col:M` cells via makeCsvLookup (per-pass cache)
 ├── commands/                 # one file per command, each exports register*(): Disposable
+│                             #   includes showValidationInfo.ts — diagnostic dump command
 ├── providers/                # IntelliSense providers wired in extension.ts
 │   ├── completion.ts            # CompletionItemProvider — connections / fields / enums / vars
 │   ├── hover.ts                 # HoverProvider — same lookups, MarkdownString output
-│   └── semanticTokens.ts        # DocumentSemanticTokensProvider — known/unknown coloring
+│   ├── semanticTokens.ts        # DocumentSemanticTokensProvider — known/unknown coloring
+│   └── codeActions.ts           # CodeActionProvider — quick-fix lightbulb for unknownEnum diagnostics
 └── lib/                      # vscode‑free where possible — all unit‑tested
     ├── parseValidityOutput.ts   # TestPit stdout → ValidityIssue[]
     ├── renumberSteps.ts         # [STEP N] → [STEP 10] [STEP 20] …
@@ -41,7 +44,8 @@ src/
     ├── xmlIndex.ts              # parses TestPit XMLs → connections / messages / fields / enums
     ├── projectIndexCache.ts     # per‑configFolderpath XmlIndex cache + FileSystemWatcher + config watcher
     ├── esiContext.ts            # cursor → EsiContext (tagName | fieldName | fieldValue | variableRef | other)
-    ├── componentValidator.ts    # pure: text + index → ComponentIssue[] (unknown connection / field / enum)
+    ├── componentValidator.ts    # pure: text + index → ComponentIssue[] (unknown connection / field / enum / csvCell);
+    │                            #   optional CsvLookup callback for resolving `<file>.csv line:N col:M` references
     └── renderComponent.ts       # MarkdownString rendering for hover + completion docs
 
 test/setup.js                  # mock‑require fake `vscode`; loaded via mocha --require
@@ -95,7 +99,7 @@ A custom entry whose `id` matches a built‑in (`RNE` / `VORILS`) overrides the 
 ### Index a new TestPit XML file type
 1. Add an `ingestXxx` function in [src/lib/xmlIndex.ts](src/lib/xmlIndex.ts) that walks the file's structure and populates `index.connections` / `index.messages`.
 2. Add a `lower.includes(...)` branch in `routeFile` to dispatch the new filename pattern to the new ingester.
-3. Decide which `Bus` value (`429` / `1553` / `DIS` / `Mem`) — extend the union if needed.
+3. Decide which `Bus` value (`429` / `1553` / `DIS` / `Mem` / `VORILS`) — extend the union if needed.
 4. Add a fixture XML under `src/test/fixtures/config/` and an assertion in [src/test/unit/xmlIndex.test.ts](src/test/unit/xmlIndex.test.ts) covering at least one connection + one message + one enum from the new file.
 5. The completion / hover / semantic-tokens providers automatically pick up the new connections — no provider changes needed if the data fits the existing `MessageDef` / `FieldDef` shape.
 
@@ -112,7 +116,9 @@ A custom entry whose `id` matches a built‑in (`RNE` / `VORILS`) overrides the 
 - **Worktree at `.claude/worktrees/confident-swanson-81eac4/` is an unregistered orphan** the Claude Code harness keeps locking as CWD. Operate on `D:\esi-Helper-for-TestPit\` via absolute paths and `git -C` / PowerShell `Set-Location`. Don't `npm install` inside the orphan dir.
 - **The XML index re-loads automatically** on `esihelper.activeProject` change, on `<id>.configFolderpath` change, and on any XML file change in the active config folder. Don't add a stateful in-provider cache — that would mask updates. Use `getActiveProjectIndex()` from [src/lib/projectIndexCache.ts](src/lib/projectIndexCache.ts) on every request.
 - **Custom projects don't get the XML index** — the per-project `configFolderpath` setting is only declared for built-ins (RNE / VORILS). Custom projects bake their full file paths into `validityArgs`, so the index lookups don't apply. Completion / hover / semantic tokens silently no-op when a custom project is active.
-- **Bus prefixes:** `.esi` references look like `[429_<connName>]` / `[1553_<connName>]` / `[DIS_<signalName>]` / `[Mem_<portName>]`. The XML index assigns the prefix based on the source file: `MessageConfig` `<Device Type>`, the file containing the message, etc. Don't hardcode prefixes elsewhere — derive from `Bus`.
+- **Bus prefixes:** `.esi` references look like `[429_<connName>]` / `[1553_<connName>]` / `[DIS_<signalName>]` / `[Mem_<portName>]` / `[VORILS<N>_<MsgName>]` / `[PART_<partition>_<port>]`. The XML index assigns the prefix based on the source file: `MessageConfig` `<Device Type>`, the file containing the message, partition walked from `MemoryPorts.xml`, etc. Don't hardcode prefixes elsewhere — derive from `Bus` / `COMPONENT_TAG_PREFIXES`.
+- **CRLF line endings.** Every `.split("\n")` on document text must be `.split(/\r?\n/)` — Windows-authored `.esi` files leave trailing `\r` that breaks `$`-anchored regexes (assignment, opening tag, etc.). This silently killed validation in 0.3.1; don't regress.
+- **CSV cell references** (`field = file.csv line:N col:M`) are detected in `componentValidator` *before* the generic enum check — otherwise `RHS_IDENT_RE` matches the basename and emits bogus `unknownEnum: <filename>`. The CSV lookup is an optional callback so the validator stays pure; the VS Code wrapper lives in [src/componentDiagnostics.ts](src/componentDiagnostics.ts) and caches reads per pass.
 - **Two diagnostic collections:** `diagnostics.ts` owns `vscode.languages.createDiagnosticCollection(uri.toString())` (one per file, populated by running TestPit.exe — heavy). `componentDiagnostics.ts` owns a single `"esi-components"` collection (cheap, in-process index lookup). Don't merge them — they have different costs and different freshness expectations.
 - **`componentValidator` skips when no XML index is loaded** (e.g. custom project, missing configFolderpath). That's deliberate: warning every identifier as "unknown" when there's no index would be noise. Don't add a fallback heuristic — let the picker prompt the user to set a project.
 
@@ -122,7 +128,7 @@ Pure functions (no `vscode` import) are unit‑tested directly with Node's `asse
 
 `projectRegistry.ts`, `statusBar.ts`, and `selectProject.ts` are deliberately untested — they're thin glue around `workspace.getConfiguration().update`, `createStatusBarItem`, and `showQuickPick`, all of which need a richer mock or an actual integration harness (`@vscode/test-electron`) to exercise meaningfully.
 
-After any change, run `npm test` and `npm run lint`. Current count: 120 passing. `npm run coverage` reports 94.76% statement coverage / 100% function coverage on the included pure-logic modules; the excluded glue files (extension, statusBar, providers, command files, registry / cache layers) need integration tests rather than unit tests.
+After any change, run `npm test` and `npm run lint`. Current count: 145+ passing. `npm run coverage` reports ~95% statement coverage / 100% function coverage on the included pure-logic modules; the excluded glue files (extension, statusBar, providers, command files, registry / cache layers) need integration tests rather than unit tests. CI posts the c8 file-by-file table to the GitHub Actions job summary and uploads the HTML report as the `coverage-html` artifact (Linux job only).
 
 ## Don't
 

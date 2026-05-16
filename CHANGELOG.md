@@ -4,6 +4,36 @@ All notable changes to the **esi Helper for TestPit** extension will be document
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.2]
+
+### Added
+- **CSV-cell validation.** Field assignments of the form `field = <file>.csv line:N col:M` now resolve the referenced cell at validation time and check its value against the field's enum table. Reports `unknownCsvCell` when the file is unreadable or the cell is out of range, `unknownEnum` when the cell value isn't in the field's enum list. CSV reads are cached per validation pass.
+- **VORILS bus prefixes** (`VORILS<N>_<MsgName>`) — connection / field / enum IntelliSense + validation for VORILS unit messages. Falls back through `VORILS_UNIT_PREFIX` so any unit number resolves to the same shared message definition.
+- **Memory-port partitions** (`PART_<partition>_<port>`) — `MemoryPorts.xml` is now walked across every `<Partition>` so partitioned ports show up in completions and validation.
+- **1553 `Word.Field` dot notation.** 1553 message fields are now qualified as `WordName.FieldName` instead of being flattened, so per-word field collisions resolve correctly.
+- **Quick-fix code actions** for `unknownEnum` warnings — a lightbulb offers one CodeAction per valid enum value, applied via WorkspaceEdit.
+- **Command: ESI Helper: Show Component Validation Info** (`extension.showValidationInfo`) — diagnostic dump: extension version, active project, configFolderpath, XmlIndex size, sample connections, per-issue line / col / kind / message, and a cross-check against `vscode.languages.getDiagnostics`.
+- **`DIS_` bus prefix** for Discrete signals (replaces the earlier `Discrete_` form).
+- README badges: Marketplace version / installs / downloads / rating (via `vsmarketplacebadges.dev`), CI status, latest release, license.
+
+### Changed
+- **README modernized:** tagline header, Getting started section, Highlights section reorganized to cover the newer features (CSV-cell validation, quick-fix actions, validation-info command, expanded bus prefixes), cleaner Author block.
+- **GitHub Actions upgraded:** `actions/checkout` v5 → v6, `actions/setup-node` v5 → v6, `actions/upload-artifact` v5 → v7 (Node-20 deprecation), `softprops/action-gh-release` v2 → v3.
+- **Code coverage in CI:** `npm run coverage` runs in every CI job; the c8 file-by-file table is posted to the GitHub Actions job summary and the HTML report is uploaded as the `coverage-html` artifact (Linux only).
+- **`CreatePackage.bat`** installs the built `.vsix` into both VS Code stable and Insiders when present (`:install_one` label avoids the cmd-parser bug with `(stable)` inside `for`-loop bodies).
+- **Completion polish:** trigger characters extended to include `.` (for `Word.Field`); every CompletionItem now carries an explicit `range` + `filterText` so digit-leading (`1553_…`) and dotted (`Mode.SelectedCourse`) tokens match reliably regardless of VS Code's default word-pattern heuristic.
+
+### Fixed
+- **CRLF line endings — silent validation failure.** Several modules split on `"\n"` and left a trailing `\r` on every line, which broke `^…$`-anchored regexes (assignment, tag, opening tag) on Windows files. Every line-split now uses `/\r?\n/`: componentValidator, esiContext, findStepLine, formatEsi, parseValidityOutput, refactorWhitespace, semanticTokens, diagnostics. On real Windows-authored `.esi` files this was the difference between 0 and dozens of warnings.
+- **CSV-reference false positives.** Before CSV-cell validation, the validator's `RHS_IDENT_RE` matched up to the first `.` in `myfile.csv …`, producing bogus `unknownEnum: <basename>` warnings. CSV references are now detected before the generic enum check.
+- **Bare-named 1553 / Memory connections** (no `L<label>` prefix) now resolve to their messages — `parseConnectionName` falls back to the raw name as `messageName`.
+- **Digit-leading completions.** `[1553_…` and `[429_…` completions had empty filter lists due to VS Code's word-at-cursor heuristic. Fixed via `language-configuration.json` `"wordPattern": "[A-Za-z0-9_.]+"` plus explicit per-item `range` / `filterText`.
+- **`showValidationInfo` parity.** Diagnostic report now uses the same `csvLookup` callback as live diagnostics, so the printed warning list matches the squiggles in the editor.
+
+### Tests
+- Test count grew to **145+ passing** with fixtures covering all five XML file types (`MessageConfig`, `A429MessageFields`, `1553MessageFields`, `DiscreteSignals`, `MemoryPorts`, `VORILSMessageFields`).
+- Additional setup.js mocks: `CodeAction`, `CodeActionKind`, `WorkspaceEdit`, `languages.registerCodeActionsProvider`, `commands`, `Disposable`, `ConfigurationTarget`.
+
 ## [0.3.1]
 
 ### Added
