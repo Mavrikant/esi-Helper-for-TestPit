@@ -53,15 +53,6 @@
         "path": "./snippets.json"
       }
     ],
-    "icons": {
-      "testpit": {
-        "description": "TestPit multimeter icon",
-        "default": {
-          "fontPath": "./icons/testpit-icons.woff",
-          "fontCharacter": "\\E001"
-        }
-      }
-    },
     "commands": [
       {
         "command": "extension.openWithTestPit",
@@ -195,8 +186,7 @@
     "watch": "tsc -watch -p ./",
     "pretest": "npm run compile",
     "test": "mocha --require ./test/setup.js",
-    "coverage": "c8 npm test",
-    "build-icons": "node scripts/build-icons.js"
+    "coverage": "c8 npm test"
   },
   "overrides": {
     "serialize-javascript": "7.0.5",
@@ -214,9 +204,6 @@
     "eslint": "^10.3.0",
     "mocha": "^11.7.5",
     "mock-require": "^3.0.3",
-    "svg2ttf": "^6.1.0",
-    "svgicons2svgfont": "^16.0.0",
-    "ttf2woff": "^3.0.0",
     "typescript": "^6.0.3"
   },
   "dependencies": {

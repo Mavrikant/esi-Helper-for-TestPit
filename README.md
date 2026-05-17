@@ -98,7 +98,6 @@ npm run compile     # tsc → out/
 npm run lint        # ESLint (flat config)
 npm test            # mocha unit tests
 npm run coverage    # c8 coverage report
-npm run build-icons # regenerate the status-bar icon font from icons/testpit.svg
 ```
 
 Press `F5` in VS Code to launch the Extension Development Host. CI runs lint + compile + test on Ubuntu / macOS / Windows × Node 22 for every push to `main` and every PR.

@@ -50,9 +50,6 @@ src/
 
 test/setup.js                  # mock‑require fake `vscode`; loaded via mocha --require
 src/test/fixtures/config/      # tiny XML fixtures used by xmlIndex.test.ts (path-resolved relative to out/test/unit)
-icons/testpit.svg              # source for the status‑bar multimeter glyph
-icons/testpit-icons.woff       # generated font; ships in the .vsix
-scripts/build-icons.js         # SVG → SVG‑font → TTF → WOFF; behind `npm run build-icons`
 ```
 
 ## Build, lint, test, run
@@ -64,7 +61,6 @@ scripts/build-icons.js         # SVG → SVG‑font → TTF → WOFF; behind `np
 | `npm test` | runs `compile` then `mocha` (uses `out/test/unit/**/*.test.js` per [.mocharc.json](.mocharc.json)) |
 | `npm run coverage` | `c8 npm test` — text summary + `coverage/index.html` + `coverage/lcov.info` (config in [.c8rc.json](.c8rc.json), vscode-touching glue excluded) |
 | `npm run watch` | TS in watch mode |
-| `npm run build-icons` | regenerate `icons/testpit-icons.woff` after editing `icons/testpit.svg` |
 | F5 in VS Code | launch Extension Development Host |
 | `npx @vscode/vsce package` | build the `.vsix` |
 
@@ -108,7 +104,6 @@ A custom entry whose `id` matches a built‑in (`RNE` / `VORILS`) overrides the 
 - **`<pre>…</pre>` blocks are depth‑affecting** in the formatter (since 0.3.1). A line ending with `<pre>` increments depth; a whole‑line `</pre>` decrements. **Don't restore verbatim pass‑through** — it shipped in 0.3.0 and produced misaligned output when surrounding tag depth shifted.
 - **Tag‑line regexes allow a trailing `# comment`** — see `OPENING_TAG_LINE` / `CLOSING_TAG_LINE` in [src/lib/formatEsi.ts](src/lib/formatEsi.ts). Real ESI files commonly have `[429_FOO_input1]   # Scenario 1`.
 - **Live diagnostics are scoped to `.esi` only** (`languageId === "esi"` check in [src/diagnostics.ts](src/diagnostics.ts)). Removing the guard causes orphan `.temp` files when editing TS / JSON / etc.
-- **Status‑bar text only renders Codicons or registered icon‑font glyphs** — raster images (`.ico`, `.png`) can't appear there. The TestPit multimeter lives in [icons/testpit-icons.woff](icons/testpit-icons.woff), registered via `contributes.icons` in package.json. Reference as `$(testpit)` in `StatusBarItem.text`.
 - **Project `id` for built‑ins is the `executablePath` string**, not the `BuiltInId` literal — see `buildBuiltInProject` in [src/projects.ts](src/projects.ts). The dedup map key in `loadProjects()` is still the `BuiltInId`, so custom entries with `id: "RNE"` still override the built‑in.
 - **`vscode` imports are intercepted by `mock-require` during tests.** Lazy `require("vscode")` in modules like `outputChannel.ts` and `toDiagnostic.ts` defers module load until after [test/setup.js](test/setup.js) registers the mock — top‑level `import * as vscode from "vscode"` also works once the mock is up.
 - **`refactorDocument` command intentionally uses `refactorWhitespace`, not `formatEsi`** — it's language‑agnostic, runs on whatever's open. The full ESI indenter is reachable only through the formatter provider (Shift+Alt+F / format‑on‑save).
@@ -132,7 +127,6 @@ After any change, run `npm test` and `npm run lint`. Current count: 145+ passing
 
 ## Don't
 
-- Don't put raster images in status‑bar text — generate a font glyph instead.
 - Don't drop the `.esi` languageId check in `diagnostics.ts` — orphan `.temp` files will return.
 - Don't restore verbatim `<pre>` pass‑through — see "Conventions" above.
 - Don't operate inside `.claude/worktrees/...` — use the real repo at `D:\esi-Helper-for-TestPit\`.

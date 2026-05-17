@@ -26,7 +26,7 @@ export function registerProjectStatusBar(): vscode.Disposable {
   const refresh = (): void => {
     const id = getActiveProjectId();
     if (!id) {
-      item.text = "$(testpit) Pick TestPit project";
+      item.text = "Pick TestPit project";
       item.tooltip = "No TestPit project selected. Click to choose one.";
       item.backgroundColor = new vscode.ThemeColor(
         "statusBarItem.warningBackground"
@@ -34,7 +34,7 @@ export function registerProjectStatusBar(): vscode.Disposable {
       return;
     }
     const project = loadProjects().find((p) => p.id === id);
-    item.text = project ? `$(testpit) ${project.label}` : `$(testpit) ${id} ?`;
+    item.text = project ? project.label : `${id} ?`;
     item.tooltip = project
       ? `Active TestPit project: ${project.label} (${id}). Click to change.`
       : `Active TestPit project id "${id}" is not defined. Click to pick another.`;
