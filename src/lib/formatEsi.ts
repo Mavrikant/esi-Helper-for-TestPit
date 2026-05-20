@@ -13,20 +13,49 @@ const OPENING_TAG_NAME = /^\[([^/\]][^\]]*)\]\s*(?:#.*)?$/;
 // orphaned [/X] from silently popping an unrelated [Y].
 const CLOSING_TAG_LINE = /^\[\/([^\]]+)\]\s*(?:#.*)?$/;
 
-// `<pre>...</pre>` blocks participate in depth tracking like [TAG]/[/TAG]:
-//   - A line ending with `<pre>` opens a block (with optional `# comment`).
-//   - A line ending with `</pre>` closes it (also optional `# comment`).
-// The CLOSER is intentionally `$`-anchored only (not `^`-anchored) so a
-// stray `content </pre>` on one line still terminates the block.
+// `<pre>...</pre>` blocks participate in indentation tracking like [TAG]/[/TAG]:
+//   - A line containing `<pre>` opens a block — even if `<pre>` is mid-line
+//     followed by inline content (e.g. `xxx = <pre> Following stuff:`). The
+//     only exception is when the same line also contains `</pre>` AFTER the
+//     opener — that's a single-line block, depth-neutral.
+//   - A line ending with `</pre>` closes the current block.
+// The CLOSER is `$`-anchored so a stray `content </pre>` still terminates.
 // `\b` on the opener prevents matching e.g. `<prefix>`.
-const PRE_OPENER_AT_END = /<pre\b[^>]*>\s*(?:#.*)?$/i;
+const PRE_OPEN_TAG = /<pre\b[^>]*>/i;
+const PRE_CLOSE_TAG = /<\/pre>/i;
 const PRE_CLOSER_AT_END = /<\/pre>\s*(?:#.*)?$/i;
 
 type Context =
   | { kind: "tag"; name: string }
-  | { kind: "pre" };
+  | { kind: "pre"; preCol: number; contentCol: number };
 
 type TagPending = { idx: number; name: string };
+
+// Classify a line's <pre>/</pre> role.
+//   isOpener      — line contains `<pre>` with no `</pre>` after it.
+//   isCloser      — line ends with `</pre>` and has no `<pre>` opener on it.
+//   isSingleLine  — line contains `<pre>...</pre>` on the same line.
+//   openMatch     — RegExp match for the opener position (when present).
+function classifyPreLine(line: string): {
+  isOpener: boolean;
+  isCloser: boolean;
+  isSingleLine: boolean;
+  openMatch: RegExpExecArray | null;
+} {
+  const openMatch = PRE_OPEN_TAG.exec(line);
+  const closerAtEnd = PRE_CLOSER_AT_END.test(line);
+  let closeAfterOpen = false;
+  if (openMatch) {
+    const remaining = line.slice(openMatch.index + openMatch[0].length);
+    closeAfterOpen = PRE_CLOSE_TAG.test(remaining);
+  }
+  return {
+    isOpener: openMatch !== null && !closeAfterOpen,
+    isCloser: closerAtEnd && !openMatch,
+    isSingleLine: closeAfterOpen,
+    openMatch,
+  };
+}
 
 // Pre-scan to identify opens that will never get a matching close. These
 // "orphan" opens are recorded by line index; the main pass renders them at
@@ -51,9 +80,8 @@ function findOrphanLineIndices(lines: string[]): Set<number> {
   for (let i = 0; i < lines.length; i++) {
     const s = lines[i].trim();
     if (s === "") continue;
-    const isOpener = PRE_OPENER_AT_END.test(s);
-    const isCloser = PRE_CLOSER_AT_END.test(s);
-    if (isOpener && isCloser) continue;
+    const { isOpener, isCloser, isSingleLine } = classifyPreLine(s);
+    if (isSingleLine) continue;
     if (isOpener) {
       preStack.push(i);
       continue;
@@ -137,37 +165,61 @@ export function formatEsi(text: string): string {
       continue;
     }
 
-    // Inside a <pre> block, every line is raw content. Only </pre> exits
-    // the block — bracket-tag-looking content (`[STEP X]`, `[/Y]`, etc.)
-    // does NOT affect depth here.
+    // Inside a <pre> block: content aligns to `contentCol` and `</pre>` to
+    // `preCol`. `contentCol` is `preCol + INDENT` when the opener line ends
+    // with `<pre>` (content "begins" on the next line, so it's indented one
+    // step in), or `preCol` when the opener has inline trailing content (the
+    // first content is already on the opener line, so subsequent lines stay
+    // at the same column). Bracket-tag-looking content does NOT affect depth.
     if (inPre()) {
+      const top = stack[stack.length - 1] as {
+        kind: "pre";
+        preCol: number;
+        contentCol: number;
+      };
       if (PRE_CLOSER_AT_END.test(stripped)) {
         stack.pop();
-        out.push(INDENT.repeat(stack.length) + stripped);
+        out.push(" ".repeat(top.preCol) + stripped);
       } else {
-        out.push(INDENT.repeat(stack.length) + stripped);
+        out.push(" ".repeat(top.contentCol) + stripped);
       }
       continue;
     }
 
-    const isPreOpener = PRE_OPENER_AT_END.test(stripped);
-    const isPreCloser = PRE_CLOSER_AT_END.test(stripped);
+    const { isOpener, isCloser, isSingleLine, openMatch } =
+      classifyPreLine(stripped);
 
-    if (isPreOpener && isPreCloser) {
+    if (isSingleLine) {
+      // Single-line `<pre>...</pre>` — depth-neutral, just render at depth.
       out.push(INDENT.repeat(stack.length) + stripped);
       continue;
     }
 
-    if (isPreCloser) {
+    if (isCloser) {
       // Orphan </pre> with no open pre on the stack — treat as content.
       out.push(INDENT.repeat(stack.length) + stripped);
       continue;
     }
 
-    if (isPreOpener) {
-      out.push(INDENT.repeat(stack.length) + stripped);
-      if (!orphan.has(i)) {
-        stack.push({ kind: "pre" });
+    if (isOpener) {
+      const indentStr = INDENT.repeat(stack.length);
+      const renderedLine = indentStr + stripped;
+      out.push(renderedLine);
+      if (!orphan.has(i) && openMatch) {
+        // openMatch was on the trimmed line; translate to the rendered line.
+        const preCol = indentStr.length + openMatch.index;
+        const preEndCol = preCol + openMatch[0].length;
+        // Look at the slice after `<pre ...>`. If anything other than
+        // whitespace + optional `# comment` remains, the opener has inline
+        // trailing content, so subsequent lines anchor to col(<pre>).
+        const trailingPart = renderedLine
+          .slice(preEndCol)
+          .replace(/\s*(?:#.*)?$/, "");
+        const hasTrailingContent = trailingPart.length > 0;
+        const contentCol = hasTrailingContent
+          ? preCol
+          : preCol + INDENT.length;
+        stack.push({ kind: "pre", preCol, contentCol });
       }
       continue;
     }
@@ -186,11 +238,11 @@ export function formatEsi(text: string): string {
       continue;
     }
 
-    const openMatch = stripped.match(OPENING_TAG_NAME);
-    if (openMatch) {
+    const tagOpenMatch = stripped.match(OPENING_TAG_NAME);
+    if (tagOpenMatch) {
       out.push(INDENT.repeat(stack.length) + stripped);
       if (!orphan.has(i)) {
-        stack.push({ kind: "tag", name: openMatch[1].trim() });
+        stack.push({ kind: "tag", name: tagOpenMatch[1].trim() });
       }
       continue;
     }

@@ -101,7 +101,11 @@ A custom entry whose `id` matches a built‑in (`RNE` / `VORILS`) overrides the 
 
 ## Conventions & gotchas
 
-- **`<pre>…</pre>` blocks are depth‑affecting** in the formatter (since 0.3.1). A line ending with `<pre>` increments depth; a whole‑line `</pre>` decrements. **Don't restore verbatim pass‑through** — it shipped in 0.3.0 and produced misaligned output when surrounding tag depth shifted.
+- **`<pre>…</pre>` blocks are column‑anchored**, not depth-based. When a `<pre>` opener appears (anywhere in a line, not just at the end), the formatter captures both `preCol` (column of `<` in the rendered opener) and `contentCol` on the `pre` Context in [src/lib/formatEsi.ts](src/lib/formatEsi.ts). `</pre>` always renders at `preCol`. `contentCol` depends on whether the opener line has inline trailing content (text after `<pre>`, ignoring `# comments`):
+  - **No trailing content** (e.g. `Step Expected Results = <pre>`): `contentCol = preCol + INDENT.length` — the first `<br/>` is on the next line, so it's indented one step in.
+  - **With trailing content** (e.g. `Step Expected Results = <pre> Following results are obtained:`): `contentCol = preCol` — the trailing text is already the "first content" of the block, so subsequent `<br/>` lines stay at the same column as `<pre>`.
+
+  This is why long-LHS lines like `Step Expected Results = <pre>` get their `<br/>` content visually under the `<pre>` text rather than at parent depth + 1. **Don't switch this back to depth-based** (the historical 0.3.1–0.3.3 behavior). **Don't drop the trailing-content branch** — the current PRE_OPEN_TAG regex matches `<pre>` mid-line, so opener detection no longer requires `<pre>` at end of line. **Don't restore verbatim pass‑through** either — that shipped in 0.3.0 and produced misaligned output when surrounding tag depth shifted.
 - **Tag‑line regexes allow a trailing `# comment`** — see `OPENING_TAG_LINE` / `CLOSING_TAG_LINE` in [src/lib/formatEsi.ts](src/lib/formatEsi.ts). Real ESI files commonly have `[429_FOO_input1]   # Scenario 1`.
 - **Live diagnostics are scoped to `.esi` only** (`languageId === "esi"` check in [src/diagnostics.ts](src/diagnostics.ts)). Removing the guard causes orphan `.temp` files when editing TS / JSON / etc.
 - **Project `id` for built‑ins is the `executablePath` string**, not the `BuiltInId` literal — see `buildBuiltInProject` in [src/projects.ts](src/projects.ts). The dedup map key in `loadProjects()` is still the `BuiltInId`, so custom entries with `id: "RNE"` still override the built‑in.
