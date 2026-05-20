@@ -12,6 +12,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - **Subscribers react via a new `onActiveProjectChanged` event** (status bar, XML index cache, component diagnostics). `onDidChangeConfiguration` is no longer fired by selection changes since the value lives outside config.
 - **All `esihelper.*` settings are now `scope: machine`** — `esihelper.refactorDocumentOnSave`, `esihelper.RNE.executablePath`, `esihelper.RNE.configFolderpath`, `esihelper.VORILS.executablePath`, `esihelper.VORILS.configFolderpath`, and `esihelper.customProjects` can only be set in User settings, never in `.vscode/settings.json`. The extension never writes anything to your workspace folder.
 
+### Fixed
+- **`formatEsi` malformed-input alignment.** Replaced the integer depth counter with a `Context[]` stack plus a two-phase `<pre>` pre-scan. Previously, a single defect — `</pre>` with a trailing `# comment`, bracket-tag-looking content inside `<pre>`, an orphan `<pre>` opener, content before `</pre>` on the same line — cascaded into every subsequent closing tag being indented one level too deep, making large files effectively un-formattable. Now bracket-tag patterns inside `<pre>` no longer disturb depth; mismatched closes render as content preserving the user's typo visibly; orphan opens render at current depth without pushing to the stack.
+- **`<pre>` opener / closer regexes** extended to recognize `<pre>` and `</pre>` mid-line and to allow a trailing `# comment`. The `<pre>` block's content column is now anchored to the opener's column (`preCol`) with a trailing-content branch: `Step Expected Results = <pre> Following results...` keeps subsequent `<br/>` lines aligned with `<pre>` rather than indented one step further.
+- **Formatter test coverage** for the new Context-stack behavior — 166+ new lines across all malformed-input scenarios.
+
+## [0.3.3]
+
+### Added
+- **SECURITY.md** documenting the vulnerability reporting policy and supported versions.
+
+### Changed
+- **README modernization** — badge layout refresh (Marketplace version / installs / downloads / rating, CI status, latest release, license, GitHub stars), tighter Highlights section, refined Author block.
+- **CI workflow refinements** — `ci.yaml` and `codeql-analysis.yaml` alignment, including action version pins.
+- **Removed unused icon-build pipeline** — `scripts/build-icons.js`, `icons/testpit-icons.woff`, `icons/testpit.svg`, and the related `package.json` build steps. The extension's icon comes directly from `images/TestPitIcon.ico`.
+
 ## [0.3.2]
 
 ### Added
