@@ -48,15 +48,15 @@
 
 ## Configuration
 
-Set in VS Code Settings or `.vscode/settings.json`:
+All `esihelper.*` settings are **user-scoped (machine-wide)** — they live in your VS Code _User_ settings, never in `.vscode/settings.json`. The extension does not pollute your workspace folder with config files.
 
 | Setting | Purpose |
 |---|---|
-| `esihelper.activeProject` | ID of the active TestPit project. Stored at workspace scope; set via the status-bar picker. |
-| `esihelper.RNE.executablePath` / `esihelper.VORILS.executablePath` | Path to the project's `TestPit.exe`. |
-| `esihelper.RNE.configFolderpath` / `esihelper.VORILS.configFolderpath` | Folder containing the project's TestPit XML configs (must end with a path separator). |
-| `esihelper.customProjects` | Array of user-defined projects. Each entry is `{ id, label, executablePath, validityArgs[], openArgs[] }`. Use `{scriptPath}` and `{filePath}` placeholders in the args — both are substituted and double-quoted at runtime. |
-| `esihelper.refactorDocumentOnSave` | When `true`, runs the ESI formatter on save. |
+| _Active project_ | Remembered per workspace folder in VS Code's machine-wide `globalState`. Set via the status-bar picker. In a multi-root workspace the first folder's path is the key. Single-file mode is supported via an internal sentinel. |
+| `esihelper.RNE.executablePath` / `esihelper.VORILS.executablePath` | Path to the project's `TestPit.exe`. Machine-scoped. |
+| `esihelper.RNE.configFolderpath` / `esihelper.VORILS.configFolderpath` | Folder containing the project's TestPit XML configs (must end with a path separator). Machine-scoped. |
+| `esihelper.customProjects` | Array of user-defined projects. Each entry is `{ id, label, executablePath, validityArgs[], openArgs[] }`. Use `{scriptPath}` and `{filePath}` placeholders in the args — both are substituted and double-quoted at runtime. Machine-scoped. |
+| `esihelper.refactorDocumentOnSave` | When `true`, runs the ESI formatter on save. Machine-scoped. |
 
 A custom-project entry whose `id` matches a built-in (`RNE` / `VORILS`) overrides the built-in.
 

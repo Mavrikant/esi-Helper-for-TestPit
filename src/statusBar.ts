@@ -1,10 +1,13 @@
 import * as vscode from "vscode";
 import { CONFIG_SECTION } from "./constants";
 import { BUILT_IN_IDS } from "./projects";
-import { getActiveProjectId, loadProjects } from "./lib/projectRegistry";
+import {
+  getActiveProjectId,
+  loadProjects,
+  onActiveProjectChanged,
+} from "./lib/projectRegistry";
 
 const WATCHED_KEYS = [
-  `${CONFIG_SECTION}.activeProject`,
   `${CONFIG_SECTION}.customProjects`,
   ...BUILT_IN_IDS.flatMap((id) => [
     `${CONFIG_SECTION}.${id}.executablePath`,
@@ -52,5 +55,7 @@ export function registerProjectStatusBar(): vscode.Disposable {
     }
   });
 
-  return vscode.Disposable.from(item, watcher);
+  const projectChangeSub = onActiveProjectChanged(() => refresh());
+
+  return vscode.Disposable.from(item, watcher, projectChangeSub);
 }

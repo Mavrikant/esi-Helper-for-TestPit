@@ -9,6 +9,7 @@ import {
   validateComponents,
 } from "./lib/componentValidator";
 import { getActiveProjectIndex } from "./lib/projectIndexCache";
+import { onActiveProjectChanged } from "./lib/projectRegistry";
 import { getOutputChannel } from "./lib/outputChannel";
 
 const COLLECTION_NAME = "esi-components";
@@ -66,28 +67,33 @@ export function registerComponentDiagnostics(): vscode.Disposable {
   // When the active project / configFolderpath / customProjects changes, the
   // index reloads — re-validate every open .esi document so warnings catch up.
   const watchedKeys = [
-    `${CONFIG_SECTION}.activeProject`,
     `${CONFIG_SECTION}.customProjects`,
     ...BUILT_IN_IDS.flatMap((id) => [
       `${CONFIG_SECTION}.${id}.executablePath`,
       `${CONFIG_SECTION}.${id}.configFolderpath`,
     ]),
   ];
+  const revalidateAll = (): void => {
+    for (const doc of vscode.workspace.textDocuments) {
+      validateAndPublish(doc);
+    }
+  };
   const onConfigChange = vscode.workspace.onDidChangeConfiguration((event) => {
     if (!watchedKeys.some((key) => event.affectsConfiguration(key))) {
       return;
     }
-    for (const doc of vscode.workspace.textDocuments) {
-      validateAndPublish(doc);
-    }
+    revalidateAll();
   });
+
+  const onProjectChange = onActiveProjectChanged(() => revalidateAll());
 
   return vscode.Disposable.from(
     collection,
     onChange,
     onOpen,
     onClose,
-    onConfigChange
+    onConfigChange,
+    onProjectChange
   );
 }
 

@@ -65,6 +65,28 @@ class SemanticTokensBuilder {
   }
 }
 
+class EventEmitter {
+  constructor() {
+    this._listeners = [];
+    this.event = (listener) => {
+      this._listeners.push(listener);
+      return {
+        dispose: () => {
+          const i = this._listeners.indexOf(listener);
+          if (i >= 0) this._listeners.splice(i, 1);
+        },
+      };
+    };
+  }
+  fire(value) {
+    for (const l of this._listeners.slice()) l(value);
+  }
+  dispose() {
+    this._listeners.length = 0;
+  }
+}
+
+
 mock('vscode', {
   window: {
     createOutputChannel(name) {
@@ -111,16 +133,24 @@ mock('vscode', {
   ThemeColor: class ThemeColor { constructor(id) { this.id = id; } },
   workspace: {
     textDocuments: [],
+    workspaceFolders: undefined,
     onDidChangeConfiguration() { return { dispose() {} }; },
     onDidChangeTextDocument() { return { dispose() {} }; },
     onDidOpenTextDocument() { return { dispose() {} }; },
     onDidCloseTextDocument() { return { dispose() {} }; },
     onWillSaveTextDocument() { return { dispose() {} }; },
     onDidSaveTextDocument() { return { dispose() {} }; },
-    getConfiguration() { return { get() { return undefined; }, update() { return Promise.resolve(); } }; },
+    getConfiguration() {
+      return {
+        get() { return undefined; },
+        update() { return Promise.resolve(); },
+        inspect() { return undefined; },
+      };
+    },
   },
   Disposable: { from() { return { dispose() {} }; } },
-  ConfigurationTarget: { Workspace: 1 },
+  ConfigurationTarget: { Global: 1, Workspace: 2, WorkspaceFolder: 3 },
+  EventEmitter,
   CodeAction: class CodeAction {
     constructor(title, kind) { this.title = title; this.kind = kind; this.diagnostics = []; this.edit = undefined; }
   },

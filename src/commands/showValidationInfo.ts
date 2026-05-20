@@ -29,7 +29,7 @@ export function registerShowValidationInfo(): vscode.Disposable {
 
       const projectId = getActiveProjectId();
       const project = getActiveProject();
-      ch.appendLine(`esihelper.activeProject: ${projectId ?? "<unset>"}`);
+      ch.appendLine(`Active project (globalState): ${projectId ?? "<unset>"}`);
       ch.appendLine(`Resolved project label:  ${project?.label ?? "<none>"}`);
       ch.appendLine(
         `Resolved configFolderpath: ${project?.configFolderpath ?? "<none>"}`

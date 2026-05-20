@@ -40,7 +40,14 @@ src/
     ├── testpitRunner.ts         # cp.exec / execSync wrappers, take a built command
     ├── withTempScript.ts        # write content → fn(tempPath) → cleanup
     ├── projectRegistry.ts       # merge built‑ins + esihelper.customProjects;
-    │                            #   getActiveProject (silent), getOrPromptForProject (interactive)
+    │                            #   getActiveProject (silent), getOrPromptForProject (interactive);
+    │                            #   re-exports onActiveProjectChanged from projectStore
+    ├── projectStore.ts          # context.globalState-backed active-project persistence;
+    │                            #   key = "activeProject::<firstFolderFsPath | __no_workspace__>";
+    │                            #   owns the onActiveProjectChanged EventEmitter;
+    │                            #   runs the one-time legacy-config → globalState migration
+    ├── migration.ts             # PURE planMigration(inspect, alreadyDone) → MigrationActions;
+    │                            #   workspaceFolder > workspace > global precedence
     ├── xmlIndex.ts              # parses TestPit XMLs → connections / messages / fields / enums
     ├── projectIndexCache.ts     # per‑configFolderpath XmlIndex cache + FileSystemWatcher + config watcher
     ├── esiContext.ts            # cursor → EsiContext (tagName | fieldName | fieldValue | variableRef | other)
@@ -113,7 +120,8 @@ A custom entry whose `id` matches a built‑in (`RNE` / `VORILS`) overrides the 
 - **`refactorDocument` command intentionally uses `refactorWhitespace`, not `formatEsi`** — it's language‑agnostic, runs on whatever's open. The full ESI indenter is reachable only through the formatter provider (Shift+Alt+F / format‑on‑save).
 - **`package.json` `overrides` block** is for security pins. The historical `minimatch: 3.0.5` pin broke modern mocha — don't add it back without verifying the test runner.
 - **Worktree at `.claude/worktrees/confident-swanson-81eac4/` is an unregistered orphan** the Claude Code harness keeps locking as CWD. Operate on `D:\esi-Helper-for-TestPit\` via absolute paths and `git -C` / PowerShell `Set-Location`. Don't `npm install` inside the orphan dir.
-- **The XML index re-loads automatically** on `esihelper.activeProject` change, on `<id>.configFolderpath` change, and on any XML file change in the active config folder. Don't add a stateful in-provider cache — that would mask updates. Use `getActiveProjectIndex()` from [src/lib/projectIndexCache.ts](src/lib/projectIndexCache.ts) on every request.
+- **The XML index re-loads automatically** when the active project changes (via the `onActiveProjectChanged` event from [src/lib/projectRegistry.ts](src/lib/projectRegistry.ts)), on `<id>.configFolderpath` change (via `onDidChangeConfiguration`), and on any XML file change in the active config folder. Don't add a stateful in-provider cache — that would mask updates. Use `getActiveProjectIndex()` from [src/lib/projectIndexCache.ts](src/lib/projectIndexCache.ts) on every request.
+- **Active project id lives in `context.globalState`, not in workspace settings.** Key: `activeProject::<firstFolderFsPath | __no_workspace__>`. Read via `getActiveProjectId()`; write via `setActiveProjectId()`; subscribe to changes via `onActiveProjectChanged` (all re-exported from [src/lib/projectRegistry.ts](src/lib/projectRegistry.ts), backed by [src/lib/projectStore.ts](src/lib/projectStore.ts)). Don't poke `context.globalState` directly and don't watch `esihelper.activeProject` in config — that key was removed when storage moved to globalState. One-time per-workspace migration on activation pulls any legacy workspace/user value into globalState and clears it from `settings.json`; the planning logic is the pure [src/lib/migration.ts](src/lib/migration.ts).
 - **Custom projects don't get the XML index** — the per-project `configFolderpath` setting is only declared for built-ins (RNE / VORILS). Custom projects bake their full file paths into `validityArgs`, so the index lookups don't apply. Completion / hover / semantic tokens silently no-op when a custom project is active.
 - **Bus prefixes:** `.esi` references look like `[429_<connName>]` / `[1553_<connName>]` / `[DIS_<signalName>]` / `[Mem_<portName>]` / `[VORILS<N>_<MsgName>]` / `[PART_<partition>_<port>]`. The XML index assigns the prefix based on the source file: `MessageConfig` `<Device Type>`, the file containing the message, partition walked from `MemoryPorts.xml`, etc. Don't hardcode prefixes elsewhere — derive from `Bus` / `COMPONENT_TAG_PREFIXES`.
 - **CRLF line endings.** Every `.split("\n")` on document text must be `.split(/\r?\n/)` — Windows-authored `.esi` files leave trailing `\r` that breaks `$`-anchored regexes (assignment, opening tag, etc.). This silently killed validation in 0.3.1; don't regress.
@@ -125,7 +133,7 @@ A custom entry whose `id` matches a built‑in (`RNE` / `VORILS`) overrides the 
 
 Pure functions (no `vscode` import) are unit‑tested directly with Node's `assert`. vscode‑touching code uses the [test/setup.js](test/setup.js) mock — currently `window.createOutputChannel`, `Range`, `Diagnostic`, `DiagnosticSeverity`. Extend setup.js when you need more.
 
-`projectRegistry.ts`, `statusBar.ts`, and `selectProject.ts` are deliberately untested — they're thin glue around `workspace.getConfiguration().update`, `createStatusBarItem`, and `showQuickPick`, all of which need a richer mock or an actual integration harness (`@vscode/test-electron`) to exercise meaningfully.
+`projectRegistry.ts`, `projectStore.ts`, `statusBar.ts`, and `selectProject.ts` are deliberately untested — they're thin glue around `context.globalState`, `createStatusBarItem`, and `showQuickPick`, all of which need a richer mock or an actual integration harness (`@vscode/test-electron`) to exercise meaningfully. The migration planning algorithm in [src/lib/migration.ts](src/lib/migration.ts) is pure (no vscode import) and unit-tested in [src/test/unit/migration.test.ts](src/test/unit/migration.test.ts).
 
 After any change, run `npm test` and `npm run lint`. Current count: 145+ passing. `npm run coverage` reports ~95% statement coverage / 100% function coverage on the included pure-logic modules; the excluded glue files (extension, statusBar, providers, command files, registry / cache layers) need integration tests rather than unit tests. CI posts the c8 file-by-file table to the GitHub Actions job summary and uploads the HTML report as the `coverage-html` artifact (Linux job only).
 

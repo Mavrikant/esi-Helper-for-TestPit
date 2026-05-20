@@ -1,7 +1,7 @@
 import type * as vscode from "vscode";
 import { CONFIG_SECTION } from "../constants";
 import { BUILT_IN_IDS } from "../projects";
-import { getActiveProject } from "./projectRegistry";
+import { getActiveProject, onActiveProjectChanged } from "./projectRegistry";
 import { XmlIndex, parseConfigFolder } from "./xmlIndex";
 import { getOutputChannel } from "./outputChannel";
 
@@ -30,24 +30,13 @@ export function registerIndexLifecycle(): vscode.Disposable {
   }
 
   const watchedKeys = [
-    `${CONFIG_SECTION}.activeProject`,
     `${CONFIG_SECTION}.customProjects`,
     ...BUILT_IN_IDS.map((id) => `${CONFIG_SECTION}.${id}.configFolderpath`),
   ];
 
-  const configWatcher = vsc.workspace.onDidChangeConfiguration((event) => {
-    if (watchedKeys.some((key) => event.affectsConfiguration(key))) {
-      indexByConfigPath.clear();
-      const folderpath = getActiveConfigFolderpath();
-      if (folderpath) {
-        rebuild(folderpath);
-      }
-    }
-  });
-
   // File watcher: rebuild when any XML in the active project's config
   // folder changes. We use a single watcher and re-create it when the
-  // active folder changes (above).
+  // active folder changes (below).
   let fsWatcher: vscode.FileSystemWatcher | undefined;
   const setupFileWatcher = (): void => {
     fsWatcher?.dispose();
@@ -68,14 +57,24 @@ export function registerIndexLifecycle(): vscode.Disposable {
   };
   setupFileWatcher();
 
-  // Re-create the file watcher if config folderpath changed.
-  const fsWatcherRefresher = vsc.workspace.onDidChangeConfiguration((event) => {
+  const reloadIndex = (): void => {
+    indexByConfigPath.clear();
+    const folderpath = getActiveConfigFolderpath();
+    if (folderpath) {
+      rebuild(folderpath);
+    }
+    setupFileWatcher();
+  };
+
+  const configWatcher = vsc.workspace.onDidChangeConfiguration((event) => {
     if (watchedKeys.some((key) => event.affectsConfiguration(key))) {
-      setupFileWatcher();
+      reloadIndex();
     }
   });
 
-  return vsc.Disposable.from(configWatcher, fsWatcherRefresher, {
+  const projectChangeSub = onActiveProjectChanged(() => reloadIndex());
+
+  return vsc.Disposable.from(configWatcher, projectChangeSub, {
     dispose: () => {
       fsWatcher?.dispose();
       indexByConfigPath.clear();

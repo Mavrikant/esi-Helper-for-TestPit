@@ -5,8 +5,12 @@ import {
   Project,
   buildBuiltInProject,
 } from "../projects";
+import {
+  getStoredProjectId,
+  setStoredProjectId,
+  onActiveProjectChanged as storeOnActiveProjectChanged,
+} from "./projectStore";
 
-const ACTIVE_PROJECT_KEY = "activeProject";
 const CUSTOM_PROJECTS_KEY = "customProjects";
 
 export function loadProjects(): Project[] {
@@ -29,19 +33,14 @@ export function loadProjects(): Project[] {
 }
 
 export function getActiveProjectId(): string | undefined {
-  const vsc: typeof vscode = require("vscode");
-  const value = vsc.workspace
-    .getConfiguration(CONFIG_SECTION)
-    .get<string>(ACTIVE_PROJECT_KEY);
-  return value && value.length > 0 ? value : undefined;
+  return getStoredProjectId();
 }
 
 export async function setActiveProjectId(id: string): Promise<void> {
-  const vsc: typeof vscode = require("vscode");
-  await vsc.workspace
-    .getConfiguration(CONFIG_SECTION)
-    .update(ACTIVE_PROJECT_KEY, id, vsc.ConfigurationTarget.Workspace);
+  await setStoredProjectId(id);
 }
+
+export const onActiveProjectChanged: vscode.Event<void> = storeOnActiveProjectChanged;
 
 export function getActiveProject(): Project | undefined {
   const id = getActiveProjectId();

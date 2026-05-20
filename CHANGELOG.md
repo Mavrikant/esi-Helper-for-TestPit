@@ -4,6 +4,14 @@ All notable changes to the **esi Helper for TestPit** extension will be document
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.4]
+
+### Changed
+- **Active project selection moved from workspace settings to machine-wide `globalState`.** The `esihelper.activeProject` configuration property is removed; the picked project is now remembered per workspace folder under the user's VS Code install. Selections no longer pollute `.vscode/settings.json` and survive across sessions without committing anything. Multi-root workspaces use the first folder as the key; single-file mode uses an internal sentinel so picks persist there too.
+- **One-time migration on first activation.** Any existing `esihelper.activeProject` value found in workspace, workspace-folder, or user settings is auto-migrated into `globalState` and cleared from `settings.json`. Migration is idempotent and per-workspace.
+- **Subscribers react via a new `onActiveProjectChanged` event** (status bar, XML index cache, component diagnostics). `onDidChangeConfiguration` is no longer fired by selection changes since the value lives outside config.
+- **All `esihelper.*` settings are now `scope: machine`** — `esihelper.refactorDocumentOnSave`, `esihelper.RNE.executablePath`, `esihelper.RNE.configFolderpath`, `esihelper.VORILS.executablePath`, `esihelper.VORILS.configFolderpath`, and `esihelper.customProjects` can only be set in User settings, never in `.vscode/settings.json`. The extension never writes anything to your workspace folder.
+
 ## [0.3.2]
 
 ### Added

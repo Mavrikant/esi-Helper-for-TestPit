@@ -16,9 +16,14 @@ import { registerEsiHoverProvider } from "./providers/hover";
 import { registerEsiSemanticTokensProvider } from "./providers/semanticTokens";
 import { registerEsiCodeActionsProvider } from "./providers/codeActions";
 import { registerComponentDiagnostics } from "./componentDiagnostics";
+import { initProjectStore } from "./lib/projectStore";
 
 export function activate(context: vscode.ExtensionContext): void {
   console.log('Extension "esi Helper for TestPit" is now active.');
+  // Must run before any register*() — status bar / index cache / component
+  // diagnostics read the active project at registration time. Reordering
+  // this would leave UI in a wrong initial state until the first event.
+  initProjectStore(context);
   context.subscriptions.push(
     registerOpenWithTestPit(),
     registerRunValidityCheck(),
