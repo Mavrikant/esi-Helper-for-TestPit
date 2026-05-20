@@ -72,7 +72,7 @@ describe("formatEsi", () => {
     assert.strictEqual(formatEsi(input), expected);
   });
 
-  it("treats <pre>/</pre> as a depth-affecting block: content one indent deeper, </pre> back to pre's level", () => {
+  it("treats <pre>/</pre> as a column-anchored block: content one indent right of <pre>, </pre> aligned with <pre>", () => {
     const input = [
       "[A]",
       "cond = <pre>",
@@ -81,21 +81,24 @@ describe("formatEsi", () => {
       "</pre>",
       "[/A]",
     ].join("\n");
+    // `<pre>` lands at col 11 in `    cond = <pre>` (4 indent + "cond = " = 11).
+    // Content -> col 15 (one indent right). `</pre>` -> col 11.
     const expected = [
       "[A]",
       "    cond = <pre>",
-      "        <br/> step 1",
-      "        <br/> step 2",
-      "    </pre>",
+      "               <br/> step 1",
+      "               <br/> step 2",
+      "           </pre>",
       "[/A]",
     ].join("\n");
     assert.strictEqual(formatEsi(input), expected);
   });
 
-  it("re-aligns misaligned <pre> block content from the source", () => {
-    // Mirrors the real-world Step Conditions screenshot: the `<br/>` and
-    // `</pre>` lines were at random columns far to the right; the formatter
-    // pulls them in to depth+1 / depth respectively.
+  it("re-aligns misaligned <pre> block content to col(<pre>)+indent / col(<pre>)", () => {
+    // Mirrors the real-world Step Conditions screenshot: random-column `<br/>`
+    // and `</pre>` lines get pulled in to col(<pre>)+4 and col(<pre>).
+    //   "        Step Conditions = <pre>"        -> <pre> at col 26 (8 + 18)
+    //   "        Step Expected Results = <pre>"  -> <pre> at col 32 (8 + 24)
     const input = [
       "[STEP 20]",
       "[STEP DEFINITION]",
@@ -112,11 +115,11 @@ describe("formatEsi", () => {
       "[STEP 20]",
       "    [STEP DEFINITION]",
       "        Step Conditions = <pre>",
-      "            <br/> Go to 'vorIlsMbPerformFunction'",
-      "        </pre>",
+      "                              <br/> Go to 'vorIlsMbPerformFunction'",
+      "                          </pre>",
       "        Step Expected Results = <pre>",
-      "            <br/> * Verify that inside the X is Y",
-      "        </pre>",
+      "                                    <br/> * Verify that inside the X is Y",
+      "                                </pre>",
       "    [/STEP DEFINITION]",
       "[/STEP 20]",
     ].join("\n");
@@ -183,11 +186,12 @@ describe("formatEsi", () => {
       "</pre>   # end of pre",
       "[/A]",
     ].join("\n");
+    // `<pre>` at col 11 in `    cond = <pre>`; content -> col 15, </pre> -> col 11.
     const expected = [
       "[A]",
       "    cond = <pre>",
-      "        content",
-      "    </pre>   # end of pre",
+      "               content",
+      "           </pre>   # end of pre",
       "[/A]",
     ].join("\n");
     assert.strictEqual(formatEsi(input), expected);
@@ -204,8 +208,8 @@ describe("formatEsi", () => {
     const expected = [
       "[A]",
       "    cond = <pre> # opener",
-      "        content",
-      "    </pre>",
+      "               content",
+      "           </pre>",
       "[/A]",
     ].join("\n");
     assert.strictEqual(formatEsi(input), expected);
@@ -223,9 +227,9 @@ describe("formatEsi", () => {
     const expected = [
       "[A]",
       "    cond = <pre>",
-      "        [STEP X]",
-      "        some content",
-      "    </pre>",
+      "               [STEP X]",
+      "               some content",
+      "           </pre>",
       "[/A]",
     ].join("\n");
     assert.strictEqual(formatEsi(input), expected);
@@ -242,8 +246,8 @@ describe("formatEsi", () => {
     const expected = [
       "[A]",
       "    cond = <pre>",
-      "        foo",
-      "    content here </pre>",
+      "               foo",
+      "           content here </pre>",
       "[/A]",
     ].join("\n");
     assert.strictEqual(formatEsi(input), expected);
@@ -318,8 +322,8 @@ describe("formatEsi", () => {
     const expected = [
       "[A]",
       "    cond = <PRE>",
-      "        foo",
-      "    </PRE>",
+      "               foo",
+      "           </PRE>",
       "[/A]",
     ].join("\n");
     assert.strictEqual(formatEsi(input), expected);
@@ -336,8 +340,8 @@ describe("formatEsi", () => {
     const expected = [
       "[A]",
       "    cond = <pre class=\"x\">",
-      "        foo",
-      "    </pre>",
+      "               foo",
+      "           </pre>",
       "[/A]",
     ].join("\n");
     assert.strictEqual(formatEsi(input), expected);
@@ -379,5 +383,142 @@ describe("formatEsi", () => {
     const once = formatEsi(input);
     const twice = formatEsi(once);
     assert.strictEqual(twice, once);
+  });
+
+  it("handles [BRACKET_LHS] = <pre> blocks (column-anchored: <br/> at col(<pre>)+indent, </pre> at col(<pre>))", () => {
+    const input = [
+      "[STEP 30]",
+      "[STEP DEFINITION]",
+      "[FOO_BAR_input1] = <pre>",
+      "<br/> first line",
+      "<br/> second line",
+      "</pre>",
+      "[/STEP DEFINITION]",
+      "[/STEP 30]",
+    ].join("\n");
+    // "[FOO_BAR_input1] = " is 19 chars, opener renders at col 8 (depth 2) =>
+    // `<pre>` lands at col 27, content at col 31, `</pre>` at col 27.
+    const expected = [
+      "[STEP 30]",
+      "    [STEP DEFINITION]",
+      "        [FOO_BAR_input1] = <pre>",
+      "                               <br/> first line",
+      "                               <br/> second line",
+      "                           </pre>",
+      "    [/STEP DEFINITION]",
+      "[/STEP 30]",
+    ].join("\n");
+    assert.strictEqual(formatEsi(input), expected);
+  });
+
+  it("re-aligns misaligned [BRACKET_LHS] = <pre> content", () => {
+    const input = [
+      "[STEP 40]",
+      "[FOO_BAR_input1] = <pre>",
+      "                <br/> wildly indented",
+      "        </pre>",
+      "[/STEP 40]",
+    ].join("\n");
+    // opener renders at col 4 (depth 1) => `<pre>` at col 23 (4 + 19),
+    // content at col 27, `</pre>` at col 23.
+    const expected = [
+      "[STEP 40]",
+      "    [FOO_BAR_input1] = <pre>",
+      "                           <br/> wildly indented",
+      "                       </pre>",
+      "[/STEP 40]",
+    ].join("\n");
+    assert.strictEqual(formatEsi(input), expected);
+  });
+
+  it("handles <pre> with inline trailing content (content lines and </pre> anchor to col(<pre>))", () => {
+    // User's real-world case: opener has text after `<pre>` on the same line.
+    // Because the "first" content piece is already inline with `<pre>`,
+    // subsequent <br/> lines stay at col(<pre>), not col(<pre>)+indent.
+    //   "            Step Expected Results = <pre> Following ..."  (col 36 for <pre>)
+    //   "                                    <br/> ..."            (col 36 — same)
+    //   "                                    </pre>"               (col 36)
+    const input = [
+      "[TEST]",
+      "[STEP 10]",
+      "[STEP DEFINITION]",
+      "Step Expected Results = <pre> Following results are obtained:",
+      "<br/> * The maintenance logs not contains IBIT errors of VORILSMB_VORLOC_BIT_ERROR, VORILSMB_GS_BIT_ERROR",
+      "<br/> * The maintenance logs contains IBIT errors of VORILSMB_MB_BIT_ERROR",
+      "</pre>",
+      "[/STEP DEFINITION]",
+      "[/STEP 10]",
+      "[/TEST]",
+    ].join("\n");
+    const expected = [
+      "[TEST]",
+      "    [STEP 10]",
+      "        [STEP DEFINITION]",
+      "            Step Expected Results = <pre> Following results are obtained:",
+      "                                    <br/> * The maintenance logs not contains IBIT errors of VORILSMB_VORLOC_BIT_ERROR, VORILSMB_GS_BIT_ERROR",
+      "                                    <br/> * The maintenance logs contains IBIT errors of VORILSMB_MB_BIT_ERROR",
+      "                                    </pre>",
+      "        [/STEP DEFINITION]",
+      "    [/STEP 10]",
+      "[/TEST]",
+    ].join("\n");
+    assert.strictEqual(formatEsi(input), expected);
+  });
+
+  it("matches the user's Step Conditions / Step Expected Results example (column-anchored <pre>)", () => {
+    // Lifted from the user's real-world report: two sibling `<pre>` blocks at
+    // depth 3 with different LHS lengths must independently anchor their `<br/>`
+    // content and `</pre>` closers to col(<pre>)+indent and col(<pre>).
+    //   "Step Conditions = "       18 chars -> <pre> at col 30, <br/> at 34, </pre> at 30
+    //   "Step Expected Results = " 24 chars -> <pre> at col 36, <br/> at 40, </pre> at 36
+    const input = [
+      "[TEST]",
+      "[STEP 10]",
+      "[STEP DEFINITION]",
+      "Step Description = Verify reading ground station binary values from hardware - SW_LLR_VORILS_VORILSMB_128",
+      "Step Requirements = SW_LLR_VORILS_VORILSMB_128, SW_LLR_VORILS_VORILSMB_288",
+      "Step Dependencies = N/A",
+      "Step Conditions = <pre>",
+      "<br/> Scenario: VORLOCFunctionMode is FUNCTION_MODE_ACTIVE",
+      "<br/> * Set DD.VORILSMBOutput.VORLOCFunctionMode to FUNCTION_MODE_ACTIVE",
+      "<br/> * Set HSI.Read.VORLOCGroundStationID1 to test value (0x12345678)",
+      "<br/> * Set HSI.Read.VORLOCGroundStationID2 to test value (0x9ABCDEF0)",
+      "<br/> * Tune to VOR frequency 108.00 MHz",
+      "</pre>",
+      "Step Expected Results = <pre>",
+      "<br/> * GroundStationBinaryValue is constructed from HSI.Read values",
+      "<br/> * First 32 bits = HSI.Read.VORLOCGroundStationID1",
+      "<br/> * Last 32 bits = HSI.Read.VORLOCGroundStationID2",
+      "<br/> * System reads hardware registers correctly",
+      "</pre>",
+      "[/STEP DEFINITION]",
+      "[/STEP 10]",
+      "[/TEST]",
+    ].join("\n");
+    const expected = [
+      "[TEST]",
+      "    [STEP 10]",
+      "        [STEP DEFINITION]",
+      "            Step Description = Verify reading ground station binary values from hardware - SW_LLR_VORILS_VORILSMB_128",
+      "            Step Requirements = SW_LLR_VORILS_VORILSMB_128, SW_LLR_VORILS_VORILSMB_288",
+      "            Step Dependencies = N/A",
+      "            Step Conditions = <pre>",
+      "                                  <br/> Scenario: VORLOCFunctionMode is FUNCTION_MODE_ACTIVE",
+      "                                  <br/> * Set DD.VORILSMBOutput.VORLOCFunctionMode to FUNCTION_MODE_ACTIVE",
+      "                                  <br/> * Set HSI.Read.VORLOCGroundStationID1 to test value (0x12345678)",
+      "                                  <br/> * Set HSI.Read.VORLOCGroundStationID2 to test value (0x9ABCDEF0)",
+      "                                  <br/> * Tune to VOR frequency 108.00 MHz",
+      "                              </pre>",
+      "            Step Expected Results = <pre>",
+      "                                        <br/> * GroundStationBinaryValue is constructed from HSI.Read values",
+      "                                        <br/> * First 32 bits = HSI.Read.VORLOCGroundStationID1",
+      "                                        <br/> * Last 32 bits = HSI.Read.VORLOCGroundStationID2",
+      "                                        <br/> * System reads hardware registers correctly",
+      "                                    </pre>",
+      "        [/STEP DEFINITION]",
+      "    [/STEP 10]",
+      "[/TEST]",
+    ].join("\n");
+    assert.strictEqual(formatEsi(input), expected);
   });
 });
