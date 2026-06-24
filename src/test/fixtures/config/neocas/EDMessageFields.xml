@@ -1,0 +1,18 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<Root>
+    <Common>
+        <CommonEnums>
+            <Enums Name="AircraftType">
+                <Enum Name="AIRCRAFT_CATEGORY_SET_A">0</Enum>
+                <Enum Name="AIRCRAFT_CATEGORY_SET_D">3</Enum>
+            </Enums>
+        </CommonEnums>
+    </Common>
+    <Messages>
+        <Message Name="Type1">
+            <Field Name="flight_id" Type="String" Count="8"/>
+            <Field Name="type_code" Type="Enum" Ref="AircraftType"/>
+            <Field Name="aircraft_category" Type="UInt8"/>
+        </Message>
+    </Messages>
+</Root>

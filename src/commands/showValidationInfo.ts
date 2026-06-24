@@ -1,10 +1,14 @@
 import * as vscode from "vscode";
 import * as fs from "fs";
 import * as path from "path";
-import { CONFIG_SECTION } from "../constants";
 import { getOutputChannel } from "../lib/outputChannel";
 import { getActiveProjectIndex } from "../lib/projectIndexCache";
-import { getActiveProjectId, getActiveProject } from "../lib/projectRegistry";
+import {
+  getActiveConfigs,
+  getActiveProfileName,
+  getProfiles,
+  getTestpitExe,
+} from "../lib/profileRegistry";
 import { CsvLookup, validateComponents } from "../lib/componentValidator";
 
 export function registerShowValidationInfo(): vscode.Disposable {
@@ -27,18 +31,25 @@ export function registerShowValidationInfo(): vscode.Disposable {
       ch.appendLine(`Active editor: ${editor?.document.uri.fsPath ?? "<none>"}`);
       ch.appendLine(`Language id:   ${editor?.document.languageId ?? "<none>"}`);
 
-      const projectId = getActiveProjectId();
-      const project = getActiveProject();
-      ch.appendLine(`Active project (globalState): ${projectId ?? "<unset>"}`);
-      ch.appendLine(`Resolved project label:  ${project?.label ?? "<none>"}`);
-      ch.appendLine(
-        `Resolved configFolderpath: ${project?.configFolderpath ?? "<none>"}`
-      );
+      ch.appendLine(`TestPit executable: ${getTestpitExe() ?? "<unset — run “Pick TestPit Executable”>"}`);
+      ch.appendLine(`Profiles (registry): ${getProfiles().join(", ") || "<none>"}`);
+      ch.appendLine(`Active profile: ${getActiveProfileName() ?? "<none>"}`);
+      const configs = getActiveConfigs();
+      ch.appendLine("Resolved config files for active profile:");
+      const roles = Object.keys(configs) as Array<keyof typeof configs>;
+      if (roles.length === 0) {
+        ch.appendLine("  <none> — run “ESI Helper: Reload TestPit Settings” or pick a profile.");
+      } else {
+        for (const role of roles) {
+          const file = configs[role];
+          ch.appendLine(`  ${role}: ${file}${file && fs.existsSync(file) ? "" : "  (MISSING)"}`);
+        }
+      }
 
       const index = getActiveProjectIndex();
       if (!index) {
         ch.appendLine(
-          "XmlIndex: <empty> — no active project, or its configFolderpath is missing/unreadable. Pick a project from the status bar to enable validation."
+          "XmlIndex: <empty> — no active profile, or its config files are missing/unreadable. Pick a profile from the status bar and check the registry."
         );
         return;
       }

@@ -112,5 +112,7 @@ function busLabel(bus: ConnectionDef["bus"]): string {
       return "Memory";
     case "VORILS":
       return "VORILS";
+    case "ED":
+      return "External Data";
   }
 }

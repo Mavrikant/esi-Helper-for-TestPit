@@ -1,61 +1,46 @@
 import * as vscode from "vscode";
-import { CONFIG_SECTION } from "./constants";
-import { BUILT_IN_IDS } from "./projects";
 import {
-  getActiveProjectId,
-  loadProjects,
-  onActiveProjectChanged,
-} from "./lib/projectRegistry";
-
-const WATCHED_KEYS = [
-  `${CONFIG_SECTION}.customProjects`,
-  ...BUILT_IN_IDS.flatMap((id) => [
-    `${CONFIG_SECTION}.${id}.executablePath`,
-    `${CONFIG_SECTION}.${id}.configFolderpath`,
-  ]),
-];
+  getActiveProfileName,
+  getProfiles,
+  onActiveProfileChanged,
+} from "./lib/profileRegistry";
 
 const STATUS_BAR_PRIORITY = 10000;
 
 export function registerProjectStatusBar(): vscode.Disposable {
   const item = vscode.window.createStatusBarItem(
-    "esihelper.testpitProject",
+    "esihelper.testpitProfile",
     vscode.StatusBarAlignment.Right,
     STATUS_BAR_PRIORITY
   );
-  item.name = "TestPit Project";
-  item.command = "extension.selectProject";
+  item.name = "TestPit Profile";
+  item.command = "extension.selectProfile";
 
   const refresh = (): void => {
-    const id = getActiveProjectId();
-    if (!id) {
-      item.text = "Pick TestPit project";
-      item.tooltip = "No TestPit project selected. Click to choose one.";
+    const profiles = getProfiles();
+    if (profiles.length === 0) {
+      item.text = "$(warning) No TestPit profiles";
+      item.tooltip =
+        "No TestPit profiles found in the registry (HKCU\\Software\\ESEN\\TestPit). Run “ESI Helper: Reload TestPit Settings”.";
       item.backgroundColor = new vscode.ThemeColor(
         "statusBarItem.warningBackground"
       );
       return;
     }
-    const project = loadProjects().find((p) => p.id === id);
-    item.text = project ? project.label : `${id} ?`;
-    item.tooltip = project
-      ? `Active TestPit project: ${project.label} (${id}). Click to change.`
-      : `Active TestPit project id "${id}" is not defined. Click to pick another.`;
-    item.backgroundColor = project
+    const active = getActiveProfileName();
+    item.text = active ?? "Pick TestPit profile";
+    item.tooltip = active
+      ? `Active TestPit profile: ${active}. Click to switch.`
+      : "No TestPit profile selected. Click to choose one.";
+    item.backgroundColor = active
       ? undefined
-      : new vscode.ThemeColor("statusBarItem.errorBackground");
+      : new vscode.ThemeColor("statusBarItem.warningBackground");
   };
 
   refresh();
   item.show();
 
-  const watcher = vscode.workspace.onDidChangeConfiguration((event) => {
-    if (WATCHED_KEYS.some((key) => event.affectsConfiguration(key))) {
-      refresh();
-    }
-  });
+  const profileChangeSub = onActiveProfileChanged(() => refresh());
 
-  const projectChangeSub = onActiveProjectChanged(() => refresh());
-
-  return vscode.Disposable.from(item, watcher, projectChangeSub);
+  return vscode.Disposable.from(item, profileChangeSub);
 }

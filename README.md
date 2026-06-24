@@ -30,12 +30,12 @@
 ## Highlights
 
 - **Live validity check** against the configured `TestPit.exe` — errors surface in the Problems panel while you type.
-- **Component IntelliSense** for `429_…`, `1553_…`, `DIS_…`, `Mem_…`, `VORILS<N>_…`, and `PART_<partition>_<port>` tags. Connections, fields, enum values, and `%VARIABLE%` references are completed and hover-documented from the active project's XML configs. Re-indexes automatically when the XMLs change.
+- **Component IntelliSense** for `429_…`, `1553_…`, `DIS_…`, `Mem_…`, `VORILS<N>_…`, `PART_<partition>_<port>`, and `ED_…` (External Data) tags. Connections, fields, enum values, and `%VARIABLE%` references are completed and hover-documented from the active profile's TestPit XML configs. Re-indexes automatically when the XMLs change.
 - **CSV-cell validation:** `field = file.csv line:N col:M` reads the referenced cell and validates its value against the field's enum table.
-- **Semantic highlighting:** resolved identifiers carry a `defaultLibrary` modifier so themes can dim unknown ones — typos and stale references stand out at a glance.
-- **Auto-formatting** with ESI-aware indentation: contents of `[TAG]…[/TAG]` blocks are indented in 4-space steps per nesting level; `<pre>…</pre>` blocks (Step Conditions / Step Expected Results) are indented one level past the opener line with `</pre>` aligned back. Runs via **Format Document** (`Shift+Alt+F`), on save (`editor.formatOnSave`), or via `esihelper.refactorDocumentOnSave`.
+- **Rich syntax highlighting** — distinct, theme-overridable colours for section tags, message fields, keys, enum values, `%MACRO%` references, file/folder paths, quoted strings, numbers, constants and comments. Resolved component identifiers carry a `defaultLibrary` semantic modifier so unknown/stale ones stand out.
+- **Auto-formatting** with ESI-aware indentation **and `=` alignment**: `[TAG]…[/TAG]` contents indent in 4-space steps; field assignments in a section align their `=` to one column (`esihelper.alignmentScope` = `section` or `tier`), including `<pre>` openers whose bodies stay under the aligned `<pre>`. Runs via **Format Document** (`Shift+Alt+F`) or on save (`esihelper.refactorDocumentOnSave`); tabs → 4 spaces on every save.
 - **Quick-fix code actions** for unknown enum values — pick the right one from a lightbulb menu.
-- **Multi-project support:** built-in `RNE` and `VORILS` profiles plus user-defined custom projects. Status-bar item (bottom-right) shows the active project; click to switch via QuickPick.
+- **Multi-profile support driven by TestPit's own settings:** profiles and their config files are read from the Windows registry (`HKCU\Software\ESEN\TestPit`). The status-bar item (bottom-right) shows the active profile; click to switch via QuickPick.
 - **Snippets** for `[STEP]`, `[STEP DEFINITION]`, `[STEP INPUTS]`, `[STEP OUTPUTS]`, `[VARIABLES]`, `[FUNC_*]`, `[PART_*]`, `[CMD_EXECUTE]`, `[MANUAL_VERIFY]`, `[EXTERNAL_VERIFY]`, `[STEP GET_DUMP]`.
 - **Step renumbering** (sequential 10, 20, 30, …) and **Goto step** (`Ctrl+G`).
 - **Open with TestPit** — launches the active script in the configured `TestPit.exe`.
@@ -43,38 +43,26 @@
 ## Getting started
 
 1. Install the extension from the [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=karamandev.esi-helper-for-testpit).
-2. Open any `.esi` file. The status bar shows the active TestPit project (bottom-right) — click it to switch between `RNE`, `VORILS`, or a custom project.
-3. Point each project at its `TestPit.exe` and its `Config` folder via VS Code Settings (see below). Validation and IntelliSense activate as soon as the config path resolves.
+2. Open any `.esi` file. On first use you're prompted to **pick your `TestPit.exe`** (the console build, used for validation) — or run **ESI Helper: Pick TestPit Executable** any time.
+3. The status bar (bottom-right) shows the active **TestPit profile**, read from TestPit's own registry settings. Click it to switch profiles, or run **ESI Helper: Reload TestPit Settings** after you change config paths in the TestPit GUI.
 
-## Configuration
+## How configuration works
 
-All `esihelper.*` settings are **user-scoped (machine-wide)** — they live in your VS Code _User_ settings, never in `.vscode/settings.json`. The extension does not pollute your workspace folder with config files.
+The extension reads the profiles and their config-file paths straight from **TestPit's Windows registry settings** at `HKEY_CURRENT_USER\Software\ESEN\TestPit` — the same settings the TestPit GUI manages. There is nothing to wire up per project:
+
+- `Settings\SettingPrefix` lists the profiles; element `[0]` is the active one.
+- Each `<Profile>\Executer\*ConfigFile` value supplies a config path by **role** (`ConfigFile`→cable, `A429ConfigFile`, `1553ConfigFile`, `DiscreteConfigFile`, `PartitionConfigFile`, `VORILSConfigFile`, `EDConfigFile`); element `[0]` is the live file.
+
+On first use this is exported once and cached in the extension's global storage; switching profiles reads the cache, and **Reload TestPit Settings** re-exports it. The `TestPit.exe` path is **not** in the registry, so it's picked once via a dialog and remembered.
+
+### Settings
+
+All `esihelper.*` settings are **user-scoped (machine-wide)** — they live in your VS Code _User_ settings, never in `.vscode/settings.json`.
 
 | Setting | Purpose |
 |---|---|
-| _Active project_ | Remembered per workspace folder in VS Code's machine-wide `globalState`. Set via the status-bar picker. In a multi-root workspace the first folder's path is the key. Single-file mode is supported via an internal sentinel. |
-| `esihelper.RNE.executablePath` / `esihelper.VORILS.executablePath` | Path to the project's `TestPit.exe`. Machine-scoped. |
-| `esihelper.RNE.configFolderpath` / `esihelper.VORILS.configFolderpath` | Folder containing the project's TestPit XML configs (must end with a path separator). Machine-scoped. |
-| `esihelper.customProjects` | Array of user-defined projects. Each entry is `{ id, label, executablePath, validityArgs[], openArgs[] }`. Use `{scriptPath}` and `{filePath}` placeholders in the args — both are substituted and double-quoted at runtime. Machine-scoped. |
-| `esihelper.refactorDocumentOnSave` | When `true`, runs the ESI formatter on save. Machine-scoped. |
-
-A custom-project entry whose `id` matches a built-in (`RNE` / `VORILS`) overrides the built-in.
-
-### Example custom project
-
-```json
-"esihelper.customProjects": [{
-  "id": "MYPROJ",
-  "label": "My Project",
-  "executablePath": "C:\\Tools\\custom.exe",
-  "validityArgs": [
-    "--cfg=foo",
-    "--sf={scriptPath}",
-    "--validate=true"
-  ],
-  "openArgs": ["--ow={filePath}"]
-}]
-```
+| `esihelper.refactorDocumentOnSave` | When `true`, runs the full ESI formatter (re-indent + `=` alignment) on save. (Tabs → 4 spaces happens on every save regardless.) |
+| `esihelper.alignmentScope` | `section` (default) aligns `=` within each block; `tier` aligns all blocks at the same bracket-depth together. |
 
 ## Commands
 
@@ -85,7 +73,9 @@ A custom-project entry whose `id` matches a built-in (`RNE` / `VORILS`) override
 | ESI Helper: Update Step Numbers | — |
 | ESI Helper: Refactor Document | — |
 | ESI Helper: Show Processed File | — |
-| ESI Helper: Select TestPit Project | — |
+| ESI Helper: Select TestPit Profile | — |
+| ESI Helper: Reload TestPit Settings | — |
+| ESI Helper: Pick TestPit Executable | — |
 | ESI Helper: Show Component Validation Info | — |
 | Goto step number | `Ctrl+G` (when editing `.esi`) |
 | Format Document (built-in) | `Shift+Alt+F` (when editing `.esi`) |

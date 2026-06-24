@@ -4,59 +4,56 @@ Guidance for Claude Code sessions working on **esi Helper for TestPit**.
 
 ## What this is
 
-A VS Code extension for editing TestPit `.esi` files — test scripts for avionics hardware testing (DO‑178C). The extension provides syntax highlighting, snippets, a goto‑step picker (Ctrl+G), live validity checking via the local `TestPit.exe`, ESI‑aware auto‑formatting, and a multi‑project model (built‑in RNE / VORILS profiles plus user‑extensible custom projects). Active project shows in a right status‑bar item; click to switch.
+A VS Code extension for editing TestPit `.esi` files — test scripts for avionics hardware testing (DO‑178C). It provides syntax highlighting, snippets, a goto‑step picker (Ctrl+G), live validity checking via the local `TestPit.exe`, ESI‑aware auto‑formatting (indentation + `=` alignment), and component IntelliSense / validation driven by the project's TestPit XML configs.
 
-TestPit only runs on Windows. Test scripts are the only language touched — the extension never auto‑activates on other file types.
+TestPit only runs on Windows. The `esi` language is the only one touched — the extension never auto‑activates on other file types.
+
+**Configuration is registry-driven.** Profiles and their config-file paths come from TestPit's own settings in the Windows registry (`HKEY_CURRENT_USER\Software\ESEN\TestPit`) — there are no hardcoded projects. The active profile shows in a right status‑bar item; click to switch. The `TestPit.exe` path is the one thing not in the registry, so it's picked once via a dialog and cached.
+
+## Configuration model (read this first)
+
+- `Settings\SettingPrefix` (REG_MULTI_SZ) lists profile names; element **[0]** is the default/active one.
+- Each profile is a subkey `…\TestPit\<Profile>\Executer`; its `*ConfigFile` values (REG_MULTI_SZ, element **[0]** is the live file) give config paths by **role**:
+  `ConfigFile`→cable/message-config, `A429ConfigFile`, `1553ConfigFile`, `DiscreteConfigFile`, `PartitionConfigFile` (memory/SW ports), `VORILSConfigFile`, `EDConfigFile` (External Data).
+- The registry is read **once** via `reg export` ([testpitRegistry.ts](src/lib/testpitRegistry.ts)), parsed, and cached as a slim JSON in the extension's global storage ([pluginStore.ts](src/lib/pluginStore.ts), file `testpit-settings.json`). Switching profiles reads the cache; the **Reload TestPit Settings** command re-exports.
+- Config files are routed to ingesters **by role, not filename** — so non-standard names (`A429Messages_HURJET.xml`, `NeoCASPorts.xml`, …) work.
 
 ## Code map
 
 ```
 src/
-├── extension.ts              # thin activate() — registers everything
+├── extension.ts              # activate(): initPluginStore → ensureRegistryLoaded → register*() → promptForExeIfUnset
 ├── constants.ts              # CONFIG_SECTION = "esihelper", OUTPUT_CHANNEL_NAME
-├── projects.ts               # Project shape + buildBuiltInProject (RNE/VORILS arg templates)
-│                             #   + buildValidityCommand / buildOpenCommand (templating + quoting)
-├── diagnostics.ts            # onDidChangeTextDocument handler (runs TestPit on .esi files only)
-├── statusBar.ts              # bottom‑right project picker item
-├── formatter.ts              # registerEsiFormatter + registerFormatOnSave
-├── componentDiagnostics.ts   # owns the "esi-components" DiagnosticCollection;
-│                             #   warns on unknown connection / field / enum identifiers;
-│                             #   resolves `<file>.csv line:N col:M` cells via makeCsvLookup (per-pass cache)
+├── profiles.ts               # buildValidityArgs/buildValidityCommand (role→flag), buildOpenCommand, deriveGuiExecutable (TestPit.exe → TestPitw.exe)
+├── diagnostics.ts            # live validity check: onDidChangeTextDocument → TestPit.exe (heavy). Skips silently if no exe.
+├── componentDiagnostics.ts   # "esi-components" DiagnosticCollection; in-process XML-index validation + CSV-cell lookup
+├── statusBar.ts              # bottom-right profile item (shows active profile; click → picker)
+├── formatter.ts              # registerEsiFormatter (Shift+Alt+F) + registerFormatOnSave (tabs→spaces always; full format when refactorDocumentOnSave)
 ├── commands/                 # one file per command, each exports register*(): Disposable
-│                             #   includes showValidationInfo.ts — diagnostic dump command
-├── providers/                # IntelliSense providers wired in extension.ts
-│   ├── completion.ts            # CompletionItemProvider — connections / fields / enums / vars
-│   ├── hover.ts                 # HoverProvider — same lookups, MarkdownString output
-│   ├── semanticTokens.ts        # DocumentSemanticTokensProvider — known/unknown coloring
-│   └── codeActions.ts           # CodeActionProvider — quick-fix lightbulb for unknownEnum diagnostics
-└── lib/                      # vscode‑free where possible — all unit‑tested
-    ├── parseValidityOutput.ts   # TestPit stdout → ValidityIssue[]
-    ├── renumberSteps.ts         # [STEP N] → [STEP 10] [STEP 20] …
-    ├── refactorWhitespace.ts    # trailing trim + tabs → 4 spaces
-    ├── formatEsi.ts             # depth‑based indenter (wraps refactorWhitespace)
-    ├── findStepLine.ts          # locate [STEP N] line
-    ├── outputChannel.ts         # singleton "esi Helper" channel (lazy require for mock‑require)
-    ├── toDiagnostic.ts          # ValidityIssue → vscode.Diagnostic
-    ├── testpitRunner.ts         # cp.exec / execSync wrappers, take a built command
-    ├── withTempScript.ts        # write content → fn(tempPath) → cleanup
-    ├── projectRegistry.ts       # merge built‑ins + esihelper.customProjects;
-    │                            #   getActiveProject (silent), getOrPromptForProject (interactive);
-    │                            #   re-exports onActiveProjectChanged from projectStore
-    ├── projectStore.ts          # context.globalState-backed active-project persistence;
-    │                            #   key = "activeProject::<firstFolderFsPath | __no_workspace__>";
-    │                            #   owns the onActiveProjectChanged EventEmitter;
-    │                            #   runs the one-time legacy-config → globalState migration
-    ├── migration.ts             # PURE planMigration(inspect, alreadyDone) → MigrationActions;
-    │                            #   workspaceFolder > workspace > global precedence
-    ├── xmlIndex.ts              # parses TestPit XMLs → connections / messages / fields / enums
-    ├── projectIndexCache.ts     # per‑configFolderpath XmlIndex cache + FileSystemWatcher + config watcher
-    ├── esiContext.ts            # cursor → EsiContext (tagName | fieldName | fieldValue | variableRef | other)
-    ├── componentValidator.ts    # pure: text + index → ComponentIssue[] (unknown connection / field / enum / csvCell);
-    │                            #   optional CsvLookup callback for resolving `<file>.csv line:N col:M` references
-    └── renderComponent.ts       # MarkdownString rendering for hover + completion docs
+│   ├── selectProfile.ts         # QuickPick of registry profiles (+ "Change TestPit executable…")
+│   ├── reloadRegistry.ts        # re-export the registry
+│   ├── pickExecutable.ts        # file dialog → store TestPit.exe
+│   ├── runValidityCheck.ts / openWithTestPit.ts / showValidationInfo.ts / showProcessedFile.ts
+│   └── updateStepNumbers.ts / gotoStep.ts / refactorDocument.ts
+├── providers/                # IntelliSense, wired in extension.ts
+│   ├── completion.ts / hover.ts / semanticTokens.ts / codeActions.ts
+└── lib/                      # vscode-free where possible — unit-tested
+    ├── testpitRegistry.ts       # reg export → RegistryModel { defaultProfile, profiles[], configs: {<profile>: {cable,a429,m1553,discrete,partition,vorils,ed}} }
+    ├── pluginStore.ts           # globalStorage JSON: testpitExe, activeProfile, cached registry; owns onActiveProfileChanged
+    ├── profileRegistry.ts       # orchestration: ensureRegistryLoaded/reloadRegistry, getProfiles/getActiveProfileName/setActiveProfile, getActiveConfigs, getTestpitExe/ensureTestpitExe/pickTestpitExe, promptForExeIfUnset
+    ├── projectIndexCache.ts     # XmlIndex for the active profile via parseConfigFiles; FileSystemWatcher on each resolved config file; getActiveProjectIndex()/registerIndexLifecycle()
+    ├── xmlIndex.ts              # parseConfigFiles(configs) [route-by-role] + parseConfigFolder(dir) [filename, tests]; Ref resolution; ingesters; COMPONENT_TAG_PREFIXES
+    ├── esiContext.ts           # cursor → EsiContext (tagName | fieldName | fieldValue | variableRef | other)
+    ├── componentValidator.ts   # pure: text + index → ComponentIssue[]; optional CsvLookup
+    ├── renderComponent.ts      # MarkdownString rendering for hover + completion
+    ├── parseValidityOutput.ts  # TestPit stdout/stderr → ValidityIssue[]
+    ├── testpitRunner.ts        # spawnSync / exec wrappers — capture stdout+stderr, ignore exit code
+    ├── formatEsi.ts            # depth indenter + `=` alignment (section/tier scope) + column-anchored <pre>
+    ├── refactorWhitespace.ts   # trailing trim + tabs → 4 spaces
+    ├── renumberSteps.ts / findStepLine.ts / toDiagnostic.ts / withTempScript.ts / outputChannel.ts
 
-test/setup.js                  # mock‑require fake `vscode`; loaded via mocha --require
-src/test/fixtures/config/      # tiny XML fixtures used by xmlIndex.test.ts (path-resolved relative to out/test/unit)
+test/setup.js                  # mock-require fake `vscode`; loaded via mocha --require
+src/test/fixtures/config/      # XML fixtures for xmlIndex tests (RNE-style at root; neocas/ for Ref/ED/ports)
 ```
 
 ## Build, lint, test, run
@@ -64,83 +61,59 @@ src/test/fixtures/config/      # tiny XML fixtures used by xmlIndex.test.ts (pat
 | Command | What it does |
 |---|---|
 | `npm run compile` | `tsc -p ./` → `out/` |
-| `npm run lint` | ESLint (flat config in [eslint.config.cjs](eslint.config.cjs)) |
-| `npm test` | runs `compile` then `mocha` (uses `out/test/unit/**/*.test.js` per [.mocharc.json](.mocharc.json)) |
-| `npm run coverage` | `c8 npm test` — text summary + `coverage/index.html` + `coverage/lcov.info` (config in [.c8rc.json](.c8rc.json), vscode-touching glue excluded) |
-| `npm run watch` | TS in watch mode |
-| F5 in VS Code | launch Extension Development Host |
+| `npm test` | `compile` then `mocha` (`out/test/unit/**/*.test.js`) — 177 passing |
+| `npm run coverage` | `c8 npm test` (config in [.c8rc.json](.c8rc.json); vscode-touching glue excluded) |
+| `npm run lint` | ESLint (flat config) — needs Node ≥ 20.19 / 22 |
+| F5 | Extension Development Host (uses [.vscode/launch.json](.vscode/launch.json); run `npm run watch` alongside) |
 | `npx @vscode/vsce package` | build the `.vsix` |
 
-CI matrix on push to `main` / PRs: ubuntu / macos / windows × Node 22 → `npm ci` → lint → compile → test. Release job (on tag push) packages and uploads the `.vsix` as a GitHub release.
+`tsc` does not prune stale outputs — after deleting/renaming a source file, wipe `out/` or you'll run/ship stale `.js` (and old tests will appear to still pass).
 
 ## Common tasks
 
-### Add a built‑in project
-1. Add the id to `BuiltInId` + `BUILT_IN_IDS` in [src/projects.ts](src/projects.ts).
-2. Add a `case` in `buildBuiltInProject` with the project's `validityArgs` template (use `{scriptPath}` placeholder).
-3. Add `esihelper.<id>.executablePath` + `esihelper.<id>.configFolderpath` to `contributes.configuration.properties` in [package.json](package.json).
-4. Update [src/test/unit/projects.test.ts](src/test/unit/projects.test.ts) to assert the new arg shape (mirror the RNE/VORILS cases).
-
-### Add a custom project (user‑side, no code change)
-Edit `esihelper.customProjects` in `.vscode/settings.json`:
-```json
-[{
-  "id": "MYPROJ",
-  "label": "My Project",
-  "executablePath": "C:\\Tools\\custom.exe",
-  "validityArgs": ["--cfg=foo", "--sf={scriptPath}", "--validate=true"],
-  "openArgs": ["--ow={filePath}"]
-}]
-```
-A custom entry whose `id` matches a built‑in (`RNE` / `VORILS`) overrides the built‑in.
+### Index a new TestPit XML file type
+1. Add an `ingestXxx(root, index)` in [xmlIndex.ts](src/lib/xmlIndex.ts) (defensive: `asArray`/`str`; resolve `Ref` via the `Common`/`References` helpers if needed).
+2. Map a registry **role** to it in `parseConfigFiles` (and a filename branch in `routeFile` for folder-mode/tests).
+3. Pick a `Bus` value (`429`/`1553`/`DIS`/`Mem`/`VORILS`/`ED`); extend the union + `PREFIXES_BY_BUS` + `COMPONENT_TAG_PREFIXES` if it's a new tag prefix.
+4. Add a fixture under `src/test/fixtures/config/` and a test (mirror `xmlIndex_neocas.test.ts`).
 
 ### Add a new command
-1. Create `src/commands/myCommand.ts` exporting `registerMyCommand(): vscode.Disposable`.
-2. Push `registerMyCommand()` into `context.subscriptions` in [src/extension.ts](src/extension.ts).
-3. Declare the command in `contributes.commands` and add `onCommand:extension.myCommand` to `activationEvents` in [package.json](package.json).
+1. `src/commands/myCommand.ts` exporting `registerMyCommand(): vscode.Disposable`.
+2. Push it into `context.subscriptions` in [extension.ts](src/extension.ts).
+3. Declare it in `contributes.commands` + add `onCommand:extension.myCommand` to `activationEvents` in [package.json](package.json).
 
-### Index a new TestPit XML file type
-1. Add an `ingestXxx` function in [src/lib/xmlIndex.ts](src/lib/xmlIndex.ts) that walks the file's structure and populates `index.connections` / `index.messages`.
-2. Add a `lower.includes(...)` branch in `routeFile` to dispatch the new filename pattern to the new ingester.
-3. Decide which `Bus` value (`429` / `1553` / `DIS` / `Mem` / `VORILS`) — extend the union if needed.
-4. Add a fixture XML under `src/test/fixtures/config/` and an assertion in [src/test/unit/xmlIndex.test.ts](src/test/unit/xmlIndex.test.ts) covering at least one connection + one message + one enum from the new file.
-5. The completion / hover / semantic-tokens providers automatically pick up the new connections — no provider changes needed if the data fits the existing `MessageDef` / `FieldDef` shape.
+### Change syntax colours
+Two places, both in `package.json` `contributes.configurationDefaults`: `editor.semanticTokenColorCustomizations.rules` (`class`/`property`/`enumMember`/`keyword` for `esi`) and `editor.tokenColorCustomizations.textMateRules` (scopes from [syntaxes/esi.json](syntaxes/esi.json): `comment.line.number-sign.esi`, `entity.name.tag.esi`, `keyword.other.field.esi`, `variable.other.macro.esi`, `string.other.path.esi`, `string.quoted.double.esi`, `constant.language.esi`, `constant.numeric.esi`, `source.esi`). Some elements appear in both layers (semantic wins) — change both to recolour consistently.
 
 ## Conventions & gotchas
 
-- **`<pre>…</pre>` blocks are column‑anchored**, not depth-based. When a `<pre>` opener appears (anywhere in a line, not just at the end), the formatter captures both `preCol` (column of `<` in the rendered opener) and `contentCol` on the `pre` Context in [src/lib/formatEsi.ts](src/lib/formatEsi.ts). `</pre>` always renders at `preCol`. `contentCol` depends on whether the opener line has inline trailing content (text after `<pre>`, ignoring `# comments`):
-  - **No trailing content** (e.g. `Step Expected Results = <pre>`): `contentCol = preCol + INDENT.length` — the first `<br/>` is on the next line, so it's indented one step in.
-  - **With trailing content** (e.g. `Step Expected Results = <pre> Following results are obtained:`): `contentCol = preCol` — the trailing text is already the "first content" of the block, so subsequent `<br/>` lines stay at the same column as `<pre>`.
-
-  This is why long-LHS lines like `Step Expected Results = <pre>` get their `<br/>` content visually under the `<pre>` text rather than at parent depth + 1. **Don't switch this back to depth-based** (the historical 0.3.1–0.3.3 behavior). **Don't drop the trailing-content branch** — the current PRE_OPEN_TAG regex matches `<pre>` mid-line, so opener detection no longer requires `<pre>` at end of line. **Don't restore verbatim pass‑through** either — that shipped in 0.3.0 and produced misaligned output when surrounding tag depth shifted.
-- **Tag‑line regexes allow a trailing `# comment`** — see `OPENING_TAG_LINE` / `CLOSING_TAG_LINE` in [src/lib/formatEsi.ts](src/lib/formatEsi.ts). Real ESI files commonly have `[429_FOO_input1]   # Scenario 1`.
-- **Live diagnostics are scoped to `.esi` only** (`languageId === "esi"` check in [src/diagnostics.ts](src/diagnostics.ts)). Removing the guard causes orphan `.temp` files when editing TS / JSON / etc.
-- **Project `id` for built‑ins is the `executablePath` string**, not the `BuiltInId` literal — see `buildBuiltInProject` in [src/projects.ts](src/projects.ts). The dedup map key in `loadProjects()` is still the `BuiltInId`, so custom entries with `id: "RNE"` still override the built‑in.
-- **`vscode` imports are intercepted by `mock-require` during tests.** Lazy `require("vscode")` in modules like `outputChannel.ts` and `toDiagnostic.ts` defers module load until after [test/setup.js](test/setup.js) registers the mock — top‑level `import * as vscode from "vscode"` also works once the mock is up.
-- **`refactorDocument` command intentionally uses `refactorWhitespace`, not `formatEsi`** — it's language‑agnostic, runs on whatever's open. The full ESI indenter is reachable only through the formatter provider (Shift+Alt+F / format‑on‑save).
-- **`package.json` `overrides` block** is for security pins. The historical `minimatch: 3.0.5` pin broke modern mocha — don't add it back without verifying the test runner.
-- **Worktree at `.claude/worktrees/confident-swanson-81eac4/` is an unregistered orphan** the Claude Code harness keeps locking as CWD. Operate on `D:\esi-Helper-for-TestPit\` via absolute paths and `git -C` / PowerShell `Set-Location`. Don't `npm install` inside the orphan dir.
-- **The XML index re-loads automatically** when the active project changes (via the `onActiveProjectChanged` event from [src/lib/projectRegistry.ts](src/lib/projectRegistry.ts)), on `<id>.configFolderpath` change (via `onDidChangeConfiguration`), and on any XML file change in the active config folder. Don't add a stateful in-provider cache — that would mask updates. Use `getActiveProjectIndex()` from [src/lib/projectIndexCache.ts](src/lib/projectIndexCache.ts) on every request.
-- **Active project id lives in `context.globalState`, not in workspace settings.** Key: `activeProject::<firstFolderFsPath | __no_workspace__>`. Read via `getActiveProjectId()`; write via `setActiveProjectId()`; subscribe to changes via `onActiveProjectChanged` (all re-exported from [src/lib/projectRegistry.ts](src/lib/projectRegistry.ts), backed by [src/lib/projectStore.ts](src/lib/projectStore.ts)). Don't poke `context.globalState` directly and don't watch `esihelper.activeProject` in config — that key was removed when storage moved to globalState. One-time per-workspace migration on activation pulls any legacy workspace/user value into globalState and clears it from `settings.json`; the planning logic is the pure [src/lib/migration.ts](src/lib/migration.ts).
-- **Custom projects don't get the XML index** — the per-project `configFolderpath` setting is only declared for built-ins (RNE / VORILS). Custom projects bake their full file paths into `validityArgs`, so the index lookups don't apply. Completion / hover / semantic tokens silently no-op when a custom project is active.
-- **Bus prefixes:** `.esi` references look like `[429_<connName>]` / `[1553_<connName>]` / `[DIS_<signalName>]` / `[Mem_<portName>]` / `[VORILS<N>_<MsgName>]` / `[PART_<partition>_<port>]`. The XML index assigns the prefix based on the source file: `MessageConfig` `<Device Type>`, the file containing the message, partition walked from `MemoryPorts.xml`, etc. Don't hardcode prefixes elsewhere — derive from `Bus` / `COMPONENT_TAG_PREFIXES`.
-- **CRLF line endings.** Every `.split("\n")` on document text must be `.split(/\r?\n/)` — Windows-authored `.esi` files leave trailing `\r` that breaks `$`-anchored regexes (assignment, opening tag, etc.). This silently killed validation in 0.3.1; don't regress.
-- **CSV cell references** (`field = file.csv line:N col:M`) are detected in `componentValidator` *before* the generic enum check — otherwise `RHS_IDENT_RE` matches the basename and emits bogus `unknownEnum: <filename>`. The CSV lookup is an optional callback so the validator stays pure; the VS Code wrapper lives in [src/componentDiagnostics.ts](src/componentDiagnostics.ts) and caches reads per pass.
-- **Two diagnostic collections:** `diagnostics.ts` owns `vscode.languages.createDiagnosticCollection(uri.toString())` (one per file, populated by running TestPit.exe — heavy). `componentDiagnostics.ts` owns a single `"esi-components"` collection (cheap, in-process index lookup). Don't merge them — they have different costs and different freshness expectations.
-- **`componentValidator` skips when no XML index is loaded** (e.g. custom project, missing configFolderpath). That's deliberate: warning every identifier as "unknown" when there's no index would be noise. Don't add a fallback heuristic — let the picker prompt the user to set a project.
+- **Registry is read once, then cached.** `ensureRegistryLoaded()` only exports if the cache is empty. Profile switches read the cache; `reloadRegistry()` re-exports. Don't add per-request `reg` calls. The exe path is NOT in the registry — it's a plugin-owned setting (`pickTestpitExe`).
+- **The XML index re-loads on `onActiveProfileChanged`** (fired by profile switch and registry reload) and on any change to a resolved config file (per-file `FileSystemWatcher`). Always call `getActiveProjectIndex()` from [projectIndexCache.ts](src/lib/projectIndexCache.ts) per request; don't cache the index in a provider.
+- **`onActiveProfileChanged` lives in [pluginStore.ts](src/lib/pluginStore.ts)** (a JSON file raises no `onDidChangeConfiguration`). `reloadRegistry` fires it even when the profile name is unchanged so subscribers refresh.
+- **Live diagnostics ([diagnostics.ts](src/diagnostics.ts)) never prompt** — if `getTestpitExe()` is unset they skip silently (the activation nudge / commands prompt instead). Component (XML-index) diagnostics need no exe.
+- **`testpitRunner` captures stdout+stderr and ignores exit code** — TestPit logs to stderr and may exit non-zero on issues. Don't switch back to stdout-only / promisified `exec` (it rejects on non-zero and the output is lost).
+- **Route configs by role, not filename.** Filename routing only exists in `parseConfigFolder` for the folder-based fixture tests. Production uses `parseConfigFiles(configs)`.
+- **`Ref` resolution** in NEOCAS configs: `<Connection Ref>`→`<References>` channel; partition `<Port Ref>`→`<Common><CommonPorts>`; field `Ref`→`<Common><CommonEnums>`. Resolved within each file during ingest; inline (RNE/VORILS) forms still work.
+- **Enum validation gates on "has an enum table", not `DataType === "Enum"`** — types vary (`Enum`, `Enum8`, `Enum16`). See `componentValidator`, `completion`, `semanticTokens`.
+- **Bus prefixes** in `.esi`: `[429_…]`/`[1553_…]`/`[DIS_…]`/`[Mem_…]`/`[VORILS<N>_…]`/`[PART_<partition>_<port>]`/`[ED_<Msg>]`. Derive from `COMPONENT_TAG_PREFIXES`/`Bus`; don't hardcode elsewhere.
+- **CRLF.** Every `.split("\n")` on document text must be `.split(/\r?\n/)` — Windows `.esi` files leave trailing `\r` that breaks `$`-anchored regexes.
+- **CSV cell refs** (`field = file.csv line:N col:M`) are detected in `componentValidator` before the generic enum check; the fs-touching `CsvLookup` is injected by [componentDiagnostics.ts](src/componentDiagnostics.ts) (cached per pass).
+- **Two diagnostic collections** — `diagnostics.ts` (one per file, runs TestPit.exe, heavy) and `componentDiagnostics.ts` (single `esi-components`, in-process, cheap). Keep them separate.
+- **Formatter `=` alignment** ([formatEsi.ts](src/lib/formatEsi.ts)): aligns `key =` per group (section instance, or bracket-depth in `tier` scope). `<pre>` openers participate (their bodies shift to follow the aligned `<pre>`); hanging multi-line continuations (indented more than their key) are kept verbatim. `[TEST/STEP DEFINITION]` prose is left alone except its keys.
+- **`<pre>` blocks are column-anchored** (content at `preCol+INDENT`, `</pre>` at `preCol`) — not depth-based. Don't revert to depth-based or verbatim pass-through.
+- **Syntax highlighting** is grammar ([syntaxes/esi.json](syntaxes/esi.json)) + semantic tokens. Inside `[TEST/STEP DEFINITION]` only comments/macros/strings/keys are coloured (a `begin/end` region) so prose numbers aren't.
 
 ## Testing approach
 
-Pure functions (no `vscode` import) are unit‑tested directly with Node's `assert`. vscode‑touching code uses the [test/setup.js](test/setup.js) mock — currently `window.createOutputChannel`, `Range`, `Diagnostic`, `DiagnosticSeverity`. Extend setup.js when you need more.
+Pure functions (no `vscode` import) are unit-tested with Node's `assert`. vscode-touching code uses the [test/setup.js](test/setup.js) mock — extend it when you need more (it currently covers window/languages/commands/workspace incl. `createFileSystemWatcher`, `RelativePattern`, `showOpenDialog`, `EventEmitter`, etc.). The smoke test runs the full `activate()`; on Windows that does a real `reg export` (failure-guarded, so it can't break the test).
 
-`projectRegistry.ts`, `projectStore.ts`, `statusBar.ts`, and `selectProject.ts` are deliberately untested — they're thin glue around `context.globalState`, `createStatusBarItem`, and `showQuickPick`, all of which need a richer mock or an actual integration harness (`@vscode/test-electron`) to exercise meaningfully. The migration planning algorithm in [src/lib/migration.ts](src/lib/migration.ts) is pure (no vscode import) and unit-tested in [src/test/unit/migration.test.ts](src/test/unit/migration.test.ts).
-
-After any change, run `npm test` and `npm run lint`. Current count: 145+ passing. `npm run coverage` reports ~95% statement coverage / 100% function coverage on the included pure-logic modules; the excluded glue files (extension, statusBar, providers, command files, registry / cache layers) need integration tests rather than unit tests. CI posts the c8 file-by-file table to the GitHub Actions job summary and uploads the HTML report as the `coverage-html` artifact (Linux job only).
+Glue (extension, statusBar, providers, commands, registry/cache/store layers) is excluded from coverage — it needs integration tests, not unit tests. After any change run `npm test`.
 
 ## Don't
 
-- Don't drop the `.esi` languageId check in `diagnostics.ts` — orphan `.temp` files will return.
-- Don't restore verbatim `<pre>` pass‑through — see "Conventions" above.
-- Don't operate inside `.claude/worktrees/...` — use the real repo at `D:\esi-Helper-for-TestPit\`.
-- Don't push to `origin` unless asked. The maintainer pushes after review.
-- Don't bump the version in package.json without coordinating — that doubles as the release trigger and the changelog cutover.
+- Don't drop the `.esi` `languageId` check in `diagnostics.ts` — orphan `.temp` files return.
+- Don't make live diagnostics prompt for the exe (per-keystroke dialogs).
+- Don't reintroduce filename-based config routing in production, or per-request registry reads.
+- Don't revert the `<pre>` column-anchoring or the stdout+stderr capture.
+- Don't bump the version in `package.json` casually — it doubles as the release trigger / changelog cutover.
+- `config_folders/` and `sample_scripts/` are **reference material kept outside the repo** (e.g. `E:\testpluginsupport`) — they are not part of the extension; the test fixtures under `src/test/fixtures/config/` are the ones that matter.

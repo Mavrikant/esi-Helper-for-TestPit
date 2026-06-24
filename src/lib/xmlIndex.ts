@@ -1,8 +1,9 @@
 import * as fs from "fs";
 import * as path from "path";
 import { XMLParser } from "fast-xml-parser";
+import { ProfileConfigs } from "./testpitRegistry";
 
-export type Bus = "429" | "1553" | "DIS" | "Mem" | "VORILS";
+export type Bus = "429" | "1553" | "DIS" | "Mem" | "VORILS" | "ED";
 
 /**
  * Single source of truth for bus prefixes used in `.esi` `[NAME]` references.
@@ -24,6 +25,9 @@ export const COMPONENT_TAG_PREFIXES = [
   "DIS",
   "Mem",
   "VORILS\\d+",
+  // ED_ — External Data (DTIF / ARINC 735B) message reference, e.g.
+  // [ED_Type1]. Messages come from the EDConfigFile (EDMessageFields.xml).
+  "ED",
   // PART_<PartitionName>_ — fully-qualified memory-port reference
   // (e.g. PART_HSI_RNEGeneralWritePSAlive, PART_TEST_MBPBITStatus).
   // Partitions in MemoryPorts.xml: HSI, DD, TEST, A429, M1553, Discrete,
@@ -48,6 +52,7 @@ const PREFIXES_BY_BUS: Record<Bus, string[]> = {
   // numbers (VORILS2_, etc.) are accepted via the resolveConnectionMessage
   // fallback that strips the unit number.
   VORILS: ["VORILS1_"],
+  ED: ["ED_"],
 };
 
 export interface ConnectionDef {
@@ -134,8 +139,8 @@ const BUS_PREFIX: Record<string, Bus> = {
   Memory: "Mem",
 };
 
-export function parseConfigFolder(configFolderpath: string): XmlIndex {
-  const index: XmlIndex = {
+export function createEmptyIndex(): XmlIndex {
+  return {
     connections: new Map(),
     messages: new Map(),
     resolveConnectionMessage(fullName) {
@@ -157,6 +162,52 @@ export function parseConfigFolder(configFolderpath: string): XmlIndex {
       return undefined;
     },
   };
+}
+
+/**
+ * Build an index from a profile's resolved config paths (from the registry),
+ * dispatching each file to its ingester by ROLE — not by filename. This is the
+ * production entry point: NEOCAS/RNEQual/etc. use non-standard filenames
+ * (A429Messages_HURJET.xml, NeoCASPorts.xml, …) that filename routing can't
+ * recognise, but the registry already tells us each file's role.
+ *
+ * A role is parsed only when its path is set AND the file exists on disk —
+ * the registry's per-role MRU can hold stale paths for buses a profile no
+ * longer uses.
+ */
+export function parseConfigFiles(configs: ProfileConfigs): XmlIndex {
+  const index = createEmptyIndex();
+  const byRole: ReadonlyArray<
+    readonly [keyof ProfileConfigs, (root: Record<string, unknown>, index: XmlIndex) => void]
+  > = [
+    ["cable", ingestMessageConfig],
+    ["a429", ingestA429MessageFields],
+    ["m1553", ingestMilStd1553Fields],
+    ["discrete", ingestDiscreteSignals],
+    ["partition", ingestMemoryPorts],
+    ["vorils", ingestVORILSMessageFields],
+    ["ed", ingestEDMessageFields],
+  ];
+  for (const [role, ingest] of byRole) {
+    const file = configs[role];
+    if (!file || !fs.existsSync(file)) {
+      continue;
+    }
+    // Guard parse AND ingest per file: a malformed or unexpectedly-shaped
+    // config must not break the whole index (or extension activation) — skip
+    // just that file.
+    try {
+      const parsed = parser.parse(fs.readFileSync(file, "utf-8"));
+      ingest(parsed as Record<string, unknown>, index);
+    } catch (err) {
+      console.warn(`esihelper: failed to load ${role} config ${file}:`, err);
+    }
+  }
+  return index;
+}
+
+export function parseConfigFolder(configFolderpath: string): XmlIndex {
+  const index = createEmptyIndex();
 
   if (!configFolderpath || !fs.existsSync(configFolderpath)) {
     return index;
@@ -201,13 +252,19 @@ function routeFile(filename: string, parsed: unknown, index: XmlIndex): void {
     ingestMilStd1553Fields(root, index);
   } else if (lower.includes("discretesignals")) {
     ingestDiscreteSignals(root, index);
-  } else if (lower.includes("memoryports")) {
+  } else if (lower.includes("memoryports") || lower.includes("ports")) {
     ingestMemoryPorts(root, index);
+  } else if (lower.includes("edmessagefields") || lower.includes("edmessage")) {
+    ingestEDMessageFields(root, index);
   }
 }
 
 function ingestMessageConfig(root: Record<string, unknown>, index: XmlIndex): void {
   const r = (root.Root ?? root) as Record<string, unknown>;
+  // NEOCAS factors the physical card/channel/speed into a <References> block
+  // and points each <Connection Ref="…"> at a named <Channel>. RNE/VORILS keep
+  // those attributes inline on a <Parameter>. Support both.
+  const channels = collectChannels(r);
   const devices = asArray((r.Devices as Record<string, unknown> | undefined)?.Device);
   for (const device of devices) {
     const d = device as Record<string, unknown>;
@@ -223,8 +280,13 @@ function ingestMessageConfig(root: Record<string, unknown>, index: XmlIndex): vo
       if (!rawName) {
         continue;
       }
-      const param = c.Parameter as Record<string, unknown> | undefined;
       const { messageName, label } = parseConnectionName(rawName);
+      const ref = str(c["@_Ref"]);
+      const param = c.Parameter as Record<string, unknown> | undefined;
+      const referenced = ref ? channels.get(ref) : undefined;
+      const card = referenced?.card ?? (param ? str(param["@_Card"]) : undefined);
+      const channel = referenced?.channel ?? (param ? str(param["@_Channel"]) : undefined);
+      const speed = referenced?.speed ?? (param ? str(param["@_Speed"]) : undefined);
       for (const prefix of PREFIXES_BY_BUS[bus]) {
         const fullName = `${prefix}${rawName}`;
         index.connections.set(fullName, {
@@ -233,13 +295,45 @@ function ingestMessageConfig(root: Record<string, unknown>, index: XmlIndex): vo
           rawName,
           messageName,
           label,
-          card: param ? str(param["@_Card"]) : undefined,
-          channel: param ? str(param["@_Channel"]) : undefined,
-          speed: param ? str(param["@_Speed"]) : undefined,
+          card,
+          channel,
+          speed,
         });
       }
     }
   }
+}
+
+interface ChannelParam {
+  card?: string;
+  channel?: string;
+  speed?: string;
+}
+
+/** Build a name → {card,channel,speed} map from a cable file's <References>. */
+function collectChannels(r: Record<string, unknown>): Map<string, ChannelParam> {
+  const map = new Map<string, ChannelParam>();
+  const refs = r.References as Record<string, unknown> | undefined;
+  if (!refs) {
+    return map;
+  }
+  for (const device of asArray(refs.Device)) {
+    const d = device as Record<string, unknown>;
+    const channelsNode = d.Channels as Record<string, unknown> | undefined;
+    for (const ch of asArray(channelsNode?.Channel)) {
+      const c = ch as Record<string, unknown>;
+      const name = str(c["@_Name"]);
+      if (!name) {
+        continue;
+      }
+      map.set(name, {
+        card: str(c["@_Card"]),
+        channel: str(c["@_Channel"]),
+        speed: str(c["@_Speed"]),
+      });
+    }
+  }
+  return map;
 }
 
 function ingestVORILSMessageFields(root: Record<string, unknown>, index: XmlIndex): void {
@@ -449,62 +543,189 @@ const PORT_TYPE_TO_BUS: Record<string, Bus> = {
 
 function ingestMemoryPorts(root: Record<string, unknown>, index: XmlIndex): void {
   const container = (root.Partitions as Record<string, unknown> | undefined) ?? root;
-  const partitions = asArray(container.Partition);
-  for (const part of partitions) {
+  // NEOCAS defines each port once under <Common><CommonPorts> (with field enums
+  // pulled from <Common><CommonEnums> via Ref) and then has every <Partition>
+  // reference them by name. RNE inlines a <Message> in each partition port.
+  const commonEnums = collectCommonEnums(container);
+  const commonPorts = collectCommonPorts(container, commonEnums, index);
+
+  for (const part of asArray(container.Partition)) {
     const p = part as Record<string, unknown>;
     const partitionName = str(p["@_Name"]);
-    const ports = asArray(p.Port);
-    for (const port of ports) {
+    for (const port of asArray(p.Port)) {
       const portObj = port as Record<string, unknown>;
-      const portName = str(portObj["@_Name"]);
-      if (!portName) {
+      const localName = str(portObj["@_Name"]);
+      if (!localName) {
         continue;
       }
-      const portType = str(portObj["@_Type"]);
-      const bus: Bus =
-        (portType && PORT_TYPE_TO_BUS[portType]) || "Mem";
-      const message = portObj.Message as Record<string, unknown> | undefined;
-      const messageName = message ? str(message["@_Name"]) ?? portName : portName;
-      const def: MessageDef = {
-        name: messageName,
-        bus,
-        fields: [],
-      };
-      const fields = asArray(message?.Field);
-      for (const f of fields) {
-        def.fields.push(parseAttributeStyleField(f as Record<string, unknown>, messageName));
-      }
-      index.messages.set(messageName, def);
+      const inlineMessage = portObj.Message as Record<string, unknown> | undefined;
+      const ref = str(portObj["@_Ref"]);
 
-      // PART_<partitionName>_<portName> — the canonical fully-qualified
-      // form used in scripts (e.g. PART_HSI_VORILSMBReadBITResult,
-      // PART_TEST_MBPBITStatus). Always registered when we have a partition
-      // name, regardless of port type.
+      let messageName: string;
+      let bus: Bus = "Mem";
+      let isInlineMem = false;
+
+      if (inlineMessage) {
+        // RNE-style: the message is defined inline on the partition's port.
+        const portType = str(portObj["@_Type"]);
+        bus = (portType && PORT_TYPE_TO_BUS[portType]) || "Mem";
+        messageName = str(inlineMessage["@_Name"]) ?? localName;
+        const def: MessageDef = { name: messageName, bus, fields: [] };
+        for (const f of asArray(inlineMessage.Field)) {
+          def.fields.push(parseRefField(f as Record<string, unknown>, messageName, commonEnums));
+        }
+        index.messages.set(messageName, def);
+        isInlineMem = bus === "Mem";
+      } else if (ref && commonPorts.has(ref)) {
+        // NEOCAS-style: <Port Name="LocalName" Ref="CommonPortName"/>.
+        const common = commonPorts.get(ref)!;
+        messageName = common.messageName;
+        bus = common.bus;
+      } else {
+        // Neither inline nor resolvable — register a bare message so the PART_
+        // connection still resolves (just with no fields).
+        messageName = localName;
+        if (!index.messages.has(messageName)) {
+          index.messages.set(messageName, { name: messageName, bus, fields: [] });
+        }
+      }
+
+      // PART_<partition>_<localName> — the canonical fully-qualified form used
+      // in scripts. The local name can differ from (and reuse) the referenced
+      // common port name (e.g. IOHealthState_Alert → IOHealthState).
       if (partitionName) {
-        const partFullName = `PART_${partitionName}_${portName}`;
+        const partFullName = `PART_${partitionName}_${localName}`;
         index.connections.set(partFullName, {
           fullName: partFullName,
           bus,
-          rawName: portName,
+          rawName: localName,
           messageName,
         });
       }
 
-      // Also register the bus's short prefix for Memory-typed ports
-      // (Mem_<portName>). For A429/M1553/Discrete-typed ports, the
-      // canonical bus-prefixed connection comes from MessageConfig.xml's
-      // <Connection> elements, so we don't double-register here.
-      if (bus === "Mem") {
+      // RNE Memory-typed inline ports are also referenced via the short Mem_
+      // prefix. (A429/1553/Discrete connections come from the cable file; the
+      // NEOCAS Sampling/Queuing ports are referenced only via PART_.)
+      if (isInlineMem) {
         for (const prefix of PREFIXES_BY_BUS["Mem"]) {
-          const fullName = `${prefix}${portName}`;
+          const fullName = `${prefix}${localName}`;
           index.connections.set(fullName, {
             fullName,
             bus: "Mem",
-            rawName: portName,
+            rawName: localName,
             messageName,
           });
         }
       }
+    }
+  }
+}
+
+/** Collect named enum groups from a file's <Common><CommonEnums>. */
+function collectCommonEnums(container: Record<string, unknown>): Map<string, EnumDef[]> {
+  const map = new Map<string, EnumDef[]>();
+  const common = container.Common as Record<string, unknown> | undefined;
+  const commonEnums = common?.CommonEnums as Record<string, unknown> | undefined;
+  if (!commonEnums) {
+    return map;
+  }
+  for (const group of asArray(commonEnums.Enums)) {
+    const g = group as Record<string, unknown>;
+    const name = str(g["@_Name"]);
+    if (name) {
+      map.set(name, parseEnumsBlock(g));
+    }
+  }
+  return map;
+}
+
+/**
+ * Parse <Common><CommonPorts> into MessageDefs (registered in the index) and
+ * return a port-name → {messageName,bus} map so partition references resolve.
+ */
+function collectCommonPorts(
+  container: Record<string, unknown>,
+  commonEnums: Map<string, EnumDef[]>,
+  index: XmlIndex
+): Map<string, { messageName: string; bus: Bus }> {
+  const map = new Map<string, { messageName: string; bus: Bus }>();
+  const common = container.Common as Record<string, unknown> | undefined;
+  const commonPorts = common?.CommonPorts as Record<string, unknown> | undefined;
+  if (!commonPorts) {
+    return map;
+  }
+  for (const port of asArray(commonPorts.Port)) {
+    const portObj = port as Record<string, unknown>;
+    const portName = str(portObj["@_Name"]);
+    if (!portName) {
+      continue;
+    }
+    const portType = str(portObj["@_Type"]);
+    const bus: Bus = (portType && PORT_TYPE_TO_BUS[portType]) || "Mem";
+    const message = portObj.Message as Record<string, unknown> | undefined;
+    const messageName = message ? str(message["@_Name"]) ?? portName : portName;
+    const def: MessageDef = { name: messageName, bus, fields: [] };
+    for (const f of asArray(message?.Field)) {
+      def.fields.push(parseRefField(f as Record<string, unknown>, messageName, commonEnums));
+    }
+    index.messages.set(messageName, def);
+    map.set(portName, { messageName, bus });
+  }
+  return map;
+}
+
+/**
+ * Attribute-style field parser that also resolves an enum table referenced by
+ * @Ref against the file's CommonEnums (ports + ED messages). Falls back to an
+ * inline <Enums> block when there's no Ref.
+ */
+function parseRefField(
+  f: Record<string, unknown>,
+  parentMessage: string,
+  commonEnums: Map<string, EnumDef[]>
+): FieldDef {
+  const field = parseAttributeStyleField(f, parentMessage);
+  const ref = str(f["@_Ref"]);
+  if (ref && commonEnums.has(ref)) {
+    field.enums = commonEnums.get(ref);
+  }
+  return field;
+}
+
+/**
+ * EDMessageFields.xml (External Data / DTIF, ARINC 735B). Shape:
+ *   <Root><Common><CommonEnums>…</CommonEnums></Common>
+ *         <Messages><Message Name="TypeN">
+ *           <Field Name="…" Type="Enum" Ref="DisplayMatrix"/> …
+ *         </Message></Messages></Root>
+ * Messages are referenced in scripts as [ED_<MessageName>] (e.g. [ED_Type1]).
+ */
+function ingestEDMessageFields(root: Record<string, unknown>, index: XmlIndex): void {
+  const container = (root.Root as Record<string, unknown> | undefined) ?? root;
+  const commonEnums = collectCommonEnums(container);
+  const messagesNode = container.Messages as Record<string, unknown> | undefined;
+  if (!messagesNode) {
+    return;
+  }
+  for (const msg of asArray(messagesNode.Message)) {
+    const m = msg as Record<string, unknown>;
+    const name = str(m["@_Name"]);
+    if (!name) {
+      continue;
+    }
+    const def: MessageDef = { name, bus: "ED", fields: [] };
+    for (const f of asArray(m.Field)) {
+      def.fields.push(parseRefField(f as Record<string, unknown>, name, commonEnums));
+    }
+    index.messages.set(name, def);
+    for (const prefix of PREFIXES_BY_BUS["ED"]) {
+      const fullName = `${prefix}${name}`;
+      index.connections.set(fullName, {
+        fullName,
+        bus: "ED",
+        rawName: name,
+        messageName: name,
+      });
     }
   }
 }

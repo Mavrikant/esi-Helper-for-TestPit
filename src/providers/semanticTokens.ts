@@ -6,7 +6,14 @@ import {
   isKnownComponent,
 } from "../lib/xmlIndex";
 
-const TOKEN_TYPES = ["class", "property", "enumMember", "variable"] as const;
+// Token types (index-aware colouring layered over the TextMate grammar):
+//   class      — component connection names ([429_…], [ED_…], …)
+//   property   — message field names (SDI, Course, flight_id, …) → orange
+//   enumMember — enum literal values on the RHS of `=`            → yellow
+//   keyword    — built-in timing keys (time/interval/…)           → light blue
+// Macros (%VAR%) are intentionally NOT emitted here — the grammar colours them
+// (red) so they stay consistent and never leak into comments.
+const TOKEN_TYPES = ["class", "property", "enumMember", "keyword"] as const;
 const TOKEN_MODIFIERS = ["defaultLibrary"] as const;
 
 export const ESI_LEGEND = new vscode.SemanticTokensLegend(
@@ -15,12 +22,21 @@ export const ESI_LEGEND = new vscode.SemanticTokensLegend(
 );
 
 const TAG_RE = /\[(\/?)([A-Za-z0-9_]+)\]/g;
-const VAR_RE = /%([A-Za-z_][A-Za-z0-9_]*)%/g;
 // Field name may include dots (1553 `Mode.SelectedCourse`).
 const ASSIGNMENT_RE = /^(\s*)([A-Za-z_][A-Za-z0-9_.]*)\s*=\s*(.*)$/;
-const IDENT_RE = /[A-Za-z_][A-Za-z0-9_]*/g;
+const FIRST_IDENT_RE = /[A-Za-z_][A-Za-z0-9_]*/;
+// `<file>.csv line:N col:M` — a CSV cell reference, not an enum literal; must
+// not be coloured as an enum value.
+const CSV_REF_RE = /^[A-Za-z0-9_.\-]+\.csv\s+line\s*:\s*\d+\s+col\s*:\s*\d+/i;
+const TIMING_FIELDS = ["time", "interval", "occurrence", "period"];
 
 const KNOWN_MODIFIER = 1 << 0;
+
+/** Drop the `# comment` tail so no token is emitted inside a comment. */
+function stripComment(line: string): string {
+  const hash = line.indexOf("#");
+  return hash === -1 ? line : line.slice(0, hash);
+}
 
 export function registerEsiSemanticTokensProvider(): vscode.Disposable {
   return vscode.languages.registerDocumentSemanticTokensProvider(
@@ -35,88 +51,91 @@ export function registerEsiSemanticTokensProvider(): vscode.Disposable {
         const stack: string[] = [];
 
         for (let lineNum = 0; lineNum < lines.length; lineNum++) {
-          const line = lines[lineNum];
+          // Comment-stripped view: tokens are never emitted inside `# …`.
+          const line = stripComment(lines[lineNum]);
 
-          // Tags first — also drive the stack.
+          // Tags drive the component stack and colour component connections.
           TAG_RE.lastIndex = 0;
           let tagMatch: RegExpExecArray | null;
           while ((tagMatch = TAG_RE.exec(line)) !== null) {
             const isClosing = tagMatch[1] === "/";
             const name = tagMatch[2];
-            const tokenStart = tagMatch.index + 1 + (isClosing ? 1 : 0);
-            const tokenLen = name.length;
             if (isComponentTag(name)) {
+              const tokenStart = tagMatch.index + 1 + (isClosing ? 1 : 0);
               const known = index ? isKnownComponent(index, name) : false;
               builder.push(
                 lineNum,
                 tokenStart,
-                tokenLen,
+                name.length,
                 tokenTypeIndex("class"),
                 known ? KNOWN_MODIFIER : 0
               );
-              if (!isClosing) {
-                stack.push(name);
-              } else if (stack[stack.length - 1] === name) {
-                stack.pop();
-              }
-            } else if (!isClosing) {
-              // Push non-component tags so depth tracking still pops correctly.
+            }
+            if (!isClosing) {
               stack.push(name);
             } else if (stack[stack.length - 1] === name) {
               stack.pop();
             }
           }
 
-          // Field assignments inside an open component.
+          // Field assignment inside an open component block.
           const enclosing = topComponent(stack);
           const assignMatch = ASSIGNMENT_RE.exec(line);
-          if (assignMatch && enclosing) {
-            const fieldName = assignMatch[2];
-            const fieldStart = assignMatch[1].length;
-            const message = index?.resolveConnectionMessage(enclosing);
-            const field = message?.fields.find((f) => f.name === fieldName);
-            const fieldKnown =
-              !!field || ["time", "interval", "occurrence", "period"].includes(fieldName);
+          if (!assignMatch || !enclosing) {
+            continue;
+          }
+          const fieldName = assignMatch[2];
+          const fieldStart = assignMatch[1].length;
+          const message = index?.resolveConnectionMessage(enclosing);
+          const field = message?.fields.find((f) => f.name === fieldName);
+
+          if (TIMING_FIELDS.includes(fieldName)) {
+            // Built-in timing key → keyword (always known).
+            builder.push(
+              lineNum,
+              fieldStart,
+              fieldName.length,
+              tokenTypeIndex("keyword"),
+              KNOWN_MODIFIER
+            );
+          } else {
+            // Message field name → property; dimmed when not in the message.
             builder.push(
               lineNum,
               fieldStart,
               fieldName.length,
               tokenTypeIndex("property"),
-              fieldKnown ? KNOWN_MODIFIER : 0
-            );
-
-            // RHS — could be enum value(s).
-            const eqIndex = line.indexOf("=");
-            if (eqIndex !== -1 && field?.dataType === "Enum" && field.enums) {
-              const rhsStart = eqIndex + 1;
-              IDENT_RE.lastIndex = rhsStart;
-              let identMatch: RegExpExecArray | null;
-              while ((identMatch = IDENT_RE.exec(line)) !== null) {
-                const ident = identMatch[0];
-                const known = field.enums.some((e) => e.name === ident);
-                builder.push(
-                  lineNum,
-                  identMatch.index,
-                  ident.length,
-                  tokenTypeIndex("enumMember"),
-                  known ? KNOWN_MODIFIER : 0
-                );
-              }
-            }
-          }
-
-          // Variable references %VAR%.
-          VAR_RE.lastIndex = 0;
-          let varMatch: RegExpExecArray | null;
-          while ((varMatch = VAR_RE.exec(line)) !== null) {
-            builder.push(
-              lineNum,
-              varMatch.index + 1,
-              varMatch[1].length,
-              tokenTypeIndex("variable"),
-              0
+              field ? KNOWN_MODIFIER : 0
             );
           }
+
+          // RHS enum literal — only for enum-typed fields, and never for CSV
+          // references or macros (the grammar colours those).
+          if (!field?.enums || field.enums.length === 0) {
+            continue;
+          }
+          const eqIndex = line.indexOf("=");
+          if (eqIndex === -1) {
+            continue;
+          }
+          const rhs = line.slice(eqIndex + 1);
+          const rhsTrimmed = rhs.trimStart();
+          if (rhsTrimmed.startsWith("%") || CSV_REF_RE.test(rhsTrimmed)) {
+            continue;
+          }
+          const valueMatch = FIRST_IDENT_RE.exec(rhs);
+          if (!valueMatch) {
+            continue;
+          }
+          const valStart = eqIndex + 1 + valueMatch.index;
+          const known = field.enums.some((e) => e.name === valueMatch[0]);
+          builder.push(
+            lineNum,
+            valStart,
+            valueMatch[0].length,
+            tokenTypeIndex("enumMember"),
+            known ? KNOWN_MODIFIER : 0
+          );
         }
         return builder.build();
       },

@@ -95,10 +95,9 @@ describe("formatEsi", () => {
   });
 
   it("re-aligns misaligned <pre> block content to col(<pre>)+indent / col(<pre>)", () => {
-    // Mirrors the real-world Step Conditions screenshot: random-column `<br/>`
-    // and `</pre>` lines get pulled in to col(<pre>)+4 and col(<pre>).
-    //   "        Step Conditions = <pre>"        -> <pre> at col 26 (8 + 18)
-    //   "        Step Expected Results = <pre>"  -> <pre> at col 32 (8 + 24)
+    // Both <pre> openers align to the widest key ("Step Expected Results", 21);
+    // each <pre> body then follows its aligned <pre> (content at preCol+4,
+    // </pre> at preCol), keeping the body text as authored.
     const input = [
       "[STEP 20]",
       "[STEP DEFINITION]",
@@ -111,16 +110,22 @@ describe("formatEsi", () => {
       "[/STEP DEFINITION]",
       "[/STEP 20]",
     ].join("\n");
+    const I = (n: number): string => " ".repeat(n);
+    const W = 21;
+    const eq = (name: string, val: string): string =>
+      I(8) + name + I(W - name.length + 1) + "= " + val;
+    const br = (s: string): string => I(36) + s; // <pre> at col 32, content +4
+    const closePre = I(32) + "</pre>";
     const expected = [
       "[STEP 20]",
-      "    [STEP DEFINITION]",
-      "        Step Conditions = <pre>",
-      "                              <br/> Go to 'vorIlsMbPerformFunction'",
-      "                          </pre>",
-      "        Step Expected Results = <pre>",
-      "                                    <br/> * Verify that inside the X is Y",
-      "                                </pre>",
-      "    [/STEP DEFINITION]",
+      I(4) + "[STEP DEFINITION]",
+      eq("Step Conditions", "<pre>"),
+      br("<br/> Go to 'vorIlsMbPerformFunction'"),
+      closePre,
+      eq("Step Expected Results", "<pre>"),
+      br("<br/> * Verify that inside the X is Y"),
+      closePre,
+      I(4) + "[/STEP DEFINITION]",
       "[/STEP 20]",
     ].join("\n");
     assert.strictEqual(formatEsi(input), expected);
@@ -163,12 +168,13 @@ describe("formatEsi", () => {
     const expected = [
       "[STEP INPUTS]",
       "    [429_L100SelectedCourseBNR_input1]          # Scenario 1",
-      "        time = 5600",
-      "        SDI = INSTALLATION_NUMBER_ONE",
+      "        time   = 5600",
+      "        SDI    = INSTALLATION_NUMBER_ONE",
       "        Course = 179.6484375",
       "    [/429_L100SelectedCourseBNR_input1]",
       "[/STEP INPUTS]",
     ].join("\n");
+    // '=' signs are aligned to the widest field name (Course) in the block.
     assert.strictEqual(formatEsi(input), expected);
   });
 
@@ -495,30 +501,176 @@ describe("formatEsi", () => {
       "[/STEP 10]",
       "[/TEST]",
     ].join("\n");
+    // All section keys — including the two `<pre>` openers — align their `=`
+    // to the widest key ("Step Expected Results", 21). Each <pre> body then
+    // follows its aligned `<pre>` (content at preCol+4, </pre> at preCol).
+    const I = (n: number): string => " ".repeat(n);
+    const W = 21;
+    const eq = (name: string, val: string): string =>
+      I(12) + name + I(W - name.length + 1) + "= " + val;
+    const br = (s: string): string => I(40) + s; // <pre> at col 36, content +4
+    const closePre = I(36) + "</pre>";
     const expected = [
       "[TEST]",
-      "    [STEP 10]",
-      "        [STEP DEFINITION]",
-      "            Step Description = Verify reading ground station binary values from hardware - SW_LLR_VORILS_VORILSMB_128",
-      "            Step Requirements = SW_LLR_VORILS_VORILSMB_128, SW_LLR_VORILS_VORILSMB_288",
-      "            Step Dependencies = N/A",
-      "            Step Conditions = <pre>",
-      "                                  <br/> Scenario: VORLOCFunctionMode is FUNCTION_MODE_ACTIVE",
-      "                                  <br/> * Set DD.VORILSMBOutput.VORLOCFunctionMode to FUNCTION_MODE_ACTIVE",
-      "                                  <br/> * Set HSI.Read.VORLOCGroundStationID1 to test value (0x12345678)",
-      "                                  <br/> * Set HSI.Read.VORLOCGroundStationID2 to test value (0x9ABCDEF0)",
-      "                                  <br/> * Tune to VOR frequency 108.00 MHz",
-      "                              </pre>",
-      "            Step Expected Results = <pre>",
-      "                                        <br/> * GroundStationBinaryValue is constructed from HSI.Read values",
-      "                                        <br/> * First 32 bits = HSI.Read.VORLOCGroundStationID1",
-      "                                        <br/> * Last 32 bits = HSI.Read.VORLOCGroundStationID2",
-      "                                        <br/> * System reads hardware registers correctly",
-      "                                    </pre>",
-      "        [/STEP DEFINITION]",
-      "    [/STEP 10]",
+      I(4) + "[STEP 10]",
+      I(8) + "[STEP DEFINITION]",
+      eq(
+        "Step Description",
+        "Verify reading ground station binary values from hardware - SW_LLR_VORILS_VORILSMB_128"
+      ),
+      eq(
+        "Step Requirements",
+        "SW_LLR_VORILS_VORILSMB_128, SW_LLR_VORILS_VORILSMB_288"
+      ),
+      eq("Step Dependencies", "N/A"),
+      eq("Step Conditions", "<pre>"),
+      br("<br/> Scenario: VORLOCFunctionMode is FUNCTION_MODE_ACTIVE"),
+      br("<br/> * Set DD.VORILSMBOutput.VORLOCFunctionMode to FUNCTION_MODE_ACTIVE"),
+      br("<br/> * Set HSI.Read.VORLOCGroundStationID1 to test value (0x12345678)"),
+      br("<br/> * Set HSI.Read.VORLOCGroundStationID2 to test value (0x9ABCDEF0)"),
+      br("<br/> * Tune to VOR frequency 108.00 MHz"),
+      closePre,
+      eq("Step Expected Results", "<pre>"),
+      br("<br/> * GroundStationBinaryValue is constructed from HSI.Read values"),
+      br("<br/> * First 32 bits = HSI.Read.VORLOCGroundStationID1"),
+      br("<br/> * Last 32 bits = HSI.Read.VORLOCGroundStationID2"),
+      br("<br/> * System reads hardware registers correctly"),
+      closePre,
+      I(8) + "[/STEP DEFINITION]",
+      I(4) + "[/STEP 10]",
       "[/TEST]",
     ].join("\n");
     assert.strictEqual(formatEsi(input), expected);
+  });
+
+  it("aligns a <pre> opener with sibling keys and shifts its body to follow", () => {
+    const input = [
+      "[STEP DEFINITION]",
+      "Step Requirements = X",
+      "Step Conditions = <pre>",
+      "<br/> do thing",
+      "</pre>",
+      "[/STEP DEFINITION]",
+    ].join("\n");
+    const lines = formatEsi(input).split("\n");
+    const reqEq = lines.find((l) => l.includes("Step Requirements"))!.indexOf("=");
+    const condEq = lines.find((l) => l.includes("Step Conditions"))!.indexOf("=");
+    // Both align to "Step Requirements" (17); indent 4 → '=' at col 22.
+    assert.strictEqual(reqEq, condEq);
+    assert.strictEqual(condEq, 4 + 17 + 1);
+    const preCol = condEq + 2; // "= <pre>" → <pre> two cols after '='
+    // Body follows the aligned <pre>: content at preCol+4, </pre> at preCol.
+    assert.ok(lines.includes(" ".repeat(preCol + 4) + "<br/> do thing"));
+    assert.ok(lines.includes(" ".repeat(preCol) + "</pre>"));
+  });
+
+  it("aligns '=' of field assignments within a component block to one column", () => {
+    const input = [
+      "[STEP INPUTS]",
+      "[ED_Type1]",
+      "time = a",
+      "flight_id = b",
+      "type_code = c",
+      "aircraft_category = d",
+      "[/ED_Type1]",
+      "[/STEP INPUTS]",
+    ].join("\n");
+    const lines = formatEsi(input).split("\n");
+    const fieldLines = lines.filter((l) => /=/.test(l) && /^\s+[A-Za-z_]/.test(l));
+    const eqCols = fieldLines.map((l) => l.indexOf("="));
+    // All '=' aligned to a single column = indent(8) + widest name(17) + 1.
+    assert.strictEqual(new Set(eqCols).size, 1);
+    assert.strictEqual(eqCols[0], 8 + 17 + 1);
+    // The widest field keeps exactly one space before '='.
+    assert.ok(lines.includes("        aircraft_category = d"));
+  });
+
+  it("aligns each component block independently", () => {
+    const input = [
+      "[ED_A]",
+      "x = 1",
+      "longname = 2",
+      "[/ED_A]",
+      "[ED_B]",
+      "p = 3",
+      "[/ED_B]",
+    ].join("\n");
+    const lines = formatEsi(input).split("\n");
+    // Block A aligns to 'longname' (8); block B has only 'p'.
+    assert.ok(lines.includes("    x        = 1"));
+    assert.ok(lines.includes("    longname = 2"));
+    assert.ok(lines.includes("    p = 3"));
+  });
+
+  it("aligns '=' inside definition sections (multi-word keys), to the widest key", () => {
+    const input = [
+      "[STEP DEFINITION]",
+      "Step Description = foo",
+      "Step Requirements = bar",
+      "Step Dependencies = baz",
+      "[/STEP DEFINITION]",
+    ].join("\n");
+    const lines = formatEsi(input).split("\n");
+    const fieldLines = lines.filter((l) => /^\s+Step/.test(l));
+    const eqCols = fieldLines.map((l) => l.indexOf("="));
+    assert.strictEqual(new Set(eqCols).size, 1);
+    // widest = "Step Requirements"/"Step Dependencies" (17); indent 4.
+    assert.strictEqual(eqCols[0], 4 + 17 + 1);
+    // "Step Description" (16) gets two spaces before '='.
+    assert.ok(lines.includes("    Step Description  = foo"));
+  });
+
+  it("converts tabs to spaces and then aligns the component block", () => {
+    const input = ["[ED_Type1]", "\ttime\t= 1", "\tflight_id\t= 2", "[/ED_Type1]"].join(
+      "\n"
+    );
+    const lines = formatEsi(input).split("\n");
+    assert.ok(!lines.some((l) => l.includes("\t")));
+    const fieldLines = lines.filter((l) => /=/.test(l) && /^\s+[A-Za-z_]/.test(l));
+    const eqCols = fieldLines.map((l) => l.indexOf("="));
+    assert.strictEqual(new Set(eqCols).size, 1);
+  });
+
+  it("keeps a hanging multi-line value continuation as authored (no reflow)", () => {
+    const input = [
+      "[STEP DEFINITION]",
+      "Step Description = line one",
+      "          hanging continuation under the value",
+      "Step Dependencies = None",
+      "[/STEP DEFINITION]",
+    ].join("\n");
+    const lines = formatEsi(input).split("\n");
+    // Indented MORE than its key, so preserved verbatim (10-space indent kept),
+    // not re-indented to the block depth or reflowed to the value column.
+    assert.ok(lines.includes("          hanging continuation under the value"));
+  });
+
+  it("re-indents non-hanging content after a key (not a continuation)", () => {
+    // 'baz' is at the same indent as 'foo', so it's ordinary content, not a
+    // hanging continuation — it gets re-indented to depth.
+    const input = "[A]\nfoo = [bar]\nbaz\n[/A]";
+    assert.strictEqual(formatEsi(input), "[A]\n    foo = [bar]\n    baz\n[/A]");
+  });
+
+  it("tier scope aligns same-depth blocks together; section scope does not", () => {
+    const input = [
+      "[STEP INPUTS]",
+      "[ED_A]",
+      "x = 1",
+      "[/ED_A]",
+      "[ED_B]",
+      "longerkey = 2",
+      "[/ED_B]",
+      "[/STEP INPUTS]",
+    ].join("\n");
+    const sec = formatEsi(input, { alignScope: "section" }).split("\n");
+    const tier = formatEsi(input, { alignScope: "tier" }).split("\n");
+    const eqCol = (arr: string[], needle: string): number =>
+      (arr.find((l) => l.includes(needle)) as string).indexOf("=");
+    // Section: 'x' aligns to its own block (just 'x', width 1) at indent 8.
+    assert.strictEqual(eqCol(sec, "x ="), 8 + 1 + 1);
+    // Tier: both depth-2 blocks align to 'longerkey' (width 9) at indent 8.
+    assert.strictEqual(eqCol(tier, "x "), 8 + 9 + 1);
+    assert.strictEqual(eqCol(tier, "longerkey "), 8 + 9 + 1);
   });
 });

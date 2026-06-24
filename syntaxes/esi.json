@@ -6,769 +6,139 @@
 	],
 	"patterns": [
 		{
+			"include": "#definition-section"
+		},
+		{
 			"include": "#comments"
 		},
 		{
-			"match": "\\b(%[A-Za-z0-9_]+%)\\b",
-			"name": "string.quoted.other.variable.include.c"
+			"include": "#macros"
 		},
 		{
-			"match": "\\b(NULL|true|false|TRUE|FALSE|N/A)\\b",
-			"name": "constant.language.c"
+			"include": "#strings"
 		},
 		{
-			"include": "#operators"
+			"include": "#tags"
+		},
+		{
+			"include": "#field-keys"
+		},
+		{
+			"include": "#file-paths"
+		},
+		{
+			"include": "#folder-paths"
+		},
+		{
+			"include": "#constants"
 		},
 		{
 			"include": "#numbers"
-		},
-		{
-			"begin": "^\\s*((#)\\s*line)\\b",
+		}
+	],
+	"repository": {
+		"definition-section": {
+			"comment": "TEST/STEP DEFINITION blocks hold prose values. Inside them only comments, macros and the fixed field keys are highlighted — numbers, literals and constants in descriptions are left as default text.",
+			"begin": "(\\[)(TEST DEFINITION|STEP DEFINITION)(\\])",
 			"beginCaptures": {
 				"1": {
-					"name": "keyword.control.directive.line.c"
+					"name": "punctuation.definition.tag.begin.esi"
 				},
 				"2": {
-					"name": "punctuation.definition.directive.c"
-				}
-			},
-			"end": "(?=(?://|/\\*))|(?<!\\\\)(?=\\n)",
-			"name": "meta.preprocessor.c",
-			"patterns": [
-				{
-					"include": "#numbers"
-				},
-				{
-					"include": "#line_continuation_character"
-				}
-			]
-		},
-		{
-			"match": "\\b(CMD_EXECUTE|VARIABLES|TEST DEFINITION|STEP DEFINITION|STEP INPUTS|STEP OUTPUTS|STEP GET_DUMP|STEP ([0-9]+|Restart[0-9]*|SET_TEST_ID)|TEST STEPS|MANUAL_VERIFY|EXTERNAL_VERIFY|INCLUDE)\\b",
-			"name": "support.type.sys-types.c"
-		},
-		{
-			"include": "#block"
-		},
-		{
-			"match": "\\b((429|1553|DIS|PART|FUNC|CMD)_[A-Za-z0-9_]+)\\b",
-			"name": "entity.name.function.c"
-		},
-		{
-			"match": "\\b(include file|Test Description|Test Configuration|Test Dependencies|Step Description|Step Requirements|Step Dependencies|Step Conditions|Step Expected Results)\\b",
-			"name": "entity.name.function.c"
-		},
-		{
-			"match": "\\b((BOOL|BOOLARRAY|BYTE|BYTEARRAY|DOUBLE|DOUBLEARRAY|FLOAT|FLOATARRAY|INT|INTARRAY|LONG|LONGARRAY|SHORT|SHORTARRAY|STRING|UBYTE|UBYTEARRAY|UINT|UINTARRAY|ULONG|ULONGARRAY|USHORT|USHORTARRAY)_[A-Za-z0-9_]+|time)\\b",
-			"name": "variable.other.member.c"
-		},
-		{
-			"begin": "(?x)\n(?:\n  ^ |\n  (?:\n    (?=\\s)(?<!else|new|return)(?<=\\w)  # word + space before name\n    |\n    (?=\\s*[A-Za-z_])(?<!&&)(?<=[*&>])   # type modifier before name\n  )\n)\n(\\s*)(?!(while|for|do|if|else|switch|catch|enumerate|return|sizeof|[cr]?iterate)\\s*\\()\n(\n  (?:[A-Za-z_][A-Za-z0-9_]*+|::)++  # actual name\n  |\n  (?:(?<=operator)(?:[-*&<>=+!]+|\\(\\)|\\[\\]))\n)\n\\s*(?=\\()",
-			"beginCaptures": {
-				"1": {
-					"name": "punctuation.whitespace.function.leading.c"
+					"name": "entity.name.tag.esi"
 				},
 				"3": {
-					"name": "entity.name.function.c"
-				},
-				"4": {
-					"name": "punctuation.definition.parameters.c"
+					"name": "punctuation.definition.tag.end.esi"
 				}
 			},
-			"end": "(?<=\\})|(?=#)|(\n)",
-			"name": "meta.function.c",
+			"end": "(\\[/)(TEST DEFINITION|STEP DEFINITION)(\\])",
+			"endCaptures": {
+				"1": {
+					"name": "punctuation.definition.tag.begin.esi"
+				},
+				"2": {
+					"name": "entity.name.tag.esi"
+				},
+				"3": {
+					"name": "punctuation.definition.tag.end.esi"
+				}
+			},
+			"name": "meta.definition.esi",
 			"patterns": [
 				{
 					"include": "#comments"
 				},
 				{
-					"include": "#parens"
+					"include": "#macros"
 				},
 				{
-					"match": "\\b(const)\\b",
-					"name": "storage.modifier.c"
+					"include": "#strings"
 				},
 				{
-					"include": "#block"
+					"include": "#field-keys"
 				}
 			]
-		},
-		{
-			"include": "#line_continuation_character"
-		},
-		{
-			"begin": "([)([-_a-zA-Z0-9/s]+)(])",
-			"beginCaptures": {
-				"1": {
-					"name": "punctuation.definition.tag.xml"
-				},
-				"2": {
-					"name": "entity.name.tag.xml"
-				},
-				"3": {
-					"name": "entity.name.tag.namespace.xml"
-				},
-				"4": {
-					"name": "punctuation.separator.namespace.xml"
-				},
-				"5": {
-					"name": "entity.name.tag.localname.xml"
-				}
-			},
-			"end": "([/)(\\2)(])",
-			"endCaptures": {
-				"1": {
-					"name": "punctuation.definition.tag.xml"
-				},
-				"2": {
-					"name": "punctuation.definition.tag.xml"
-				},
-				"3": {
-					"name": "entity.name.tag.xml"
-				},
-				"4": {
-					"name": "entity.name.tag.namespace.xml"
-				},
-				"5": {
-					"name": "punctuation.separator.namespace.xml"
-				},
-				"6": {
-					"name": "entity.name.tag.localname.xml"
-				},
-				"7": {
-					"name": "punctuation.definition.tag.xml"
-				}
-			},
-			"name": "meta.tag.no-content.xml",
-			"patterns": [
-				{
-					"include": "#tagStuff"
-				}
-			]
-		},
-		{
-			"begin": "([/?)(?:([-\\w\\.]+)((:)))?([-\\w\\.:]+)",
-			"captures": {
-				"1": {
-					"name": "punctuation.definition.tag.xml"
-				},
-				"2": {
-					"name": "entity.name.tag.namespace.xml"
-				},
-				"3": {
-					"name": "entity.name.tag.xml"
-				},
-				"4": {
-					"name": "punctuation.separator.namespace.xml"
-				},
-				"5": {
-					"name": "entity.name.tag.localname.xml"
-				}
-			},
-			"end": "(/?])",
-			"name": "meta.tag.xml",
-			"patterns": [
-				{
-					"include": "#tagStuff"
-				}
-			]
-		},
-		{
-			"include": "#entity"
-		},
-		{
-			"include": "#bare-ampersand"
-		}		
-	],
-	"repository": {
-		"access": {
-			"captures": {
-				"2": {
-					"name": "punctuation.separator.dot-access.c"
-				},
-				"3": {
-					"name": "punctuation.separator.pointer-access.c"
-				},
-				"4": {
-					"name": "variable.other.member.c"
-				}
-			},
-			"match": "((\\.)|(->))([a-zA-Z_][a-zA-Z_0-9]*)\\b(?!\\s*\\()"
-		},
-		"block": {
-			"patterns": [
-				{
-					"begin": "\\{",
-					"beginCaptures": {
-						"0": {
-							"name": "punctuation.section.block.begin.c"
-						}
-					},
-					"end": "\\}|(?=\\s*#\\s*endif\\b)",
-					"endCaptures": {
-						"0": {
-							"name": "punctuation.section.block.end.c"
-						}
-					},
-					"name": "meta.block.c",
-					"patterns": [
-						{
-							"include": "#block_innards"
-						}
-					]
-				}
-			]
-		},
-		"block_innards": {
-			"patterns": [
-				{
-					"include": "#preprocessor-rule-enabled-block"
-				},
-				{
-					"include": "#preprocessor-rule-disabled-block"
-				},
-				{
-					"include": "#preprocessor-rule-other-block"
-				},
-				{
-					"include": "#access"
-				},
-				{
-					"include": "#c_function_call"
-				},
-				{
-					"captures": {
-						"1": {
-							"name": "variable.other.c"
-						},
-						"2": {
-							"name": "punctuation.definition.parameters.c"
-						}
-					},
-					"match": "(?x)\n(?:\n  (?:\n    (?=\\s)(?<!else|new|return)\n    (?<=\\w) \\s+  # or word + space before name\n  )\n)\n(\n  (?:[A-Za-z_][A-Za-z0-9_]*+ | :: )++   # actual name\n  |\n  (?:(?<=operator) (?:[-*&<>=+!]+ | \\(\\) | \\[\\]))\n)\n\\s*(\\() # opening bracket",
-					"name": "meta.initialization.c"
-				},
-				{
-					"include": "#block"
-				},
-				{
-					"include": "$base"
-				}
-			]
-		},
-		"c_function_call": {
-			"captures": {
-				"1": {
-					"name": "punctuation.whitespace.function-call.leading.c"
-				},
-				"2": {
-					"name": "support.function.any-method.c"
-				},
-				"4": {
-					"name": "punctuation.definition.parameters.c"
-				}
-			},
-			"match": "(?x)\n(?:\n  (?=\\s)\n  (?:(?<=else|new|return) | (?<!\\w)) (\\s+)\n)?\n\n# Actual name\n(\n  \\b\n  (?!\n    (while|for|do|if|else|switch|catch|enumerate|return|sizeof|r?iterate)\n    \\s* \\(\n  )\n  (?:(?!NS)[A-Za-z_][A-Za-z0-9_]*+\\b | ::)++\n)\n\\s*(\\() # Opening bracket",
-			"name": "meta.function-call.c"
 		},
 		"comments": {
-			"patterns": [
-				{
-					"begin": "(^[ \\t]+)?(?=#)",
-					"beginCaptures": {
-						"1": {
-							"name": "punctuation.whitespace.comment.leading.cpp"
-						}
-					},
-					"end": "(?!\\G)",
-					"patterns": [
-						{
-							"begin": "#",
-							"beginCaptures": {
-								"0": {
-									"name": "punctuation.definition.comment.cpp"
-								}
-							},
-							"end": "\\n",
-							"name": "comment.line.double-slash.cpp",
-							"patterns": [
-								{
-									"include": "#line_continuation_character"
-								}
-							]
-						}
-					]
-				}
-			]
+			"comment": "A '#' starts a line comment to end-of-line. Listed first so macros/tags inside a comment are not separately highlighted.",
+			"match": "#.*$",
+			"name": "comment.line.number-sign.esi"
 		},
-		"disabled": {
-			"begin": "^\\s*#\\s*if(n?def)?\\b.*$",
-			"end": "^\\s*#\\s*endif\\b",
-			"patterns": [
-				{
-					"include": "#disabled"
+		"macros": {
+			"comment": "%MACRO% references and declarations.",
+			"match": "%[A-Za-z0-9_]+%",
+			"name": "variable.other.macro.esi"
+		},
+		"tags": {
+			"comment": "Section / component tags: [NAME] and [/NAME]. Component connections ([429_…], [ED_…], …) are re-coloured by the semantic-token provider.",
+			"match": "(\\[)(/?)([^\\[\\]]+?)(\\])",
+			"captures": {
+				"1": {
+					"name": "punctuation.definition.tag.begin.esi"
 				},
-				{
-					"include": "#pragma-mark"
+				"2": {
+					"name": "punctuation.definition.tag.begin.esi"
+				},
+				"3": {
+					"name": "entity.name.tag.esi"
+				},
+				"4": {
+					"name": "punctuation.definition.tag.end.esi"
 				}
-			]
+			}
 		},
-		"line_continuation_character": {
-			"patterns": [
-				{
-					"match": "(\\\\)\\n",
-					"captures": {
-						"1": {
-							"name": "constant.character.escape.line-continuation.c"
-						}
-					}
+		"field-keys": {
+			"comment": "Any `key =` left-hand side (section keys like 'Step Description', 'system call', 'result file', 'time', message field names, …). Coloured as a keyword; message field keys inside component blocks are re-coloured (orange) by the semantic-token provider.",
+			"match": "^[ \\t]*([A-Za-z][A-Za-z0-9_. ]*?)(?=\\s*=)",
+			"captures": {
+				"1": {
+					"name": "keyword.other.field.esi"
 				}
-			]
+			}
+		},
+		"file-paths": {
+			"comment": "File-path values: a path-like token (folders with / or \\ separators, optional drive letter) ending in a short alphabetic extension — e.g. ../../Utilities/DumpReadLog.py, C:\\dir\\file.csv, report.html, tool.exe. Extension-agnostic (any 1–7 letter extension) so new types like .exe/.html need no list; numeric suffixes (1.5, 192.168.0.1) and N/A are excluded because the extension must start with a letter.",
+			"match": "[\\w./\\\\:-]*\\.[A-Za-z][A-Za-z0-9]{0,6}\\b",
+			"name": "string.other.path.esi"
+		},
+		"folder-paths": {
+			"comment": "Directory paths without a file extension — e.g. folder/subfolder, folder\\subfolder\\, ../../Utilities/, C:\\dir\\. Same colour as file paths. Requires a separator after a ./ ../ drive, or a 2+ char segment, so values like N/A are not matched.",
+			"match": "(?:\\.\\.?[/\\\\]|[A-Za-z]:[/\\\\]|[\\w.-]{2,}[/\\\\])[\\w./\\\\:-]*",
+			"name": "string.other.path.esi"
+		},
+		"strings": {
+			"comment": "Double-quoted string literals used as values.",
+			"match": "\"[^\"]*\"",
+			"name": "string.quoted.double.esi"
+		},
+		"constants": {
+			"match": "\\b(NULL|TRUE|FALSE|true|false|N/A)\\b",
+			"name": "constant.language.esi"
 		},
 		"numbers": {
-			"patterns": [
-				{
-					"match": "\\b((0(x|X)[0-9a-fA-F]*)|(0(b|B)[01]*)|(([0-9]+\\.?[0-9]*)|(\\.[0-9]+))((e|E)(\\+|-)?[0-9]+)?)(L|l|UL|ul|u|U|F|f|ll|LL|ull|ULL)?\\b",
-					"name": "constant.numeric.c"
-				}
-			]
-		},
-		"parens": {
-			"begin": "\\(",
-			"beginCaptures": {
-				"0": {
-					"name": "punctuation.section.parens.begin.c"
-				}
-			},
-			"end": "\\)",
-			"endCaptures": {
-				"0": {
-					"name": "punctuation.section.parens.end.c"
-				}
-			},
-			"name": "meta.parens.c",
-			"patterns": [
-				{
-					"include": "$base"
-				}
-			]
-		},
-	
-		"preprocessor-rule-disabled": {
-			"begin": "^\\s*(((#)if)\\s+(0)\\b).*",
-			"beginCaptures": {
-				"1": {
-					"name": "meta.preprocessor.c"
-				},
-				"2": {
-					"name": "keyword.control.directive.conditional.c"
-				},
-				"3": {
-					"name": "punctuation.definition.directive.c"
-				},
-				"4": {
-					"name": "constant.numeric.preprocessor.c"
-				}
-			},
-			"end": "^\\s*(((#)\\s*endif)\\b)",
-			"endCaptures": {
-				"1": {
-					"name": "meta.preprocessor.c"
-				},
-				"2": {
-					"name": "keyword.control.directive.conditional.c"
-				},
-				"3": {
-					"name": "punctuation.definition.directive.c"
-				}
-			},
-			"patterns": [
-				{
-					"begin": "^\\s*(((#)\\s*else)\\b)",
-					"beginCaptures": {
-						"1": {
-							"name": "meta.preprocessor.c"
-						},
-						"2": {
-							"name": "keyword.control.directive.conditional.c"
-						},
-						"3": {
-							"name": "punctuation.definition.directive.c"
-						}
-					},
-					"end": "(?=^\\s*#\\s*endif\\b)",
-					"patterns": [
-						{
-							"include": "$base"
-						}
-					]
-				},
-				{
-					"begin": "\\G",
-					"end": "(?=^\\s*#\\s*(else|endif)\\b)",
-					"contentName": "comment.block.preprocessor.if-branch",
-					"patterns": [
-						{
-							"include": "#disabled"
-						},
-						{
-							"include": "#pragma-mark"
-						}
-					]
-				}
-			]
-		},
-		"preprocessor-rule-disabled-block": {
-			"begin": "^\\s*(((#)if)\\s+(0)\\b).*",
-			"beginCaptures": {
-				"1": {
-					"name": "meta.preprocessor.c"
-				},
-				"2": {
-					"name": "keyword.control.directive.conditional.c"
-				},
-				"3": {
-					"name": "punctuation.definition.directive.c"
-				},
-				"4": {
-					"name": "constant.numeric.preprocessor.c"
-				}
-			},
-			"end": "^\\s*(((#)\\s*endif)\\b)",
-			"endCaptures": {
-				"1": {
-					"name": "meta.preprocessor.c"
-				},
-				"2": {
-					"name": "keyword.control.directive.conditional.c"
-				},
-				"3": {
-					"name": "punctuation.definition.directive.c"
-				}
-			},
-			"patterns": [
-				{
-					"begin": "^\\s*(((#)\\s*else\\b))",
-					"beginCaptures": {
-						"1": {
-							"name": "meta.preprocessor.c"
-						},
-						"2": {
-							"name": "keyword.control.directive.conditional.c"
-						},
-						"3": {
-							"name": "punctuation.definition.directive.c"
-						}
-					},
-					"end": "(?=^\\s*#\\s*endif\\b)",
-					"patterns": [
-						{
-							"include": "#block_innards"
-						}
-					]
-				},
-				{
-					"begin": "\\G",
-					"end": "(?=^\\s*#\\s*(else|endif)\\b)",
-					"contentName": "comment.block.preprocessor.if-branch.in-block",
-					"patterns": [
-						{
-							"include": "#disabled"
-						},
-						{
-							"include": "#pragma-mark"
-						}
-					]
-				}
-			]
-		},
-		"preprocessor-rule-enabled": {
-			"begin": "^\\s*(((#)if)\\s+(0*1)\\b)",
-			"beginCaptures": {
-				"1": {
-					"name": "meta.preprocessor.c"
-				},
-				"2": {
-					"name": "keyword.control.directive.conditional.c"
-				},
-				"3": {
-					"name": "punctuation.definition.directive.c"
-				},
-				"4": {
-					"name": "constant.numeric.preprocessor.c"
-				}
-			},
-			"end": "^\\s*(((#)\\s*endif)\\b)",
-			"endCaptures": {
-				"1": {
-					"name": "meta.preprocessor.c"
-				},
-				"2": {
-					"name": "keyword.control.directive.conditional.c"
-				},
-				"3": {
-					"name": "punctuation.definition.directive.c"
-				}
-			},
-			"patterns": [
-				{
-					"begin": "^\\s*(((#)\\s*else)\\b).*",
-					"beginCaptures": {
-						"1": {
-							"name": "meta.preprocessor.c"
-						},
-						"2": {
-							"name": "keyword.control.directive.conditional.c"
-						},
-						"3": {
-							"name": "punctuation.definition.directive.c"
-						}
-					},
-					"contentName": "comment.block.preprocessor.else-branch",
-					"end": "(?=^\\s*#\\s*endif\\b)",
-					"patterns": [
-						{
-							"include": "#disabled"
-						},
-						{
-							"include": "#pragma-mark"
-						}
-					]
-				},
-				{
-					"begin": "\\G",
-					"end": "(?=^\\s*#\\s*(else|endif)\\b)",
-					"patterns": [
-						{
-							"include": "$base"
-						}
-					]
-				}
-			]
-		},
-		"preprocessor-rule-enabled-block": {
-			"begin": "^\\s*(((#)if)\\s+(0*1)\\b)",
-			"beginCaptures": {
-				"1": {
-					"name": "meta.preprocessor.c"
-				},
-				"2": {
-					"name": "keyword.control.directive.conditional.c"
-				},
-				"3": {
-					"name": "punctuation.definition.directive.c"
-				},
-				"4": {
-					"name": "constant.numeric.preprocessor.c"
-				}
-			},
-			"end": "^\\s*(((#)\\s*endif)\\b)",
-			"endCaptures": {
-				"1": {
-					"name": "meta.preprocessor.c"
-				},
-				"2": {
-					"name": "keyword.control.directive.conditional.c"
-				},
-				"3": {
-					"name": "punctuation.definition.directive.c"
-				}
-			},
-			"patterns": [
-				{
-					"begin": "^\\s*(((#)\\s*else)\\b).*",
-					"beginCaptures": {
-						"1": {
-							"name": "meta.preprocessor.c"
-						},
-						"2": {
-							"name": "keyword.control.directive.conditional.c"
-						},
-						"3": {
-							"name": "punctuation.definition.directive.c"
-						}
-					},
-					"contentName": "comment.block.preprocessor.else-branch.in-block",
-					"end": "(?=^\\s*#\\s*endif\\b)",
-					"patterns": [
-						{
-							"include": "#disabled"
-						},
-						{
-							"include": "#pragma-mark"
-						}
-					]
-				},
-				{
-					"begin": "\\G",
-					"end": "(?=^\\s*#\\s*(else|endif)\\b)",
-					"patterns": [
-						{
-							"include": "#block_innards"
-						}
-					]
-				}
-			]
-		},
-		"preprocessor-rule-other": {
-			"begin": "^\\s*(((#)\\s*if(n?def)?)\\b.*?(?:(?=(?://|/\\*))|$))",
-			"beginCaptures": {
-				"1": {
-					"name": "meta.preprocessor.c"
-				},
-				"2": {
-					"name": "keyword.control.directive.conditional.c"
-				},
-				"3": {
-					"name": "punctuation.definition.directive.c"
-				}
-			},
-			"end": "^\\s*(((#)\\s*(endif))\\b)",
-			"endCaptures": {
-				"1": {
-					"name": "meta.preprocessor.c"
-				},
-				"2": {
-					"name": "keyword.control.directive.conditional.c"
-				},
-				"3": {
-					"name": "punctuation.definition.directive.c"
-				}
-			},
-			"patterns": [
-				{
-					"include": "$base"
-				}
-			]
-		},
-		"preprocessor-rule-other-block": {
-			"begin": "^\\s*(((#)\\s*if(n?def)?)\\b.*?(?:(?=(?://|/\\*))|$))",
-			"beginCaptures": {
-				"1": {
-					"name": "meta.preprocessor.c"
-				},
-				"2": {
-					"name": "keyword.control.directive.conditional.c"
-				},
-				"3": {
-					"name": "punctuation.definition.directive.c"
-				}
-			},
-			"end": "^\\s*(((#)\\s*endif)\\b)",
-			"endCaptures": {
-				"1": {
-					"name": "meta.preprocessor.c"
-				},
-				"2": {
-					"name": "keyword.control.directive.conditional.c"
-				},
-				"3": {
-					"name": "punctuation.definition.directive.c"
-				}
-			},
-			"patterns": [
-				{
-					"include": "#block_innards"
-				}
-			]
-		},
-		"operators": {
-			"patterns": [
-				{
-					"match": "(?<![\\w$])(sizeof)(?![\\w$])",
-					"name": "keyword.operator.sizeof.c"
-				},
-				{
-					"match": "--",
-					"name": "keyword.operator.decrement.c"
-				},
-				{
-					"match": "\\+\\+",
-					"name": "keyword.operator.increment.c"
-				},
-				{
-					"match": "%=|\\+=|-=|\\*=|(?<!\\()/=",
-					"name": "keyword.operator.assignment.compound.c"
-				},
-				{
-					"match": "&=|\\^=|<<=|>>=|\\|=",
-					"name": "keyword.operator.assignment.compound.bitwise.c"
-				},
-				{
-					"match": "<<|>>",
-					"name": "keyword.operator.bitwise.shift.c"
-				},
-				{
-					"match": "!=|<=|>=|==|<|>",
-					"name": "keyword.operator.comparison.c"
-				},
-				{
-					"match": "&&|!|\\|\\|",
-					"name": "keyword.operator.logical.c"
-				},
-				{
-					"match": "&|\\||\\^|~",
-					"name": "keyword.operator.c"
-				},
-				{
-					"match": "=",
-					"name": "keyword.operator.assignment.c"
-				},
-				{
-					"match": "%|\\*|/|-|\\+",
-					"name": "keyword.operator.c"
-				},
-				{
-					"begin": "\\?",
-					"beginCaptures": {
-						"0": {
-							"name": "keyword.operator.ternary.c"
-						}
-					},
-					"end": ":",
-					"endCaptures": {
-						"0": {
-							"name": "keyword.operator.ternary.c"
-						}
-					},
-					"patterns": [
-						{
-							"include": "#access"
-						},
-						{
-							"include": "#c_function_call"
-						},
-						{
-							"include": "$self"
-						}
-					]
-				}
-			]
-		},
-		"string_escaped_char": {
-			"patterns": [
-				{
-					"match": "(?x)\\\\ (\n\\\\             |\n[abefnprtv'\"?]   |\n[0-3]\\d{,2}     |\n[4-7]\\d?        |\nx[a-fA-F0-9]{,2} |\nu[a-fA-F0-9]{,4} |\nU[a-fA-F0-9]{,8} )",
-					"name": "constant.character.escape.c"
-				},
-				{
-					"match": "\\\\.",
-					"name": "invalid.illegal.unknown-escape.c"
-				}
-			]
-		},
-		"string_placeholder": {
-			"patterns": [
-				{
-					"match": "(?x) %\n(\\d+\\$)?                           # field (argument #)\n[#0\\- +']*                          # flags\n[,:_]?                              # separator character (AltiVec)\n((-?\\d+)|\\*(-?\\d+\\$)?)?          # minimum field width\n(\\.((-?\\d+)|\\*(-?\\d+\\$)?)?)?    # precision\n(hh|h|ll|l|j|t|z|q|L|vh|vl|v|hv|hl)? # length modifier\n[diouxXDOUeEfFgGaACcSspn%]           # conversion type",
-					"name": "constant.other.placeholder.c"
-				},
-				{
-					"match": "%",
-					"name": "invalid.illegal.placeholder.c"
-				}
-			]
+			"comment": "Integers, decimals, hex and signed/exponent forms — only as standalone tokens, never inside identifiers like DO-260B_11503.",
+			"match": "(?<![\\w.])[+-]?(?:0[xX][0-9a-fA-F]+|[0-9]+(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?)(?![\\w.])",
+			"name": "constant.numeric.esi"
 		}
-	},
-	"version": "https://github.com/atom/language-c/commit/0d0f32388e73fc91a86f4c31ff59c36191869d63"
+	}
 }

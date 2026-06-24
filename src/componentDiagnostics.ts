@@ -1,15 +1,13 @@
 import * as vscode from "vscode";
 import * as fs from "fs";
 import * as path from "path";
-import { CONFIG_SECTION } from "./constants";
-import { BUILT_IN_IDS } from "./projects";
 import {
   ComponentIssue,
   CsvLookup,
   validateComponents,
 } from "./lib/componentValidator";
 import { getActiveProjectIndex } from "./lib/projectIndexCache";
-import { onActiveProjectChanged } from "./lib/projectRegistry";
+import { onActiveProfileChanged } from "./lib/profileRegistry";
 import { getOutputChannel } from "./lib/outputChannel";
 
 const COLLECTION_NAME = "esi-components";
@@ -64,36 +62,22 @@ export function registerComponentDiagnostics(): vscode.Disposable {
     collection.delete(doc.uri);
   });
 
-  // When the active project / configFolderpath / customProjects changes, the
-  // index reloads — re-validate every open .esi document so warnings catch up.
-  const watchedKeys = [
-    `${CONFIG_SECTION}.customProjects`,
-    ...BUILT_IN_IDS.flatMap((id) => [
-      `${CONFIG_SECTION}.${id}.executablePath`,
-      `${CONFIG_SECTION}.${id}.configFolderpath`,
-    ]),
-  ];
+  // When the active profile changes (or the registry is reloaded), the index
+  // reloads — re-validate every open .esi document so warnings catch up.
   const revalidateAll = (): void => {
     for (const doc of vscode.workspace.textDocuments) {
       validateAndPublish(doc);
     }
   };
-  const onConfigChange = vscode.workspace.onDidChangeConfiguration((event) => {
-    if (!watchedKeys.some((key) => event.affectsConfiguration(key))) {
-      return;
-    }
-    revalidateAll();
-  });
 
-  const onProjectChange = onActiveProjectChanged(() => revalidateAll());
+  const onProfileChange = onActiveProfileChanged(() => revalidateAll());
 
   return vscode.Disposable.from(
     collection,
     onChange,
     onOpen,
     onClose,
-    onConfigChange,
-    onProjectChange
+    onProfileChange
   );
 }
 
