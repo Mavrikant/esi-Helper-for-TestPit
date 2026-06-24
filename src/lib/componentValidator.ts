@@ -136,7 +136,10 @@ export function validateComponents(
       });
       continue;
     }
-    if (field.dataType !== "Enum" || !field.enums || field.enums.length === 0) {
+    // Validate against the enum table whenever the field has one — the type
+    // string varies across configs ("Enum", "Enum8", "Enum16", …), so the
+    // presence of an enum table is the reliable signal, not the type name.
+    if (!field.enums || field.enums.length === 0) {
       continue;
     }
 

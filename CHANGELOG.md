@@ -4,6 +4,30 @@ All notable changes to the **esi Helper for TestPit** extension will be document
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0]
+
+A major rework of how the extension finds its TestPit configuration, plus broader project support, smarter formatting, and a full syntax-colour overhaul.
+
+### Added
+- **Registry-driven, multi-profile configuration.** Profiles and their config-file paths now come from TestPit's own Windows registry settings (`HKEY_CURRENT_USER\Software\ESEN\TestPit`) instead of hardcoded project definitions. On first use the extension runs a single `reg export`, parses it, and caches a slim JSON in the extension's global storage. `Settings\SettingPrefix[0]` is the default profile; each `<Profile>\Executer\*ConfigFile[0]` gives a config path by role.
+- **Status-bar profile picker** populated from `SettingPrefix`; click to switch profiles. New commands **ESI Helper: Reload TestPit Settings** (re-export after changing paths in the TestPit GUI) and **ESI Helper: Pick TestPit Executable**.
+- **NEOCAS-style config support:** config files are routed to ingesters **by registry role, not filename**, so non-standard names (`A429Messages_HURJET.xml`, `NeoCASPorts.xml`, …) work. The `Ref` indirection is resolved in all three forms — `<Connection Ref>`→`<References>` channel, partition `<Port Ref>`→`<Common><CommonPorts>`, field `Ref`→`<Common><CommonEnums>` — plus `Sampling`/`Queuing` port types.
+- **External Data (DTIF) messages:** new `EDMessageFields.xml` ingester and the `ED_` tag prefix (`[ED_Type1]`).
+- **`=` alignment in the formatter.** Field assignments are aligned to one column per section (and `<pre>` block openers align with their sibling keys; their bodies follow the aligned `<pre>`). New `esihelper.alignmentScope` setting: `section` (default) or `tier` (align all blocks at the same bracket-depth together).
+- **Tabs → 4 spaces on every save** (full re-format on save still gated by `esihelper.refactorDocumentOnSave`).
+- **Syntax-highlighting overhaul.** A purpose-built grammar + semantic tokens colour: section tags / connections, message fields, enum values, keys (any `key =`), `%MACRO%` references, file/folder path values, double-quoted strings, numbers, constants, and comments — each via its own scope so themes/users can recolour. `[TEST DEFINITION]`/`[STEP DEFINITION]` prose only highlights macros + keys + strings.
+
+### Changed
+- **Validity check / live diagnostics** build the TestPit command from the active profile's resolved config paths (`--cf/--ac/--mc/--dc/--pc/--edc/--vc` for the roles that exist) and `--validateScriptOnly=true`.
+- **TestPit.exe is a one-time pick** (file dialog, stored in the plugin's JSON), prompted on activation if unset — it is not in the registry. **Open with TestPit** derives `TestPitw.exe` from the same folder.
+- All `esihelper.*` settings remain machine-scoped; the only remaining ones are `esihelper.refactorDocumentOnSave` and `esihelper.alignmentScope`.
+
+### Fixed
+- **TestPit output capture.** The runner now captures both stdout and stderr and ignores the process exit code, so validation warnings (which TestPit may print to stderr and/or accompany a non-zero exit) reach the Problems panel instead of being silently dropped.
+
+### Removed
+- Built-in RNE/VORILS project machinery and the settings `esihelper.RNE.*`, `esihelper.VORILS.*`, `esihelper.<id>.configFolderpath`, and `esihelper.customProjects`. Also the legacy globalState "active project" store and its one-time settings migration. Profiles + config paths now come from the registry.
+
 ## [0.3.4]
 
 ### Changed

@@ -1,7 +1,7 @@
 import * as vscode from "vscode";
 import { runCommandDetached } from "../lib/testpitRunner";
-import { getOrPromptForProject } from "../lib/projectRegistry";
-import { buildOpenCommand } from "../projects";
+import { ensureTestpitExe } from "../lib/profileRegistry";
+import { buildOpenCommand } from "../profiles";
 
 export function registerOpenWithTestPit(): vscode.Disposable {
   return vscode.commands.registerCommand(
@@ -11,11 +11,13 @@ export function registerOpenWithTestPit(): vscode.Disposable {
       if (!filePath) {
         return;
       }
-      const project = await getOrPromptForProject();
-      if (!project) {
+      const exe = await ensureTestpitExe();
+      if (!exe) {
         return;
       }
-      runCommandDetached(buildOpenCommand(project, filePath));
+      // The console TestPit.exe can't open a script; buildOpenCommand derives
+      // the GUI TestPitw.exe (same folder) and launches it with --ow.
+      runCommandDetached(buildOpenCommand(exe, filePath));
     }
   );
 }

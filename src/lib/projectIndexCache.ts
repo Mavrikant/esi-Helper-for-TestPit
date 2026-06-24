@@ -1,20 +1,48 @@
 import type * as vscode from "vscode";
-import { CONFIG_SECTION } from "../constants";
-import { BUILT_IN_IDS } from "../projects";
-import { getActiveProject, onActiveProjectChanged } from "./projectRegistry";
-import { XmlIndex, parseConfigFolder } from "./xmlIndex";
+import * as path from "path";
+import { XmlIndex, parseConfigFiles } from "./xmlIndex";
+import {
+  getActiveConfigs,
+  getActiveProfileName,
+  onActiveProfileChanged,
+} from "./profileRegistry";
 import { getOutputChannel } from "./outputChannel";
 
-const indexByConfigPath = new Map<string, XmlIndex>();
+/**
+ * Builds and caches the XML index for the active profile. Config paths come
+ * from the registry (via profileRegistry), routed to ingesters by role — not
+ * by filename — so non-standard names (NEOCAS/RNEQual) are handled.
+ *
+ * Cached by profile name; invalidated on profile change, on registry reload
+ * (which fires the same change event), and when any resolved config file
+ * changes on disk.
+ */
+
+let cachedIndex: XmlIndex | undefined;
+let cachedKey: string | undefined;
 
 export function getActiveProjectIndex(): XmlIndex | undefined {
-  const folderpath = getActiveConfigFolderpath();
-  if (!folderpath) {
+  const configs = getActiveConfigs();
+  if (Object.keys(configs).length === 0) {
     return undefined;
   }
-  let index = indexByConfigPath.get(folderpath);
-  if (!index) {
-    index = rebuild(folderpath);
+  const key = getActiveProfileName();
+  if (cachedIndex && cachedKey === key) {
+    return cachedIndex;
+  }
+  return rebuild(key);
+}
+
+function rebuild(key: string | undefined): XmlIndex {
+  const index = parseConfigFiles(getActiveConfigs());
+  cachedIndex = index;
+  cachedKey = key;
+  try {
+    getOutputChannel().appendLine(
+      `[index] profile ${key ?? "<none>"}: ${index.connections.size} connections, ${index.messages.size} messages`
+    );
+  } catch {
+    // OutputChannel access can fail when vscode isn't fully mocked (tests).
   }
   return index;
 }
@@ -22,87 +50,57 @@ export function getActiveProjectIndex(): XmlIndex | undefined {
 export function registerIndexLifecycle(): vscode.Disposable {
   const vsc: typeof vscode = require("vscode");
 
-  // Pre-build for the currently active project (if any) so the first
-  // completion / hover request is fast.
-  const initial = getActiveConfigFolderpath();
-  if (initial) {
-    rebuild(initial);
+  // Pre-build for the active profile so the first completion/hover is fast.
+  if (Object.keys(getActiveConfigs()).length > 0) {
+    rebuild(getActiveProfileName());
   }
 
-  const watchedKeys = [
-    `${CONFIG_SECTION}.customProjects`,
-    ...BUILT_IN_IDS.map((id) => `${CONFIG_SECTION}.${id}.configFolderpath`),
-  ];
-
-  // File watcher: rebuild when any XML in the active project's config
-  // folder changes. We use a single watcher and re-create it when the
-  // active folder changes (below).
-  let fsWatcher: vscode.FileSystemWatcher | undefined;
-  const setupFileWatcher = (): void => {
-    fsWatcher?.dispose();
-    fsWatcher = undefined;
-    const folderpath = getActiveConfigFolderpath();
-    if (!folderpath) {
-      return;
+  let watchers: vscode.FileSystemWatcher[] = [];
+  const disposeWatchers = (): void => {
+    for (const w of watchers) {
+      w.dispose();
     }
-    const pattern = new vsc.RelativePattern(folderpath, "*.xml");
-    fsWatcher = vsc.workspace.createFileSystemWatcher(pattern);
+    watchers = [];
+  };
+  const setupWatchers = (): void => {
+    disposeWatchers();
     const onChange = (): void => {
-      indexByConfigPath.delete(folderpath);
-      rebuild(folderpath);
+      cachedKey = undefined; // force rebuild
+      rebuild(getActiveProfileName());
     };
-    fsWatcher.onDidChange(onChange);
-    fsWatcher.onDidCreate(onChange);
-    fsWatcher.onDidDelete(onChange);
-  };
-  setupFileWatcher();
-
-  const reloadIndex = (): void => {
-    indexByConfigPath.clear();
-    const folderpath = getActiveConfigFolderpath();
-    if (folderpath) {
-      rebuild(folderpath);
+    for (const file of Object.values(getActiveConfigs())) {
+      if (!file) {
+        continue;
+      }
+      const pattern = new vsc.RelativePattern(
+        path.dirname(file),
+        path.basename(file)
+      );
+      const watcher = vsc.workspace.createFileSystemWatcher(pattern);
+      watcher.onDidChange(onChange);
+      watcher.onDidCreate(onChange);
+      watcher.onDidDelete(onChange);
+      watchers.push(watcher);
     }
-    setupFileWatcher();
+  };
+  setupWatchers();
+
+  const reload = (): void => {
+    cachedKey = undefined;
+    cachedIndex = undefined;
+    if (Object.keys(getActiveConfigs()).length > 0) {
+      rebuild(getActiveProfileName());
+    }
+    setupWatchers();
   };
 
-  const configWatcher = vsc.workspace.onDidChangeConfiguration((event) => {
-    if (watchedKeys.some((key) => event.affectsConfiguration(key))) {
-      reloadIndex();
-    }
-  });
+  const profileChangeSub = onActiveProfileChanged(() => reload());
 
-  const projectChangeSub = onActiveProjectChanged(() => reloadIndex());
-
-  return vsc.Disposable.from(configWatcher, projectChangeSub, {
+  return vsc.Disposable.from(profileChangeSub, {
     dispose: () => {
-      fsWatcher?.dispose();
-      indexByConfigPath.clear();
+      disposeWatchers();
+      cachedIndex = undefined;
+      cachedKey = undefined;
     },
   });
-}
-
-function rebuild(folderpath: string): XmlIndex {
-  const index = parseConfigFolder(folderpath);
-  indexByConfigPath.set(folderpath, index);
-  try {
-    const ch = getOutputChannel();
-    ch.appendLine(
-      `[index] ${folderpath}: ${index.connections.size} connections, ${index.messages.size} messages`
-    );
-  } catch {
-    // OutputChannel access can fail in test contexts where vscode isn't
-    // fully mocked; the index is still usable.
-  }
-  return index;
-}
-
-function getActiveConfigFolderpath(): string | undefined {
-  // Read it off the resolved Project rather than re-deriving from settings.
-  // Built-in projects (RNE / VORILS) get configFolderpath populated by
-  // buildBuiltInProject; custom projects leave it undefined and are
-  // skipped (they bake full paths into their validityArgs instead).
-  const project = getActiveProject();
-  const folderpath = project?.configFolderpath;
-  return folderpath && folderpath.length > 0 ? folderpath : undefined;
 }

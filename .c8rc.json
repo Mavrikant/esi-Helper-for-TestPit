@@ -13,8 +13,8 @@
     "out/commands/**",
     "out/providers/**",
     "out/lib/projectIndexCache.js",
-    "out/lib/projectRegistry.js",
-    "out/lib/projectStore.js",
+    "out/lib/profileRegistry.js",
+    "out/lib/pluginStore.js",
     "out/lib/outputChannel.js"
   ],
   "reporter": [

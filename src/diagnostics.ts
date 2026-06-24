@@ -3,8 +3,8 @@ import { parseValidityOutput } from "./lib/parseValidityOutput";
 import { runValidityCheckAsync } from "./lib/testpitRunner";
 import { toDiagnostic } from "./lib/toDiagnostic";
 import { withTempScript } from "./lib/withTempScript";
-import { getActiveProject } from "./lib/projectRegistry";
-import { buildValidityCommand } from "./projects";
+import { getActiveConfigs, getTestpitExe } from "./lib/profileRegistry";
+import { buildValidityCommand } from "./profiles";
 
 const diagnosticCollections = new Map<string, vscode.DiagnosticCollection>();
 let isUpdating = false;
@@ -23,8 +23,11 @@ async function handleDocumentChange(): Promise<void> {
     if (!editor || editor.document.languageId !== "esi") {
       return;
     }
-    const project = getActiveProject();
-    if (!project) {
+    // Live (per-keystroke) path: never prompt for the exe — silently skip if
+    // it isn't configured yet. The explicit "Run Validity Check" command
+    // prompts via ensureTestpitExe instead.
+    const exe = getTestpitExe();
+    if (!exe) {
       return;
     }
     const uri = editor.document.uri;
@@ -33,7 +36,7 @@ async function handleDocumentChange(): Promise<void> {
 
     const documentText = editor.document.getText();
     await withTempScript(editor.document.uri.fsPath, documentText, async (tempPath) => {
-      const command = buildValidityCommand(project, tempPath);
+      const command = buildValidityCommand(exe, tempPath, getActiveConfigs());
       const output = await runValidityCheckAsync(command);
       const issues = parseValidityOutput(output, documentText.split(/\r?\n/));
       collection.set(uri, issues.map(toDiagnostic));

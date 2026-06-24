@@ -81,7 +81,7 @@ export function registerEsiCompletionProvider(): vscode.Disposable {
               return [];
             }
             const valueRange = computeIdentifierRange(document, position);
-            if (field.dataType === "Enum" && field.enums) {
+            if (field.enums && field.enums.length > 0) {
               return field.enums.map((e) => {
                 const item = new vscode.CompletionItem(
                   e.name,

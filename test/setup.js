@@ -110,6 +110,11 @@ mock('vscode', {
         dispose() {},
       };
     },
+    showOpenDialog() { return Promise.resolve(undefined); },
+    showInformationMessage() { return Promise.resolve(undefined); },
+    showWarningMessage() { return Promise.resolve(undefined); },
+    showErrorMessage() { return Promise.resolve(undefined); },
+    activeTextEditor: undefined,
   },
   languages: {
     registerDocumentSemanticTokensProvider() { return { dispose() {} }; },
@@ -147,7 +152,19 @@ mock('vscode', {
         inspect() { return undefined; },
       };
     },
+    createFileSystemWatcher() {
+      return {
+        onDidChange() { return { dispose() {} }; },
+        onDidCreate() { return { dispose() {} }; },
+        onDidDelete() { return { dispose() {} }; },
+        dispose() {},
+      };
+    },
   },
+  RelativePattern: class RelativePattern {
+    constructor(base, pattern) { this.base = base; this.pattern = pattern; }
+  },
+  Uri: { file(p) { return { fsPath: p, toString: () => p }; } },
   Disposable: { from() { return { dispose() {} }; } },
   ConfigurationTarget: { Global: 1, Workspace: 2, WorkspaceFolder: 3 },
   EventEmitter,

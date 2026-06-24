@@ -1,0 +1,28 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<Partitions>
+    <Common>
+        <CommonEnums>
+            <Enums Name="HealthState">
+                <Enum Name="HEALTHY">0</Enum>
+                <Enum Name="FAULTY">1</Enum>
+            </Enums>
+        </CommonEnums>
+        <CommonPorts>
+            <Port Type="Sampling" Name="IOHealthState" MaxMessageSize="8" RefreshRateSeconds="0.25">
+                <Message Name="IOHealthState">
+                    <Field Name="State" Type="Enum8" Ref="HealthState"/>
+                    <Field Name="Pad" Type="UInt8" Count="7"/>
+                </Message>
+            </Port>
+            <Port Type="Queuing" Name="A429BITResults" MaxMessageSize="8" MaxNbMessages="50">
+                <Message Name="A429BITResults">
+                    <Field Name="ErrorCode" Type="UInt16"/>
+                </Message>
+            </Port>
+        </CommonPorts>
+    </Common>
+    <Partition Name="HealthManager">
+        <Port Name="IOHealthState_Alert" Ref="IOHealthState"/>
+        <Port Name="A429BITResults" Ref="A429BITResults"/>
+    </Partition>
+</Partitions>
