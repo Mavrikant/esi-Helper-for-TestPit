@@ -66,19 +66,19 @@ All `esihelper.*` settings are **user-scoped (machine-wide)** — they live in y
 
 ## Commands
 
-| Command | Default keybinding |
-|---|---|
-| ESI Helper: Run Validity Check | — |
-| ESI Helper: Open with TestPit | — |
-| ESI Helper: Update Step Numbers | — |
-| ESI Helper: Refactor Document | — |
-| ESI Helper: Show Processed File | — |
-| ESI Helper: Select TestPit Profile | — |
-| ESI Helper: Reload TestPit Settings | — |
-| ESI Helper: Pick TestPit Executable | — |
-| ESI Helper: Show Component Validation Info | — |
-| Goto step number | `Ctrl+G` (when editing `.esi`) |
-| Format Document (built-in) | `Shift+Alt+F` (when editing `.esi`) |
+| Command | What it does | Keybinding |
+|---|---|---|
+| ESI Helper: Run Validity Check | Validate the current `.esi` against the active profile (`TestPit.exe --validateScriptOnly`); results go to the output channel / Problems panel. | — |
+| ESI Helper: Open with TestPit | Open the current script in the TestPit **GUI** (`TestPitw.exe`, derived from the configured executable's folder). | — |
+| ESI Helper: Update Step Numbers | Renumber `[STEP N]` blocks sequentially (10, 20, 30, …). | — |
+| ESI Helper: Refactor Document | Trim trailing whitespace and convert tabs to 4 spaces. | — |
+| ESI Helper: Show Processed File | Open TestPit's last preprocessed script (`Documents\Testpit\Preprocessed.esi`) side‑by‑side. | — |
+| ESI Helper: Select TestPit Profile | Switch the active profile (from the registry's `SettingPrefix`); also offers "Change TestPit executable…". | — |
+| ESI Helper: Reload TestPit Settings | Re-read profiles & config-file paths from the registry — run this after adding a profile or changing config paths in the TestPit GUI. | — |
+| ESI Helper: Pick TestPit Executable | Choose / re-point the console `TestPit.exe` used for validation. | — |
+| ESI Helper: Show Component Validation Info | Diagnostic dump: active profile, resolved config files, index size, and the current component‑validation issues. | — |
+| Goto step number | Jump to a `[STEP N]` by number. | `Ctrl+G` (when editing `.esi`) |
+| Format Document (built-in) | ESI‑aware indentation **+ `=` alignment**. | `Shift+Alt+F` (when editing `.esi`) |
 
 ## Development
 
