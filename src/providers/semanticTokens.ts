@@ -5,6 +5,7 @@ import {
   XmlIndex,
   isKnownComponent,
 } from "../lib/xmlIndex";
+import { PARAMETER_FIELDS } from "../lib/componentValidator";
 
 // Token types (index-aware colouring layered over the TextMate grammar):
 //   class      — component connection names ([429_…], [ED_…], …)
@@ -28,7 +29,6 @@ const FIRST_IDENT_RE = /[A-Za-z_][A-Za-z0-9_]*/;
 // `<file>.csv line:N col:M` — a CSV cell reference, not an enum literal; must
 // not be coloured as an enum value.
 const CSV_REF_RE = /^[A-Za-z0-9_.\-]+\.csv\s+line\s*:\s*\d+\s+col\s*:\s*\d+/i;
-const TIMING_FIELDS = ["time", "interval", "occurrence", "period"];
 
 const KNOWN_MODIFIER = 1 << 0;
 
@@ -89,8 +89,8 @@ export function registerEsiSemanticTokensProvider(): vscode.Disposable {
           const message = index?.resolveConnectionMessage(enclosing);
           const field = message?.fields.find((f) => f.name === fieldName);
 
-          if (TIMING_FIELDS.includes(fieldName)) {
-            // Built-in timing key → keyword (always known).
+          if (PARAMETER_FIELDS.has(fieldName)) {
+            // Built-in parameter key → keyword (always known).
             builder.push(
               lineNum,
               fieldStart,

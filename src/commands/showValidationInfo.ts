@@ -9,7 +9,11 @@ import {
   getProfiles,
   getTestpitExe,
 } from "../lib/profileRegistry";
-import { CsvLookup, validateComponents } from "../lib/componentValidator";
+import {
+  CsvLookup,
+  validateComponents,
+  validateStructure,
+} from "../lib/componentValidator";
 
 export function registerShowValidationInfo(): vscode.Disposable {
   return vscode.commands.registerCommand(
@@ -49,17 +53,16 @@ export function registerShowValidationInfo(): vscode.Disposable {
       const index = getActiveProjectIndex();
       if (!index) {
         ch.appendLine(
-          "XmlIndex: <empty> — no active profile, or its config files are missing/unreadable. Pick a profile from the status bar and check the registry."
+          "XmlIndex: <empty> — no active profile, or its config files are missing/unreadable. Pick a profile from the status bar and check the registry. (Structural checks still run.)"
         );
-        return;
+      } else {
+        ch.appendLine(
+          `XmlIndex: ${index.connections.size} connections, ${index.messages.size} messages`
+        );
+        // Sample a couple of expected names so the user can sanity-check the index loaded the right project.
+        const sampleConns = Array.from(index.connections.keys()).slice(0, 5);
+        ch.appendLine(`Sample connections: ${sampleConns.join(", ")}`);
       }
-      ch.appendLine(
-        `XmlIndex: ${index.connections.size} connections, ${index.messages.size} messages`
-      );
-
-      // Sample a couple of expected names so the user can sanity-check the index loaded the right project.
-      const sampleConns = Array.from(index.connections.keys()).slice(0, 5);
-      ch.appendLine(`Sample connections: ${sampleConns.join(", ")}`);
 
       if (!editor || editor.document.languageId !== "esi") {
         ch.appendLine(
@@ -68,10 +71,15 @@ export function registerShowValidationInfo(): vscode.Disposable {
         return;
       }
 
-      // Use the same csvLookup that componentDiagnostics uses, so the
-      // numbers in this report match what the user sees as live squiggles.
+      // Use the same csvLookup that componentDiagnostics uses, so the numbers
+      // in this report match what the user sees as live squiggles. Structural
+      // checks run with or without an index; component checks need the index.
+      const text = editor.document.getText();
       const csvLookup = makeCsvLookup(editor.document.uri.fsPath);
-      const issues = validateComponents(editor.document.getText(), index, csvLookup);
+      const issues = [
+        ...validateStructure(text),
+        ...(index ? validateComponents(text, index, csvLookup) : []),
+      ];
       ch.appendLine(`Validation result on this file: ${issues.length} issue(s).`);
       for (const issue of issues.slice(0, 20)) {
         ch.appendLine(

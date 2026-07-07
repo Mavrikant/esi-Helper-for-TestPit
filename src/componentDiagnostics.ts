@@ -5,6 +5,7 @@ import {
   ComponentIssue,
   CsvLookup,
   validateComponents,
+  validateStructure,
 } from "./lib/componentValidator";
 import { getActiveProjectIndex } from "./lib/projectIndexCache";
 import { onActiveProfileChanged } from "./lib/profileRegistry";
@@ -23,25 +24,21 @@ export function registerComponentDiagnostics(): vscode.Disposable {
     if (document.languageId !== "esi") {
       return;
     }
+    const text = document.getText();
+    // Structural checks need no config, so they run even with no active
+    // profile — the extension still catches tag/nesting mistakes.
+    const issues = validateStructure(text);
     const index = getActiveProjectIndex();
-    if (!index) {
-      collection.delete(document.uri);
-      const key = document.uri.toString();
-      if (lastLoggedCount.get(key) !== -1) {
-        getOutputChannel().appendLine(
-          `[validate] ${path.basename(document.uri.fsPath)}: no active project — diagnostics cleared. Pick a project from the status bar to enable validation.`
-        );
-        lastLoggedCount.set(key, -1);
-      }
-      return;
+    if (index) {
+      const csvLookup = makeCsvLookup(document.uri.fsPath);
+      issues.push(...validateComponents(text, index, csvLookup));
     }
-    const csvLookup = makeCsvLookup(document.uri.fsPath);
-    const issues = validateComponents(document.getText(), index, csvLookup);
     collection.set(document.uri, issues.map(toDiagnostic));
     const key = document.uri.toString();
     if (lastLoggedCount.get(key) !== issues.length) {
+      const scope = index ? "" : " (structural only — no active project)";
       getOutputChannel().appendLine(
-        `[validate] ${path.basename(document.uri.fsPath)}: ${issues.length} component issue(s)`
+        `[validate] ${path.basename(document.uri.fsPath)}: ${issues.length} issue(s)${scope}`
       );
       lastLoggedCount.set(key, issues.length);
     }
@@ -133,7 +130,9 @@ function toDiagnostic(issue: ComponentIssue): vscode.Diagnostic {
   const diag = new vscode.Diagnostic(
     range,
     issue.message,
-    vscode.DiagnosticSeverity.Warning
+    issue.severity === "error"
+      ? vscode.DiagnosticSeverity.Error
+      : vscode.DiagnosticSeverity.Warning
   );
   diag.source = "esi Helper";
   diag.code = issue.kind;

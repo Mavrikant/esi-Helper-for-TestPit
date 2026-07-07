@@ -8,7 +8,11 @@ import {
 } from "../lib/renderComponent";
 import { ConnectionDef, FieldDef } from "../lib/xmlIndex";
 
-const TIMING_FIELDS = ["time", "interval", "occurrence", "period"];
+// Common cross-bus parameter fields offered in every message block. The
+// validator (componentValidator.PARAMETER_FIELDS) accepts a wider set incl.
+// bus-specific params (parity/value/angle/duration/image/…); those are left out
+// of completion so suggestions stay relevant to the typical case.
+const COMMON_PARAMETER_FIELDS = ["time", "period", "interval", "occurrence", "count"];
 
 const VARIABLE_BLOCK = /\[VARIABLES\]([\s\S]*?)\[\/VARIABLES\]/g;
 const VARIABLE_DECL = /%([A-Za-z_][A-Za-z0-9_]*)%/g;
@@ -49,12 +53,12 @@ export function registerEsiCompletionProvider(): vscode.Disposable {
           }
           case "fieldName": {
             const fieldRange = computeIdentifierRange(document, position);
-            const items: vscode.CompletionItem[] = TIMING_FIELDS.map((name) => {
+            const items: vscode.CompletionItem[] = COMMON_PARAMETER_FIELDS.map((name) => {
               const item = new vscode.CompletionItem(
                 name,
                 vscode.CompletionItemKind.Keyword
               );
-              item.detail = "TestPit timing field";
+              item.detail = "TestPit parameter field";
               item.range = fieldRange;
               item.filterText = name;
               return item;

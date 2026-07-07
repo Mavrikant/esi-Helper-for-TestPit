@@ -127,8 +127,8 @@
 			"name": "string.other.path.esi"
 		},
 		"strings": {
-			"comment": "Double-quoted string literals used as values.",
-			"match": "\"[^\"]*\"",
+			"comment": "Double-quoted string literals — straight (\"…\") and typographic/curly (“…”) quotes.",
+			"match": "\"[^\"]*\"|“[^”]*”",
 			"name": "string.quoted.double.esi"
 		},
 		"constants": {

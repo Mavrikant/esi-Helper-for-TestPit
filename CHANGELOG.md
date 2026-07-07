@@ -4,6 +4,21 @@ All notable changes to the **esi Helper for TestPit** extension will be document
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.1]
+
+Conformance and diagnostics polish following review against the TestPit source.
+
+### Fixed
+- **No more false "Unknown field" warnings on valid parameter fields.** The component validator's allowlist was widened to match TestPit's `ScriptMessageValidator.cpp` — message blocks may carry the scheduling/output parameters `count`, `parity`, `synchronize`, `validity`, `angle`, `duration`, and `image` (alongside the existing `time`/`interval`/`occurrence`/`period`). The discrete `value` field is intentionally still validated against its enum table.
+- **Quoted-string highlighting** now covers typographic quotes (`“…”`) in addition to straight `"…"`.
+
+### Added
+- **New structural checks that run even with no active profile** (they need no config): unbalanced/mismatched section tags (error), A708 message under `[STEP INPUTS]` (error), `MANUAL_VERIFY`/`EXTERNAL_VERIFY` under `[STEP INPUTS]` (warning), output-only fields (`occurrence`/`synchronize`) used in a `[STEP INPUTS]` message (warning), and duplicate keys within a message block (error). These mirror TestPit's own validator and are scoped to complete scripts (a `[TEST STEPS]`/`[TEST DEFINITION]` root), so include-fragments are never false-flagged.
+- **Numeric range check.** A bare numeric field value outside the message field's `MinValue`/`MaxValue` is flagged. Skipped for `%macro%` values, CSV references, and ranges, whose real value is only known after TestPit preprocessing — so no false positives.
+- **Numeric enum values are validated too.** An enum field may be set by its numeric value (e.g. `SDI = 1`), matching TestPit's `getEnumValue`; an out-of-table number (e.g. `SDI = 7`) is now flagged. Skipped for macros/CSV/file references and when the enum table carries no numeric values.
+- **Run Validity Check prints the full TestPit command.** The output channel now logs the active profile, the script path, a note about the temp-copy validation, and the exact command (with all flags) before the TestPit output — making CLI-vs-extension discrepancies easy to diagnose.
+- **`[TEST STEPS]` snippet** plus tidied descriptions/indentation for the existing step snippets.
+
 ## [0.4.0]
 
 A major rework of how the extension finds its TestPit configuration, plus broader project support, smarter formatting, and a full syntax-colour overhaul.

@@ -9,77 +9,84 @@
     "TEST DEFINITION": {
 		"prefix": "[TEST DEFINITION]",
 		"body": [
-			"[TEST DEFINITION]\n    Test Description =  $1\n    Test Configuration = $2\n    Test Dependencies = $3\n[/TEST DEFINITION]"		
+			"[TEST DEFINITION]\n    Test Description =  $1\n    Test Configuration = $2\n    Test Dependencies = $3\n[/TEST DEFINITION]"
 		],
 		"description": "Test definiton"
 	},
 	"STEP": {
 		"prefix": "[STEP 00]",
 		"body": [
-			"[STEP 00$1]\n    [STEP DEFINITION]\n        Step Description = $2\n        Step Requirements = $3\n        Step Dependencies = N/A$4\n        Step Conditions =   <pre> \n                                <br/> $5\n                                <br/> $6\n                            </pre>  \n        Step Expected Results = <pre> \n                                    <br/> $7\n                                </pre>  \n    [/STEP DEFINITION]\n    [STEP INPUTS]\n        $8\n    [/STEP INPUTS]\n    [STEP OUTPUTS]\n        $9\n    [/STEP OUTPUTS]\n[/STEP 00$1]"		
+			"[STEP 00$1]\n    [STEP DEFINITION]\n        Step Description = $2\n        Step Requirements = $3\n        Step Dependencies = N/A$4\n        Step Conditions =   <pre> \n                                <br/> $5\n                                <br/> $6\n                            </pre>  \n        Step Expected Results = <pre> \n                                    <br/> $7\n                                </pre>  \n    [/STEP DEFINITION]\n    [STEP INPUTS]\n        $8\n    [/STEP INPUTS]\n    [STEP OUTPUTS]\n        $9\n    [/STEP OUTPUTS]\n[/STEP 00$1]"
 		],
 		"description": "Step"
 	},
 	"STEP INPUTS": {
 		"prefix": "[STEP INPUTS]",
 		"body": [
-			" [STEP INPUTS]\n     $1\n [/STEP INPUTS]"		
+			"[STEP INPUTS]\n    $1\n[/STEP INPUTS]"
 		],
 		"description": "Step inputs"
 	},
 	"STEP OUTPUTS": {
 		"prefix": "[STEP OUTPUTS]",
 		"body": [
-			" [STEP OUTPUTS]\n     $1\n [/STEP OUTPUTS]"		
+			"[STEP OUTPUTS]\n    $1\n[/STEP OUTPUTS]"
 		],
 		"description": "Step outputs"
 	},
 	"STEP GET_DUMP": {
 		"prefix": "[STEP GET_DUMP]",
 		"body": [
-			"[STEP GET_DUMP]\n    [STEP INPUTS]\n    [/STEP INPUTS]\n[/STEP GET_DUMP]"		
+			"[STEP GET_DUMP]\n    [STEP INPUTS]\n    [/STEP INPUTS]\n[/STEP GET_DUMP]"
 		],
 		"description": "Step GET_DUMP"
+	},
+	"TEST STEPS": {
+		"prefix": "[TEST STEPS]",
+		"body": [
+			"[TEST STEPS]\n    $1\n[/TEST STEPS]"
+		],
+		"description": "Test steps"
 	},
 	"FUNC_": {
 		"prefix": "[FUNC_XXXXXX]",
 		"body": [
-			"[FUNC_$1]\n    time = $2\n[/FUNC_$1]"		
+			"[FUNC_$1]\n    time = $2\n[/FUNC_$1]"
 		],
 		"description": "FUNC_ step"
 	},
 	"PART_": {
 		"prefix": "[PART_XXXXXX]",
 		"body": [
-			"[PART_$1]\n    time = $2\n[/PART_$1]"		
+			"[PART_$1]\n    time = $2\n[/PART_$1]"
 		],
 		"description": "PART_ step"
 	},
 	"VARIABLES": {
 		"prefix": "[VARIABLES]",
 		"body": [
-			"[VARIABLES]\n    %$1% = $2\n[/VARIABLES]"		
+			"[VARIABLES]\n    %$1% = $2\n[/VARIABLES]"
 		],
 		"description": "VARIABLES"
 	},
 	"MANUAL_VERIFY": {
 		"prefix": "[MANUAL_VERIFY]",
 		"body": [
-			"[MANUAL_VERIFY]\n    text = $1\n[/MANUAL_VERIFY]"		
+			"[MANUAL_VERIFY]\n    text = $1\n[/MANUAL_VERIFY]"
 		],
 		"description": "MANUAL_VERIFY"
 	},
 	"EXTERNAL_VERIFY": {
 		"prefix": "[EXTERNAL_VERIFY]",
 		"body": [
-			"[EXTERNAL_VERIFY]\n    result file = $1\n[/EXTERNAL_VERIFY]"		
+			"[EXTERNAL_VERIFY]\n    result file = $1\n[/EXTERNAL_VERIFY]"
 		],
 		"description": "EXTERNAL_VERIFY"
 	},
 	"CMD_EXECUTE": {
 		"prefix": "[CMD_EXECUTE]",
 		"body": [
-			"[CMD_EXECUTE]\n    system call = $1\n    wait timeout = %TIMEOUT%\n[/CMD_EXECUTE]"		
+			"[CMD_EXECUTE]\n    system call = $1\n    wait timeout = %TIMEOUT%\n[/CMD_EXECUTE]"
 		],
 		"description": "CMD_EXECUTE"
 	}

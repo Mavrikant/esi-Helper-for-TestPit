@@ -1,7 +1,10 @@
 import * as assert from "assert";
 import * as path from "path";
 import { parseConfigFolder } from "../../lib/xmlIndex";
-import { validateComponents } from "../../lib/componentValidator";
+import {
+  validateComponents,
+  validateStructure,
+} from "../../lib/componentValidator";
 
 const FIXTURE_DIR = path.resolve(
   __dirname,
@@ -89,6 +92,38 @@ describe("componentValidator", () => {
     assert.deepStrictEqual(validateComponents(text, idx), []);
   });
 
+  it("does not warn about TestPit parameter fields (count, parity, synchronize, …)", () => {
+    // Per TestPit ScriptMessageValidator.cpp these are accepted in any message
+    // block alongside the message's own data fields — they must not be flagged
+    // as 'Unknown field'. (Multi-word params like "time offset"/"clear time"
+    // aren't matched by the single-token assignment regex, so they're skipped
+    // too.)
+    const text = [
+      "[429_L100SelectedCourseBNR_input1]",
+      "    count = 3",
+      "    parity = ODD",
+      "    synchronize = 1",
+      "    validity = VALID",
+      "    occurrence = 1",
+      "[/429_L100SelectedCourseBNR_input1]",
+    ].join("\n");
+    assert.deepStrictEqual(validateComponents(text, idx), []);
+  });
+
+  it("still validates the discrete 'value' field's enum (value is NOT a free param)", () => {
+    // Regression guard for the PARAMETER_FIELDS allowlist: `value` is a real
+    // enum field for DIS_ messages, so a bad value must still be flagged.
+    const text = [
+      "[DIS_PowerOnOff]",
+      "    value = POWER_NOPE",
+      "[/DIS_PowerOnOff]",
+    ].join("\n");
+    const issues = validateComponents(text, idx);
+    assert.strictEqual(issues.length, 1);
+    assert.strictEqual(issues[0].kind, "unknownEnum");
+    assert.strictEqual(issues[0].identifier, "POWER_NOPE");
+  });
+
   it("validates 1553 dot-notation fields (Word.Field) inside an open block", () => {
     // Good: TACANDMEOutput1 has DataValidity.TransmitReceive (Enum: RECEIVE/TRANSMITRECEIVE).
     const good = [
@@ -168,6 +203,45 @@ describe("componentValidator", () => {
     assert.deepStrictEqual(validateComponents(text, idx), []);
   });
 
+  describe("numeric range check (MinValue/MaxValue)", () => {
+    // Course is BNR with MinValue=0, MaxValue=359.9 in the fixtures.
+    const courseLine = (rhs: string) =>
+      [
+        "[429_L100SelectedCourseBNR_input1]",
+        `    Course = ${rhs}`,
+        "[/429_L100SelectedCourseBNR_input1]",
+      ].join("\n");
+
+    it("flags a numeric literal above MaxValue", () => {
+      const issues = validateComponents(courseLine("400.0"), idx);
+      assert.strictEqual(issues.length, 1);
+      assert.strictEqual(issues[0].kind, "valueOutOfRange");
+      assert.strictEqual(issues[0].identifier, "400.0");
+      assert.match(issues[0].message, /0\.\.359\.9/);
+    });
+
+    it("flags a numeric literal below MinValue", () => {
+      const issues = validateComponents(courseLine("-5"), idx);
+      assert.strictEqual(issues.length, 1);
+      assert.strictEqual(issues[0].kind, "valueOutOfRange");
+    });
+
+    it("accepts a value at the boundary and inside the range", () => {
+      assert.deepStrictEqual(validateComponents(courseLine("0"), idx), []);
+      assert.deepStrictEqual(validateComponents(courseLine("359.9"), idx), []);
+      assert.deepStrictEqual(validateComponents(courseLine("180"), idx), []);
+    });
+
+    it("skips a macro RHS (value only known after preprocessing)", () => {
+      assert.deepStrictEqual(validateComponents(courseLine("%COURSE%"), idx), []);
+    });
+
+    it("skips a range/expression RHS and tolerates a trailing comment", () => {
+      assert.deepStrictEqual(validateComponents(courseLine("100-200"), idx), []);
+      assert.deepStrictEqual(validateComponents(courseLine("180 # mid"), idx), []);
+    });
+  });
+
   it("returns no issues for an empty document", () => {
     assert.deepStrictEqual(validateComponents("", idx), []);
   });
@@ -202,13 +276,43 @@ describe("componentValidator", () => {
     assert.deepStrictEqual(validateComponents(text, idx), []);
   });
 
-  it("ignores an Enum-field assignment whose RHS is a numeric literal (no enum check fires)", () => {
+  it("accepts a valid numeric enum value (SDI = 0 → INSTALLATION_NUMBER_ALL_CALL)", () => {
+    // TestPit accepts an enum by its numeric value; 0 maps to a defined enum.
     const text = [
       "[429_L100SelectedCourseBNR_input1]",
       "    SDI = 0",
       "[/429_L100SelectedCourseBNR_input1]",
     ].join("\n");
-    // RHS doesn't start with an identifier char, so no unknownEnum is raised.
+    assert.deepStrictEqual(validateComponents(text, idx), []);
+  });
+
+  it("accepts the other valid numeric enum value (SDI = 1) and tolerates a trailing comment", () => {
+    const good = [
+      "[429_L100SelectedCourseBNR_input1]",
+      "    SDI = 1 # INSTALLATION_NUMBER_ONE",
+      "[/429_L100SelectedCourseBNR_input1]",
+    ].join("\n");
+    assert.deepStrictEqual(validateComponents(good, idx), []);
+  });
+
+  it("flags an out-of-table numeric enum value (SDI = 7)", () => {
+    const text = [
+      "[429_L100SelectedCourseBNR_input1]",
+      "    SDI = 7",
+      "[/429_L100SelectedCourseBNR_input1]",
+    ].join("\n");
+    const issues = validateComponents(text, idx);
+    assert.strictEqual(issues.length, 1);
+    assert.strictEqual(issues[0].kind, "unknownEnum");
+    assert.strictEqual(issues[0].identifier, "7");
+  });
+
+  it("skips a macro RHS on an enum field (no numeric guess)", () => {
+    const text = [
+      "[429_L100SelectedCourseBNR_input1]",
+      "    SDI = %SDI_VALUE%",
+      "[/429_L100SelectedCourseBNR_input1]",
+    ].join("\n");
     assert.deepStrictEqual(validateComponents(text, idx), []);
   });
 
@@ -361,5 +465,156 @@ describe("componentValidator", () => {
       "[/Discrete_PowerOnOff]",
     ].join("\n");
     assert.deepStrictEqual(validateComponents(text, idx), []);
+  });
+});
+
+describe("validateStructure (index-independent structural checks)", () => {
+  const wrap = (...inner: string[]) =>
+    ["[TEST STEPS]", "    [STEP 10]", ...inner, "    [/STEP 10]", "[/TEST STEPS]"].join(
+      "\n"
+    );
+
+  it("returns nothing for a balanced complete script", () => {
+    const text = wrap(
+      "        [STEP INPUTS]",
+      "            [429_Foo]",
+      "                time = 5",
+      "            [/429_Foo]",
+      "        [/STEP INPUTS]"
+    );
+    assert.deepStrictEqual(validateStructure(text), []);
+  });
+
+  it("skips include-fragments (no TEST STEPS / TEST DEFINITION root)", () => {
+    // A fragment can legitimately have tags closed by its parent — never flag.
+    const text = ["[STEP INPUTS]", "    [429_Foo]", "[/STEP 10]"].join("\n");
+    assert.deepStrictEqual(validateStructure(text), []);
+  });
+
+  it("flags an unclosed section at end of file", () => {
+    const text = ["[TEST STEPS]", "    [STEP 10]", "    [/STEP 10]"].join("\n");
+    const issues = validateStructure(text);
+    assert.strictEqual(issues.length, 1);
+    assert.strictEqual(issues[0].kind, "unbalancedTag");
+    assert.strictEqual(issues[0].severity, "error");
+    assert.strictEqual(issues[0].identifier, "TEST STEPS");
+  });
+
+  it("flags a stray closing tag with no opener", () => {
+    const text = ["[TEST STEPS]", "    [/STEP 99]", "[/TEST STEPS]"].join("\n");
+    const issues = validateStructure(text);
+    assert.strictEqual(issues.length, 1);
+    assert.strictEqual(issues[0].kind, "unbalancedTag");
+    assert.match(issues[0].message, /no matching opening tag/);
+  });
+
+  it("errors on an A708 message under STEP INPUTS", () => {
+    const text = wrap(
+      "        [STEP INPUTS]",
+      "            [708_WeatherRadar]",
+      "                time = 1",
+      "            [/708_WeatherRadar]",
+      "        [/STEP INPUTS]"
+    );
+    const issues = validateStructure(text);
+    assert.strictEqual(issues.length, 1);
+    assert.strictEqual(issues[0].kind, "invalidNesting");
+    assert.strictEqual(issues[0].severity, "error");
+    assert.match(issues[0].message, /A708/);
+  });
+
+  it("warns on MANUAL_VERIFY under STEP INPUTS", () => {
+    const text = wrap(
+      "        [STEP INPUTS]",
+      "            [MANUAL_VERIFY]",
+      "                text = check",
+      "            [/MANUAL_VERIFY]",
+      "        [/STEP INPUTS]"
+    );
+    const issues = validateStructure(text);
+    assert.strictEqual(issues.length, 1);
+    assert.strictEqual(issues[0].kind, "invalidNesting");
+    assert.strictEqual(issues[0].severity, "warning");
+  });
+
+  it("warns on an output-only field (occurrence) in a STEP INPUTS message", () => {
+    const text = wrap(
+      "        [STEP INPUTS]",
+      "            [429_Foo]",
+      "                occurrence = 1",
+      "            [/429_Foo]",
+      "        [/STEP INPUTS]"
+    );
+    const issues = validateStructure(text);
+    assert.strictEqual(issues.length, 1);
+    assert.strictEqual(issues[0].kind, "outputFieldInInput");
+    assert.strictEqual(issues[0].identifier, "occurrence");
+  });
+
+  it("does NOT flag output-only fields in a STEP OUTPUTS message", () => {
+    const text = wrap(
+      "        [STEP OUTPUTS]",
+      "            [429_Foo]",
+      "                occurrence = 1",
+      "                synchronize = 1",
+      "            [/429_Foo]",
+      "        [/STEP OUTPUTS]"
+    );
+    assert.deepStrictEqual(validateStructure(text), []);
+  });
+
+  it("does not treat [..] inside prose/values as a tag", () => {
+    const text = wrap(
+      "        [STEP DEFINITION]",
+      "            Step Description = see note [TBD] and [ref 5]",
+      "        [/STEP DEFINITION]"
+    );
+    assert.deepStrictEqual(validateStructure(text), []);
+  });
+
+  it("flags a duplicate key within a message block", () => {
+    const text = wrap(
+      "        [STEP INPUTS]",
+      "            [429_Foo]",
+      "                SDI = X",
+      "                SDI = Y",
+      "            [/429_Foo]",
+      "        [/STEP INPUTS]"
+    );
+    const issues = validateStructure(text);
+    assert.strictEqual(issues.length, 1);
+    assert.strictEqual(issues[0].kind, "duplicateKey");
+    assert.strictEqual(issues[0].severity, "error");
+    assert.strictEqual(issues[0].identifier, "SDI");
+    assert.strictEqual(issues[0].line, 5); // the second (duplicate) SDI line
+  });
+
+  it("does not treat the same key in two separate message blocks as a duplicate", () => {
+    const text = wrap(
+      "        [STEP INPUTS]",
+      "            [429_Foo]",
+      "                SDI = X",
+      "            [/429_Foo]",
+      "            [429_Bar]",
+      "                SDI = Y",
+      "            [/429_Bar]",
+      "        [/STEP INPUTS]"
+    );
+    assert.deepStrictEqual(validateStructure(text), []);
+  });
+
+  it("detects duplicate 1553 dot-notation keys", () => {
+    const text = wrap(
+      "        [STEP OUTPUTS]",
+      "            [1553_Foo]",
+      "                Mode.SelectedCourse = 1",
+      "                Mode.SelectedCourse = 2",
+      "            [/1553_Foo]",
+      "        [/STEP OUTPUTS]"
+    );
+    const issues = validateStructure(text);
+    assert.strictEqual(issues.length, 1);
+    assert.strictEqual(issues[0].kind, "duplicateKey");
+    assert.strictEqual(issues[0].identifier, "Mode.SelectedCourse");
   });
 });

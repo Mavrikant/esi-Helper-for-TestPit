@@ -2,7 +2,11 @@ import * as vscode from "vscode";
 import { runValidityCheckSync } from "../lib/testpitRunner";
 import { getOutputChannel } from "../lib/outputChannel";
 import { withTempScript } from "../lib/withTempScript";
-import { ensureTestpitExe, getActiveConfigs } from "../lib/profileRegistry";
+import {
+  ensureTestpitExe,
+  getActiveConfigs,
+  getActiveProfileName,
+} from "../lib/profileRegistry";
 import { buildValidityCommand } from "../profiles";
 
 export function registerRunValidityCheck(): vscode.Disposable {
@@ -18,14 +22,22 @@ export function registerRunValidityCheck(): vscode.Disposable {
         return;
       }
       const configs = getActiveConfigs();
+      const channel = getOutputChannel();
       await withTempScript(
         editor.document.uri.fsPath,
         editor.document.getText(),
         (tempPath) => {
           const command = buildValidityCommand(exe, tempPath, configs);
-          const output = runValidityCheckSync(command);
-          const channel = getOutputChannel();
           channel.clear();
+          channel.appendLine(`[profile]   ${getActiveProfileName() ?? "<none>"}`);
+          channel.appendLine(`[script]    ${editor.document.uri.fsPath}`);
+          channel.appendLine(
+            "[temp copy] validated against a temp copy of the current buffer (see --sf below)"
+          );
+          channel.appendLine(`[command]   ${command}`);
+          channel.appendLine("");
+          channel.appendLine("--- TestPit output ---");
+          const output = runValidityCheckSync(command);
           channel.appendLine(output);
           channel.show(true);
         }
