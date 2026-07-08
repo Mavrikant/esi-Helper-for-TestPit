@@ -61,7 +61,7 @@ describe("xmlIndex helpers", () => {
   it("renderConnection renders '... more' when fields > 12", () => {
     // Build a fake connection and index with a message with 15 fields
     const conn: any = { fullName: "429_X", bus: "429" };
-    const index: any = { messages: new Map() };
+    const index: any = { messages: new Map(), messagesByBus: new Map() };
     const msg: any = { name: "M", type: "BNR", fields: [] };
     for (let i = 0; i < 15; i++) msg.fields.push({ name: `F${i}` });
     index.messages.set("M", msg);

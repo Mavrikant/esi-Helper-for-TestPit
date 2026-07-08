@@ -1,6 +1,11 @@
 import * as assert from "assert";
 import * as path from "path";
-import { parseConfigFolder } from "../../lib/xmlIndex";
+import {
+  createEmptyIndex,
+  messageKey,
+  parseConfigFolder,
+} from "../../lib/xmlIndex";
+import type { MessageDef, ConnectionDef } from "../../lib/xmlIndex";
 
 const FIXTURE_DIR = path.resolve(
   __dirname,
@@ -242,6 +247,61 @@ describe("xmlIndex", () => {
         value!.enums?.map((e) => e.name),
         ["FAILURE", "SUCCESS"]
       );
+    });
+  });
+
+  describe("cross-bus message name collision", () => {
+    // Regression: an A429 message and a memory-port message can share a bare
+    // name (e.g. "RadioAltitude"). The flat `messages` map keeps only the
+    // last-ingested one, so a 429_ connection must resolve within its own bus
+    // via messagesByBus — not pick up the port message and lose its fields.
+    const buildCollidingIndex = () => {
+      const idx = createEmptyIndex();
+      const a429: MessageDef = {
+        name: "RadioAltitude",
+        bus: "429",
+        fields: [{ name: "SDI", parentMessage: "RadioAltitude", enums: [] }],
+      };
+      const mem: MessageDef = {
+        name: "RadioAltitude",
+        bus: "Mem",
+        fields: [{ name: "Value", parentMessage: "RadioAltitude", enums: [] }],
+      };
+      // Simulate ingestion order (a429 first, partition second → flat overwrite).
+      idx.messages.set(a429.name, a429);
+      idx.messagesByBus.set(messageKey("429", "RadioAltitude"), a429);
+      idx.messages.set(mem.name, mem); // flat: Mem clobbers A429 (the bug source)
+      idx.messagesByBus.set(messageKey("Mem", "RadioAltitude"), mem);
+
+      const a429Conn: ConnectionDef = {
+        fullName: "429_L164RadioAltitude",
+        bus: "429",
+        rawName: "L164RadioAltitude",
+        messageName: "RadioAltitude",
+      };
+      const memConn: ConnectionDef = {
+        fullName: "Mem_RadioAltitude",
+        bus: "Mem",
+        rawName: "RadioAltitude",
+        messageName: "RadioAltitude",
+      };
+      idx.connections.set(a429Conn.fullName, a429Conn);
+      idx.connections.set(memConn.fullName, memConn);
+      return idx;
+    };
+
+    it("resolves the A429 connection to the A429 message (keeps SDI)", () => {
+      const idx = buildCollidingIndex();
+      const msg = idx.resolveConnectionMessage("429_L164RadioAltitude");
+      assert.strictEqual(msg?.bus, "429");
+      assert.ok(msg?.fields.some((f) => f.name === "SDI"));
+    });
+
+    it("resolves the Mem connection to the memory-port message", () => {
+      const idx = buildCollidingIndex();
+      const msg = idx.resolveConnectionMessage("Mem_RadioAltitude");
+      assert.strictEqual(msg?.bus, "Mem");
+      assert.ok(msg?.fields.some((f) => f.name === "Value"));
     });
   });
 });

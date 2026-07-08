@@ -4,6 +4,11 @@ All notable changes to the **esi Helper for TestPit** extension will be document
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.2]
+
+### Fixed
+- **Cross-bus message-name collision caused false "Unknown field" errors.** When two config files defined a message with the same name on different buses — e.g. an A429 message `RadioAltitude` and a `NeoCASPorts.xml` memory port also named `RadioAltitude` — the later-ingested one overwrote the earlier in the shared message map, so a valid field (`SDI = …`) on the A429 message was reported as `Unknown field 'SDI' for message 'RadioAltitude'`. Message resolution (and hover) is now **bus-aware**: each connection resolves to the message from its own bus, so same-named messages on different buses no longer clash.
+
 ## [0.4.1]
 
 Conformance and diagnostics polish following review against the TestPit source.

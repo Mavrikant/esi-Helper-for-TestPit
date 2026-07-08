@@ -1,5 +1,12 @@
 import type * as vscode from "vscode";
-import { ConnectionDef, EnumDef, FieldDef, MessageDef, XmlIndex } from "./xmlIndex";
+import {
+  ConnectionDef,
+  EnumDef,
+  FieldDef,
+  MessageDef,
+  XmlIndex,
+  messageKey,
+} from "./xmlIndex";
 
 /**
  * MarkdownString rendering for connections / fields / enums. Used by both
@@ -21,7 +28,11 @@ export function renderConnection(
   if (conn.card || conn.channel || conn.speed) {
     md.appendMarkdown(`- Card / Channel / Speed: \`${conn.card ?? "?"}\` / \`${conn.channel ?? "?"}\` / \`${conn.speed ?? "?"}\`\n`);
   }
-  const message = conn.messageName ? index.messages.get(conn.messageName) : undefined;
+  // Bus-aware: avoid picking up a same-named message from a different bus.
+  const message = conn.messageName
+    ? index.messagesByBus.get(messageKey(conn.bus, conn.messageName)) ??
+      index.messages.get(conn.messageName)
+    : undefined;
   if (message) {
     md.appendMarkdown(`- Message: \`${message.name}\``);
     if (message.type) {

@@ -99,7 +99,13 @@ export interface MessageDef {
 
 export interface XmlIndex {
   connections: Map<string, ConnectionDef>;
+  /** Flat, keyed by bare message name — last writer wins on a cross-bus name
+   *  collision. Kept for name-only lookups; use `messagesByBus` to resolve
+   *  within a specific bus. */
   messages: Map<string, MessageDef>;
+  /** Keyed by `messageKey(bus, name)` — collision-safe, so an A429 message and
+   *  a memory-port message that share a name both survive. */
+  messagesByBus: Map<string, MessageDef>;
   resolveConnectionMessage(fullName: string): MessageDef | undefined;
 }
 
@@ -139,13 +145,28 @@ const BUS_PREFIX: Record<string, Bus> = {
   Memory: "Mem",
 };
 
+/** Collision-safe key for `messagesByBus` — a message is identified by its
+ *  bus AND name, since names can repeat across buses (e.g. an A429 message and
+ *  a memory port both named "RadioAltitude"). */
+export function messageKey(bus: Bus, name: string): string {
+  return `${bus}:${name}`;
+}
+
 export function createEmptyIndex(): XmlIndex {
   return {
     connections: new Map(),
     messages: new Map(),
+    messagesByBus: new Map(),
     resolveConnectionMessage(fullName) {
       const conn = this.connections.get(fullName);
       if (conn?.messageName) {
+        // Bus-aware first: the flat `messages` map keeps only the last-ingested
+        // message for a given name, so a 429_ connection could otherwise pick up
+        // a same-named Mem/partition message. Resolve within the connection's bus.
+        const byBus = this.messagesByBus.get(messageKey(conn.bus, conn.messageName));
+        if (byBus) {
+          return byBus;
+        }
         const direct = this.messages.get(conn.messageName);
         if (direct) {
           return direct;
@@ -154,14 +175,23 @@ export function createEmptyIndex(): XmlIndex {
       // VORILS<N>_<MsgName> fallback: VORILSMessageFields registers a
       // canonical VORILS1_<MsgName> connection, but scripts may use
       // VORILS2_…, VORILS3_…, etc. for additional units. Strip the unit
-      // number and look up the message directly.
+      // number and look up the message (bus-aware, then by name).
       const m = VORILS_UNIT_PREFIX.exec(fullName);
       if (m) {
-        return this.messages.get(m[1]);
+        return (
+          this.messagesByBus.get(messageKey("VORILS", m[1])) ??
+          this.messages.get(m[1])
+        );
       }
       return undefined;
     },
   };
+}
+
+/** Register a message in both the flat and bus-aware maps. */
+function registerMessage(index: XmlIndex, def: MessageDef): void {
+  index.messages.set(def.name, def);
+  index.messagesByBus.set(messageKey(def.bus, def.name), def);
 }
 
 /**
@@ -373,7 +403,7 @@ function ingestVORILSMessageFields(root: Record<string, unknown>, index: XmlInde
       for (const f of fields) {
         def.fields.push(parseVORILSField(f as Record<string, unknown>, name));
       }
-      index.messages.set(name, def);
+      registerMessage(index, def);
       // Synthesize a canonical VORILS1_<MessageName> connection so completion
       // suggests it. Other unit numbers (VORILS2, VORILS3, …) are accepted
       // via the resolveConnectionMessage / isKnownComponent fallback that
@@ -439,7 +469,7 @@ function ingestA429MessageFields(root: Record<string, unknown>, index: XmlIndex)
     for (const f of fields) {
       def.fields.push(parseElementStyleField(f as Record<string, unknown>, name));
     }
-    index.messages.set(name, def);
+    registerMessage(index, def);
   }
 }
 
@@ -476,7 +506,7 @@ function ingestMilStd1553Fields(root: Record<string, unknown>, index: XmlIndex):
         def.fields.push(field);
       }
     }
-    index.messages.set(name, def);
+    registerMessage(index, def);
   }
 }
 
@@ -513,7 +543,7 @@ function ingestDiscreteSignals(root: Record<string, unknown>, index: XmlIndex): 
         parentMessage: name,
       });
     }
-    index.messages.set(name, def);
+    registerMessage(index, def);
     // Discrete signals are referenced as connections under DIS_<name>
     // (TestPit's PartitionAlias for the Discrete partition).
     for (const prefix of PREFIXES_BY_BUS["DIS"]) {
@@ -574,7 +604,7 @@ function ingestMemoryPorts(root: Record<string, unknown>, index: XmlIndex): void
         for (const f of asArray(inlineMessage.Field)) {
           def.fields.push(parseRefField(f as Record<string, unknown>, messageName, commonEnums));
         }
-        index.messages.set(messageName, def);
+        registerMessage(index, def);
         isInlineMem = bus === "Mem";
       } else if (ref && commonPorts.has(ref)) {
         // NEOCAS-style: <Port Name="LocalName" Ref="CommonPortName"/>.
@@ -583,10 +613,16 @@ function ingestMemoryPorts(root: Record<string, unknown>, index: XmlIndex): void
         bus = common.bus;
       } else {
         // Neither inline nor resolvable — register a bare message so the PART_
-        // connection still resolves (just with no fields).
+        // connection still resolves (just with no fields). Guarded so it never
+        // clobbers a richer same-name/same-bus message ingested elsewhere.
         messageName = localName;
+        const stub: MessageDef = { name: messageName, bus, fields: [] };
         if (!index.messages.has(messageName)) {
-          index.messages.set(messageName, { name: messageName, bus, fields: [] });
+          index.messages.set(messageName, stub);
+        }
+        const stubKey = messageKey(bus, messageName);
+        if (!index.messagesByBus.has(stubKey)) {
+          index.messagesByBus.set(stubKey, stub);
         }
       }
 
@@ -668,7 +704,7 @@ function collectCommonPorts(
     for (const f of asArray(message?.Field)) {
       def.fields.push(parseRefField(f as Record<string, unknown>, messageName, commonEnums));
     }
-    index.messages.set(messageName, def);
+    registerMessage(index, def);
     map.set(portName, { messageName, bus });
   }
   return map;
@@ -717,7 +753,7 @@ function ingestEDMessageFields(root: Record<string, unknown>, index: XmlIndex): 
     for (const f of asArray(m.Field)) {
       def.fields.push(parseRefField(f as Record<string, unknown>, name, commonEnums));
     }
-    index.messages.set(name, def);
+    registerMessage(index, def);
     for (const prefix of PREFIXES_BY_BUS["ED"]) {
       const fullName = `${prefix}${name}`;
       index.connections.set(fullName, {
