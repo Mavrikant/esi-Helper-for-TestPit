@@ -90,8 +90,8 @@
 			"name": "variable.other.macro.esi"
 		},
 		"tags": {
-			"comment": "Section / component tags: [NAME] and [/NAME]. Component connections ([429_…], [ED_…], …) are re-coloured by the semantic-token provider.",
-			"match": "(\\[)(/?)([^\\[\\]]+?)(\\])",
+			"comment": "Section / component tags: [NAME], [/NAME] and the one-liner [NAME/] (opens and closes on one line). Both slashes are punctuation, so the tag name colours the same in all three forms. Component connections ([429_…], [ED_…], …) are re-coloured by the semantic-token provider.",
+			"match": "(\\[)(/?)([^\\[\\]]+?)(/?)(\\])",
 			"captures": {
 				"1": {
 					"name": "punctuation.definition.tag.begin.esi"
@@ -103,6 +103,9 @@
 					"name": "entity.name.tag.esi"
 				},
 				"4": {
+					"name": "punctuation.definition.tag.end.esi"
+				},
+				"5": {
 					"name": "punctuation.definition.tag.end.esi"
 				}
 			}

@@ -673,4 +673,46 @@ describe("formatEsi", () => {
     assert.strictEqual(eqCol(tier, "x "), 8 + 9 + 1);
     assert.strictEqual(eqCol(tier, "longerkey "), 8 + 9 + 1);
   });
+
+  // A one-liner `[NAME/]` opens and closes on the same line, so it must not
+  // shift the indentation of anything after it.
+  it("keeps a one-liner section depth-neutral", () => {
+    const input = [
+      "[STEP 10]",
+      "[STEP DUMP/]",
+      "[STEP INPUTS]",
+      "foo",
+      "[/STEP INPUTS]",
+      "[/STEP 10]",
+    ].join("\n");
+    const expected = [
+      "[STEP 10]",
+      "    [STEP DUMP/]",
+      "    [STEP INPUTS]",
+      "        foo",
+      "    [/STEP INPUTS]",
+      "[/STEP 10]",
+    ].join("\n");
+    assert.strictEqual(formatEsi(input), expected);
+  });
+
+  it("does not let a one-liner steal a later same-named block's closer", () => {
+    const input = [
+      "[STEP 10]",
+      "[ED_A/]",
+      "[ED_A]",
+      "x = 1",
+      "[/ED_A]",
+      "[/STEP 10]",
+    ].join("\n");
+    const expected = [
+      "[STEP 10]",
+      "    [ED_A/]",
+      "    [ED_A]",
+      "        x = 1",
+      "    [/ED_A]",
+      "[/STEP 10]",
+    ].join("\n");
+    assert.strictEqual(formatEsi(input), expected);
+  });
 });

@@ -12,7 +12,22 @@ import { ConnectionDef, FieldDef } from "../lib/xmlIndex";
 // validator (componentValidator.PARAMETER_FIELDS) accepts a wider set incl.
 // bus-specific params (parity/value/angle/duration/image/…); those are left out
 // of completion so suggestions stay relevant to the typical case.
-const COMMON_PARAMETER_FIELDS = ["time", "period", "interval", "occurrence", "count"];
+const COMMON_PARAMETER_FIELDS = [
+  "time",
+  "period",
+  "interval",
+  "occurrence",
+  "count",
+  "match",
+];
+
+// The only two values `match` accepts (TestPit checkMatchValue). Offered
+// directly — `match` is a TestPit parameter, not an XML-indexed field, so
+// there is no enum table to draw them from.
+const MATCH_VALUE_HINTS: ReadonlyArray<[string, string]> = [
+  ["next", "the default: the next record no other block has taken"],
+  ["any", "any record of the window may answer this block"],
+];
 
 const VARIABLE_BLOCK = /\[VARIABLES\]([\s\S]*?)\[\/VARIABLES\]/g;
 const VARIABLE_DECL = /%([A-Za-z_][A-Za-z0-9_]*)%/g;
@@ -76,6 +91,20 @@ export function registerEsiCompletionProvider(): vscode.Disposable {
             return items;
           }
           case "fieldValue": {
+            // `match` is answered without the index — it needs no config.
+            if (ctx.fieldName === "match") {
+              const matchRange = computeIdentifierRange(document, position);
+              return MATCH_VALUE_HINTS.map(([name, detail]) => {
+                const item = new vscode.CompletionItem(
+                  name,
+                  vscode.CompletionItemKind.EnumMember
+                );
+                item.detail = detail;
+                item.range = matchRange;
+                item.filterText = name;
+                return item;
+              });
+            }
             if (!index) {
               return [];
             }

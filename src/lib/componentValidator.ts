@@ -1,3 +1,4 @@
+import { parseSectionTagLine } from "./parseSectionTag";
 import {
   COMPONENT_TAG_PATTERN,
   EnumDef,
@@ -15,7 +16,8 @@ export type IssueKind =
   | "invalidNesting"
   | "outputFieldInInput"
   | "valueOutOfRange"
-  | "duplicateKey";
+  | "duplicateKey"
+  | "invalidParameterValue";
 
 export interface ComponentIssue {
   line: number;
@@ -43,7 +45,10 @@ export type CsvLookup = (
   col: number
 ) => string | undefined;
 
-const TAG_RE = /\[(\/?)([A-Za-z0-9_]+)\]/g;
+// Inline-capable tag scan for the component pass. The trailing `(\/?)` is the
+// one-liner form `[NAME/]` (see parseSectionTag.ts) — it opens AND closes, so
+// the connection name is still checked but nothing is pushed on the stack.
+const TAG_RE = /\[(\/?)([A-Za-z0-9_]+)(\/?)\]/g;
 // Field name may include dots (1553 `Mode.SelectedCourse`).
 const ASSIGNMENT_RE = /^(\s*)([A-Za-z_][A-Za-z0-9_.]*)\s*=\s*(.*)$/;
 const RHS_IDENT_RE = /^[A-Za-z_][A-Za-z0-9_]*/;
@@ -72,28 +77,94 @@ export const PARAMETER_FIELDS = new Set([
   "count",
   "parity",
   "synchronize",
+  "match",
   "validity",
   "angle",
   "duration",
   "image",
 ]);
 
+// `match` says WHICH record of the comparison window may answer an expected
+// block (TestPit ParserCharacterDefinitions.h / ComparisonEngine.cpp):
+//   next — the default: the next record no other block has taken (the
+//          positional rule that makes an ordered sequence verifiable)
+//   any  — any record of the window carrying these values, wherever it sits
+// TestPit's checkMatchValue REFUSES anything else rather than falling back to
+// the default silently, so an unknown value is a hard error, not a warning.
+export const MATCH_FIELD = "match";
+export const MATCH_VALUES = ["any", "next"];
+
+// `occurrence` and `match` are the ONLY parameters whose VALUE TestPit
+// constrains (ScriptMessageValidator.cpp checkOccurrenceValue / checkMatchValue),
+// and in both cases it refuses an unrecognised value outright instead of falling
+// back to a default — an out-of-grammar occurrence used to run against an
+// expected count of -1, a silent determinate FAIL. So a bad value is an error.
+// A %macro% value is always exempt: it resolves at run time.
+const OCCURRENCE_FIELD = "occurrence";
+const OCCURRENCE_VALUE_RE = /^(ALL|[<>]?\s*\d+)$/;
+
+/**
+ * Check the value of `occurrence` / `match`. Any other key is ignored.
+ * `keyCol`/`keyLen` locate the key so the '=' — and from it the value — can be
+ * found without searching for the value text, which may repeat the key.
+ */
+function checkParameterValue(
+  key: string,
+  rhs: string,
+  raw: string,
+  lineNum: number,
+  keyCol: number,
+  keyLen: number,
+  issues: ComponentIssue[]
+): void {
+  if (key !== MATCH_FIELD && key !== OCCURRENCE_FIELD) {
+    return;
+  }
+  const value = rhs.split("#")[0].trim();
+  if (value.includes("%")) {
+    return;
+  }
+  const isMatch = key === MATCH_FIELD;
+  const bad = isMatch
+    ? !MATCH_VALUES.includes(value)
+    : !OCCURRENCE_VALUE_RE.test(value);
+  if (!bad) {
+    return;
+  }
+  const message = isMatch
+    ? `Invalid 'match' value '${value}'. Use 'any' (any record of the window may answer) or 'next' (the default: the next record no other block has taken).`
+    : `Invalid 'occurrence' value '${value}'. Use 'ALL' or an optional '<'/'>' operator with a non-negative number.`;
+  const eq = raw.indexOf("=", keyCol + keyLen);
+  const valueCol = value.length > 0 ? raw.indexOf(value, eq + 1) : eq + 1;
+  issues.push({
+    line: lineNum,
+    startCol: valueCol,
+    endCol: valueCol + (value.length || 1),
+    message,
+    identifier: key,
+    kind: "invalidParameterValue",
+    severity: "error",
+  });
+}
+
 // --- Structural-check vocabulary (from TestPit ParserCharacterDefinitions.h) ---
 // A section/message tag occupies its own line and TestPit tags are line-oriented,
 // so a whole-line bracket is a tag while an inline `[..]` in prose/values is not.
-// This keeps the structural checks free of prose false-positives.
-const SECTION_LINE_RE = /^(\s*)\[\s*(\/?)\s*([^\]\r\n#]+?)\s*\]\s*(?:#.*)?$/;
+// This keeps the structural checks free of prose false-positives. The line is
+// classified by parseSectionTag.ts, which ports the reader's own grammar —
+// including the one-liner `[NAME/]` and the sloppy forms it repairs.
 const SEC_TEST_STEPS = "TEST STEPS";
 const SEC_TEST_DEFINITION = "TEST DEFINITION";
 const SEC_STEP_INPUTS = "STEP INPUTS";
 const SEC_MANUAL_VERIFY = "MANUAL_VERIFY";
 const SEC_EXTERNAL_VERIFY = "EXTERNAL_VERIFY";
 const A708_TAG_PREFIX = "708_";
-// occurrence/synchronize are output-only for EVERY bus (ScriptMessageValidator.cpp
-// outputFields), so inside a STEP INPUTS message they are always an "unexpected
-// output field in input message" — safe to flag regardless of bus. Bus-specific
-// output params (validity/angle/…) are deliberately excluded to stay conservative.
-const OUTPUT_ONLY_IN_INPUT = new Set(["occurrence", "synchronize"]);
+// occurrence/synchronize/match are output-only for EVERY bus
+// (ScriptMessageValidator.cpp outputFields), so inside a STEP INPUTS message they
+// are always an "unexpected output field in input message" — safe to flag
+// regardless of bus. Bus-specific output params (validity/angle/…) are
+// deliberately excluded to stay conservative.
+const OUTPUT_ONLY_IN_INPUT = new Set(["occurrence", "synchronize", "match"]);
 
 interface StackEntry {
   name: string;
@@ -140,8 +211,13 @@ export function validateComponents(
         }
         continue;
       }
+      const isOneLiner = tagMatch[3] === "/";
       const isComponent = COMPONENT_TAG.test(name);
-      stack.push({ name, isComponent });
+      // `[NAME/]` is a complete, empty block — the connection name is still
+      // worth checking, but it opens no scope for field assignments.
+      if (!isOneLiner) {
+        stack.push({ name, isComponent });
+      }
       if (isComponent && !isKnownComponent(index, name)) {
         const startCol = tagMatch.index + 1; // skip the [
         issues.push({
@@ -430,10 +506,9 @@ export function validateStructure(documentText: string): ComponentIssue[] {
   // Fragment guard.
   let isCompleteScript = false;
   for (const raw of lines) {
-    const m = SECTION_LINE_RE.exec(raw);
-    if (m && m[2] !== "/") {
-      const name = m[3].trim();
-      if (name === SEC_TEST_STEPS || name === SEC_TEST_DEFINITION) {
+    const tag = parseSectionTagLine(raw);
+    if (tag && !tag.invalid && tag.kind !== "close") {
+      if (tag.name === SEC_TEST_STEPS || tag.name === SEC_TEST_DEFINITION) {
         isCompleteScript = true;
         break;
       }
@@ -457,16 +532,19 @@ export function validateStructure(documentText: string): ComponentIssue[] {
 
   for (let lineNum = 0; lineNum < lines.length; lineNum++) {
     const raw = lines[lineNum];
-    const m = SECTION_LINE_RE.exec(raw);
-    if (m) {
-      const closing = m[2] === "/";
-      const name = m[3].trim();
-      const lb = raw.indexOf("[");
-      const rb = raw.indexOf("]");
-      const startCol = lb >= 0 ? lb : 0;
-      const endCol = rb >= 0 ? rb + 1 : raw.length;
+    const tag = parseSectionTagLine(raw);
+    if (tag) {
+      // A name TestPit's checkTagName would reject outright (empty, or still
+      // holding a brace or slash) is not guessed at: skip the line entirely
+      // rather than push a nonsense name that cascades into bogus
+      // "never closed" / "no matching opening tag" errors down the file.
+      // TestPit's own validity check reports the real error.
+      if (tag.invalid) {
+        continue;
+      }
+      const { kind, name, startCol, endCol } = tag;
 
-      if (closing) {
+      if (kind === "close") {
         let matchIdx = -1;
         for (let i = stack.length - 1; i >= 0; i--) {
           if (stack[i].name === name) {
@@ -504,6 +582,8 @@ export function validateStructure(documentText: string): ComponentIssue[] {
       }
 
       // Opening tag — nesting checks (only when a STEP INPUTS is an ancestor).
+      // A one-liner is an opening tag too (it just closes immediately), so it
+      // is subject to the same nesting rules.
       if (inInputBlock()) {
         if (name.startsWith(A708_TAG_PREFIX)) {
           issues.push({
@@ -527,6 +607,12 @@ export function validateStructure(documentText: string): ComponentIssue[] {
           });
         }
       }
+      // `[NAME/]` opens and closes on one line, so it is depth-neutral: it
+      // never goes on the stack and can never be "unclosed".
+      if (kind === "oneLiner") {
+        continue;
+      }
+
       const isComponent = COMPONENT_TAG_PATTERN.test(name);
       stack.push({
         name,
@@ -574,6 +660,9 @@ export function validateStructure(documentText: string): ComponentIssue[] {
               severity: "warning",
             });
           }
+          // `occurrence` / `match` value grammar (case-sensitive, as in the
+          // engine).
+          checkParameterValue(key, a[3], raw, lineNum, col, key.length, issues);
         }
       }
     }

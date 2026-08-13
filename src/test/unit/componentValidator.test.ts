@@ -617,4 +617,242 @@ describe("validateStructure (index-independent structural checks)", () => {
     assert.strictEqual(issues[0].kind, "duplicateKey");
     assert.strictEqual(issues[0].identifier, "Mode.SelectedCourse");
   });
+
+  // --- one-liner sections: [NAME/] opens AND closes on one line ---
+
+  it("does not report a one-liner section as unclosed", () => {
+    const text = wrap("        [STEP DUMP/]");
+    assert.deepStrictEqual(validateStructure(text), []);
+  });
+
+  it("does not report a one-liner at file level as unclosed", () => {
+    const text = [
+      "[UnusedOneLiner/]",
+      "[TEST STEPS]",
+      "    [STEP 10]",
+      "    [/STEP 10]",
+      "[/TEST STEPS]",
+    ].join("\n");
+    assert.deepStrictEqual(validateStructure(text), []);
+  });
+
+  it("keeps a one-liner depth-neutral (later closes still pair up)", () => {
+    const text = wrap(
+      "        [STEP DUMP/]",
+      "        [STEP OUTPUTS]",
+      "            [429_Foo]",
+      "                time = 5",
+      "            [/429_Foo]",
+      "        [/STEP OUTPUTS]"
+    );
+    assert.deepStrictEqual(validateStructure(text), []);
+  });
+
+  it("still applies nesting rules to a one-liner (A708 under STEP INPUTS)", () => {
+    // Depth-neutral does not mean invisible: the engine emits a real
+    // begin+end pair for `[708_Foo/]`, so it is still an A708 message that
+    // cannot live under [STEP INPUTS].
+    const text = wrap(
+      "        [STEP INPUTS]",
+      "            [708_Foo/]",
+      "        [/STEP INPUTS]"
+    );
+    const issues = validateStructure(text);
+    assert.strictEqual(issues.length, 1);
+    assert.strictEqual(issues[0].kind, "invalidNesting");
+    assert.strictEqual(issues[0].identifier, "708_Foo");
+  });
+
+  it("a one-liner opens no scope for field assignments", () => {
+    // `time` here belongs to no message block, so the duplicate-key tracker
+    // must not attribute it to the one-liner.
+    const text = wrap("        [429_Foo/]", "        time = 5", "        time = 6");
+    assert.deepStrictEqual(validateStructure(text), []);
+  });
+
+  // --- the sloppy forms TestPit repairs: no cascading false errors ---
+
+  it("accepts repeated braces/slashes around a message name", () => {
+    const text = wrap(
+      "        [STEP INPUTS]",
+      "            [[429_Foo]]",
+      "                time = 5",
+      "            [//429_Foo]",
+      "        [/STEP INPUTS]"
+    );
+    assert.deepStrictEqual(validateStructure(text), []);
+  });
+
+  it("accepts text left after a tag end", () => {
+    const text = wrap(
+      "        [STEP INPUTS]",
+      "            [429_Foo] leftover",
+      "                time = 5",
+      "            [/429_Foo]",
+      "        [/STEP INPUTS]"
+    );
+    assert.deepStrictEqual(validateStructure(text), []);
+  });
+
+  it("accepts a tag whose closing brace is missing", () => {
+    const text = wrap(
+      "        [STEP INPUTS]",
+      "            [429_Foo",
+      "                time = 5",
+      "            [/429_Foo]",
+      "        [/STEP INPUTS]"
+    );
+    assert.deepStrictEqual(validateStructure(text), []);
+  });
+
+  it("ignores a tag whose name TestPit would reject, without cascading", () => {
+    // `[ 429_Foo / ]` does not end in '/]' so it is not a one-liner; the name
+    // keeps a slash, which TestPit rejects. Skip it silently rather than push
+    // a nonsense name that makes every later close look unbalanced.
+    const text = wrap(
+      "        [STEP INPUTS]",
+      "            [ 429_Foo / ]",
+      "        [/STEP INPUTS]"
+    );
+    assert.deepStrictEqual(validateStructure(text), []);
+  });
+
+  // --- the `match` parameter ---
+
+  it("accepts match = any and match = next", () => {
+    for (const value of ["any", "next"]) {
+      const text = wrap(
+        "        [STEP OUTPUTS]",
+        "            [429_Foo]",
+        `                match = ${value}`,
+        "            [/429_Foo]",
+        "        [/STEP OUTPUTS]"
+      );
+      assert.deepStrictEqual(validateStructure(text), [], `match = ${value}`);
+    }
+  });
+
+  it("rejects any other match value, and underlines the value", () => {
+    const text = wrap(
+      "        [STEP OUTPUTS]",
+      "            [429_Foo]",
+      "                match = first",
+      "            [/429_Foo]",
+      "        [/STEP OUTPUTS]"
+    );
+    const issues = validateStructure(text);
+    assert.strictEqual(issues.length, 1);
+    assert.strictEqual(issues[0].kind, "invalidParameterValue");
+    assert.strictEqual(issues[0].severity, "error");
+    assert.strictEqual(issues[0].identifier, "match");
+    assert.match(issues[0].message, /'any'/);
+    assert.match(issues[0].message, /'next'/);
+    const line = text.split("\n")[issues[0].line];
+    assert.strictEqual(
+      line.slice(issues[0].startCol, issues[0].endCol),
+      "first"
+    );
+  });
+
+  it("rejects match values that differ only in case (the engine is case-sensitive)", () => {
+    const text = wrap(
+      "        [STEP OUTPUTS]",
+      "            [429_Foo]",
+      "                match = ANY",
+      "            [/429_Foo]",
+      "        [/STEP OUTPUTS]"
+    );
+    const issues = validateStructure(text);
+    assert.strictEqual(issues.length, 1);
+    assert.strictEqual(issues[0].kind, "invalidParameterValue");
+  });
+
+  it("exempts a macro match value — it resolves at run time", () => {
+    const text = wrap(
+      "        [STEP OUTPUTS]",
+      "            [429_Foo]",
+      "                match = %MATCH_MODE%",
+      "            [/429_Foo]",
+      "        [/STEP OUTPUTS]"
+    );
+    assert.deepStrictEqual(validateStructure(text), []);
+  });
+
+  it("ignores a trailing comment when checking the match value", () => {
+    const text = wrap(
+      "        [STEP OUTPUTS]",
+      "            [429_Foo]",
+      "                match = any   # wherever it sits in the window",
+      "            [/429_Foo]",
+      "        [/STEP OUTPUTS]"
+    );
+    assert.deepStrictEqual(validateStructure(text), []);
+  });
+
+  it("underlines the value on `match = match`, not the key", () => {
+    const text = wrap(
+      "        [STEP OUTPUTS]",
+      "            [429_Foo]",
+      "                match = match",
+      "            [/429_Foo]",
+      "        [/STEP OUTPUTS]"
+    );
+    const issues = validateStructure(text);
+    assert.strictEqual(issues.length, 1);
+    const line = text.split("\n")[issues[0].line];
+    // The second occurrence — the value, past the '='.
+    assert.ok(issues[0].startCol > line.indexOf("="));
+  });
+
+  // --- the `occurrence` value grammar (the other half of checkOccurrenceValue) ---
+
+  it("accepts every legal occurrence value", () => {
+    for (const value of ["ALL", "0", "3", ">3", "<5", "> 3", "%COUNT%"]) {
+      const text = wrap(
+        "        [STEP OUTPUTS]",
+        "            [429_Foo]",
+        `                occurrence = ${value}`,
+        "            [/429_Foo]",
+        "        [/STEP OUTPUTS]"
+      );
+      assert.deepStrictEqual(
+        validateStructure(text),
+        [],
+        `occurrence = ${value}`
+      );
+    }
+  });
+
+  it("rejects an out-of-grammar occurrence value", () => {
+    // TestPit ran these against an expected count of -1 — a silent FAIL.
+    for (const value of ["all", ">=3", ">", "-1", "two"]) {
+      const text = wrap(
+        "        [STEP OUTPUTS]",
+        "            [429_Foo]",
+        `                occurrence = ${value}`,
+        "            [/429_Foo]",
+        "        [/STEP OUTPUTS]"
+      );
+      const issues = validateStructure(text);
+      assert.strictEqual(issues.length, 1, `occurrence = ${value}`);
+      assert.strictEqual(issues[0].kind, "invalidParameterValue");
+      assert.strictEqual(issues[0].identifier, "occurrence");
+      assert.match(issues[0].message, /'ALL'/);
+    }
+  });
+
+  it("warns that match is output-only inside a STEP INPUTS message", () => {
+    const text = wrap(
+      "        [STEP INPUTS]",
+      "            [429_Foo]",
+      "                match = any",
+      "            [/429_Foo]",
+      "        [/STEP INPUTS]"
+    );
+    const issues = validateStructure(text);
+    assert.strictEqual(issues.length, 1);
+    assert.strictEqual(issues[0].kind, "outputFieldInInput");
+    assert.strictEqual(issues[0].severity, "warning");
+    assert.strictEqual(issues[0].identifier, "match");
+  });
 });

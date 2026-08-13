@@ -4,6 +4,18 @@ All notable changes to the **esi Helper for TestPit** extension will be document
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.3]
+
+Catch-up with the TestPit comparison-engine work (Source r2341–r2345): the new `match` parameter, and a section-tag reader that matches the engine's own.
+
+### Fixed
+- **One-liner sections `[NAME/]` were reported as unclosed.** TestPit's reader accepts `[NAME/]` as a section that opens *and* closes on a single line — it is the only reason a section name may legitimately appear with no matching closing tag. The validator read the trailing `/` as part of the tag name, pushed `NAME/` on its tag stack and never popped it, so a script containing e.g. `[STEP GET_DUMP/]` got a spurious *Section [STEP GET_DUMP/] is never closed* / *is not closed before […]* error. One-liners are now depth-neutral: they never go on the stack, but the nesting rules still apply to them (a `[708_…/]` under `[STEP INPUTS]` is still flagged). The formatter no longer indents anything after a one-liner, and the highlighter now colours the closing `/` as punctuation instead of swallowing it into the tag name.
+- **The sloppy-but-legal tag forms no longer cascade into false "unbalanced tag" errors.** TestPit repairs a handful of malformed tags with a warning and carries on; the validator did not, so the *next* closing tag looked unmatched and every later close in the file was flagged too. The tag grammar is now a faithful port of the reader's own (`ScriptParser.cpp` `readSection` + `checkTagName`), covering repeated braces/slashes (`[[NAME]]`, `[//NAME]`), text left after the tag end (`[NAME] junk`), and a missing closing brace (`[NAME`). A tag whose name TestPit would reject outright is skipped silently rather than guessed at — its real error comes from the validity check. Pinned against the regression case `TRT/Scripts/Validation/val_test_tag_recovery_pass.esi`, which TestPit validates clean and the extension now reports clean too (it previously raised four errors on it).
+
+### Added
+- **The `match` parameter** (TestPit ≥ v1.3.6.15, Source r2341). `match` says which record of the comparison window may answer an expected block: `next` — the default, the next record no other block has taken — or `any`, meaning any record of the window carrying these values, wherever it sits. It is accepted in message blocks on every bus, offered in completion (with both values suggested and explained), coloured as a parameter keyword, flagged as output-only inside a `[STEP INPUTS]` message, and **its value is validated**: anything other than `any`/`next` is an error, matching TestPit's `checkMatchValue`, which refuses an unknown value rather than silently falling back to the default. A `%macro%` value is exempt — it resolves at run time. The comparison is case-sensitive, as it is in the engine.
+- **`occurrence` values are validated too.** `occurrence` and `match` are the only two parameters whose value TestPit constrains, and the same reasoning applies: an out-of-grammar value used to run against an expected count of −1, a *silent* determinate FAIL. Only `ALL` or an optional `<`/`>` followed by a non-negative number is accepted (so `all`, `>=3`, `>` and `-1` are flagged), mirroring `checkOccurrenceValue`; `%macro%` values are exempt.
+
 ## [0.4.2]
 
 ### Fixed

@@ -19,6 +19,12 @@ const OPENING_TAG_NAME = /^\[([^/\]][^\]]*)\]\s*(?:#.*)?$/;
 // orphaned [/X] from silently popping an unrelated [Y].
 const CLOSING_TAG_LINE = /^\[\/([^\]]+)\]\s*(?:#.*)?$/;
 
+// The one-liner form `[NAME/]` opens and closes a section on a single line, so
+// it is DEPTH-NEUTRAL: it must not be pushed on the stack (and must not be
+// mistaken for an orphan opener). It has to be tested BEFORE OPENING_TAG_NAME,
+// which would otherwise match it and swallow the `/` into the tag name.
+const ONE_LINER_TAG_LINE = /^\[([^/\]][^\]]*)\/\]\s*(?:#.*)?$/;
+
 // `<pre>...</pre>` blocks participate in indentation tracking like [TAG]/[/TAG]:
 //   - A line containing `<pre>` opens a block — even if `<pre>` is mid-line
 //     followed by inline content (e.g. `xxx = <pre> Following stuff:`). The
@@ -138,6 +144,11 @@ function findOrphanLineIndices(lines: string[]): Set<number> {
         }
         pending.length = foundAt;
       }
+      i += 1;
+      continue;
+    }
+    if (ONE_LINER_TAG_LINE.test(s)) {
+      // Self-closing: never pending, so never an orphan either.
       i += 1;
       continue;
     }
@@ -315,6 +326,13 @@ export function formatEsi(text: string, options: FormatOptions = {}): string {
         // Mismatched or orphan close — render at current depth, no pop.
         out.push(INDENT.repeat(stack.length) + stripped);
       }
+      continue;
+    }
+
+    // `[NAME/]` — rendered at the current depth, pushes nothing.
+    if (ONE_LINER_TAG_LINE.test(stripped)) {
+      valueKeyIndent = -1;
+      out.push(INDENT.repeat(stack.length) + stripped);
       continue;
     }
 

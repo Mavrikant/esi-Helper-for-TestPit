@@ -44,6 +44,7 @@ src/
     ├── projectIndexCache.ts     # XmlIndex for the active profile via parseConfigFiles; FileSystemWatcher on each resolved config file; getActiveProjectIndex()/registerIndexLifecycle()
     ├── xmlIndex.ts              # parseConfigFiles(configs) [route-by-role] + parseConfigFolder(dir) [filename, tests]; Ref resolution; ingesters; COMPONENT_TAG_PREFIXES
     ├── esiContext.ts           # cursor → EsiContext (tagName | fieldName | fieldValue | variableRef | other)
+    ├── parseSectionTag.ts      # ONE source of section-tag grammar: [NAME] / [/NAME] / one-liner [NAME/] + the sloppy forms TestPit repairs
     ├── componentValidator.ts   # pure: text + index → ComponentIssue[]; optional CsvLookup
     ├── renderComponent.ts      # MarkdownString rendering for hover + completion
     ├── parseValidityOutput.ts  # TestPit stdout/stderr → ValidityIssue[]
@@ -61,7 +62,7 @@ src/test/fixtures/config/      # XML fixtures for xmlIndex tests (RNE-style at r
 | Command | What it does |
 |---|---|
 | `npm run compile` | `tsc -p ./` → `out/` |
-| `npm test` | `compile` then `mocha` (`out/test/unit/**/*.test.js`) — 177 passing |
+| `npm test` | `compile` then `mocha` (`out/test/unit/**/*.test.js`) — 237 passing |
 | `npm run coverage` | `c8 npm test` (config in [.c8rc.json](.c8rc.json); vscode-touching glue excluded) |
 | `npm run lint` | ESLint (flat config) — needs Node ≥ 20.19 / 22 |
 | F5 | Extension Development Host (uses [.vscode/launch.json](.vscode/launch.json); run `npm run watch` alongside) |
@@ -96,6 +97,9 @@ Two places, both in `package.json` `contributes.configurationDefaults`: `editor.
 - **`Ref` resolution** in NEOCAS configs: `<Connection Ref>`→`<References>` channel; partition `<Port Ref>`→`<Common><CommonPorts>`; field `Ref`→`<Common><CommonEnums>`. Resolved within each file during ingest; inline (RNE/VORILS) forms still work.
 - **Enum validation gates on "has an enum table", not `DataType === "Enum"`** — types vary (`Enum`, `Enum8`, `Enum16`). See `componentValidator`, `completion`, `semanticTokens`.
 - **Bus prefixes** in `.esi`: `[429_…]`/`[1553_…]`/`[DIS_…]`/`[Mem_…]`/`[VORILS<N>_…]`/`[PART_<partition>_<port>]`/`[ED_<Msg>]`. Derive from `COMPONENT_TAG_PREFIXES`/`Bus`; don't hardcode elsewhere.
+- **`[NAME/]` is a ONE-LINER section — it opens AND closes on one line.** It is the only reason a section name may appear with no matching `[/NAME]`, so it must never go on a tag stack (that produced a false "never closed" error, and every later close in the file cascaded). It is depth-neutral for indentation too, but it is still a real block: nesting rules apply to it. TestPit is also deliberately forgiving about tag SHAPE — `[[NAME]]`, `[//NAME]`, `[NAME] junk` and `[NAME` are all repaired with a warning, and a name still holding a `[`/`]`/`/` after normalization is rejected outright. All of this lives in ONE place, [parseSectionTag.ts](src/lib/parseSectionTag.ts), a port of `ScriptParser.cpp` `readSection` + `checkTagName`; don't re-derive a `\[(\/?)([^\]]+)\]` regex anywhere else. `TRT/Scripts/Validation/val_test_tag_recovery_pass.esi` is the authoritative list of forms, and TestPit validates it clean — so must we.
+- **`match` (parameter field, TestPit ≥ v1.3.6.15) takes only `any` or `next`.** It picks which record of the comparison window may answer an expected block: `next` is the default (the next record no other block has taken); `any` means any record in the window carrying these values. It is output-only on every bus, and TestPit's `checkMatchValue` **refuses** an unknown value rather than defaulting, so the extension reports one as an error. Case-sensitive; a `%macro%` value is exempt. Values are hardcoded (`MATCH_VALUES`) — it is an engine keyword, not an XML-indexed enum.
+- **`occurrence` and `match` are the ONLY parameters whose value the engine constrains** (`checkOccurrenceValue` / `checkMatchValue`); both are checked in `checkParameterValue`. Everything else in `PARAMETER_FIELDS` is accepted with any value. Keep that list in sync with `ScriptMessageValidator.cpp`'s per-bus `commonFields`/`outputFields` — only the single-token ones, since the multi-word params (`end time`, `time offset`, `clear time`, `frame count`, `return code`) never match `ASSIGNMENT_RE`. `value` is deliberately excluded: the XML index synthesizes a real enum-typed `value` field for `DIS_` messages.
 - **CRLF.** Every `.split("\n")` on document text must be `.split(/\r?\n/)` — Windows `.esi` files leave trailing `\r` that breaks `$`-anchored regexes.
 - **CSV cell refs** (`field = file.csv line:N col:M`) are detected in `componentValidator` before the generic enum check; the fs-touching `CsvLookup` is injected by [componentDiagnostics.ts](src/componentDiagnostics.ts) (cached per pass).
 - **Two diagnostic collections** — `diagnostics.ts` (one per file, runs TestPit.exe, heavy) and `componentDiagnostics.ts` (single `esi-components`, in-process, cheap). Keep them separate.

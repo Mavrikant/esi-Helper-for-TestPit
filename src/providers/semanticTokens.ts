@@ -22,7 +22,9 @@ export const ESI_LEGEND = new vscode.SemanticTokensLegend(
   TOKEN_MODIFIERS as unknown as string[]
 );
 
-const TAG_RE = /\[(\/?)([A-Za-z0-9_]+)\]/g;
+// The trailing `(\/?)` is the one-liner form `[NAME/]`, which opens AND closes
+// on one line: it still gets the connection colour, but pushes no scope.
+const TAG_RE = /\[(\/?)([A-Za-z0-9_]+)(\/?)\]/g;
 // Field name may include dots (1553 `Mode.SelectedCourse`).
 const ASSIGNMENT_RE = /^(\s*)([A-Za-z_][A-Za-z0-9_.]*)\s*=\s*(.*)$/;
 const FIRST_IDENT_RE = /[A-Za-z_][A-Za-z0-9_]*/;
@@ -71,7 +73,10 @@ export function registerEsiSemanticTokensProvider(): vscode.Disposable {
                 known ? KNOWN_MODIFIER : 0
               );
             }
-            if (!isClosing) {
+            const isOneLiner = tagMatch[3] === "/";
+            if (isOneLiner) {
+              // Self-closing — no scope opened.
+            } else if (!isClosing) {
               stack.push(name);
             } else if (stack[stack.length - 1] === name) {
               stack.pop();
