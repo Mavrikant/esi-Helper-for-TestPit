@@ -197,7 +197,10 @@ function fieldToItem(
     field.name,
     vscode.CompletionItemKind.Field
   );
-  item.detail = field.dataType ?? message.name;
+  const type = field.dataType ?? message.name;
+  // A reserved field is offered - it IS a field of the message and TestPit
+  // accepts it - but it is worth knowing the value goes nowhere.
+  item.detail = field.used === false ? `${type} · reserved` : type;
   item.documentation = renderField(field, undefined);
   item.range = range;
   // Spell out filterText so dotted field names (1553's `Mode.SelectedCourse`)

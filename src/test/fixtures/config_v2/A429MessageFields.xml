@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!--
+    Format 2: one ATTRIBUTE per value.  An attribute that is left out takes its default:
+
+        Used           true - the field is decoded, encoded and compared
+        ReverseBits    false
+        Resolution     1
+        DefaultValue   0
+        Encoding       unset - the message's own Encoding governs the field
+        MinValue       DefaultValue |  neither bound stated means the field is a CONSTANT
+        MaxValue       DefaultValue |  taking exactly its DefaultValue.  A declared range
+                                    |  is enforced only where MinValue < MaxValue, and a
+                                    |  field counts as signed only where MinValue < 0.
+
+    Name, DataType, StartBit and BitSize are always written.  StartBit is a 1-based bit
+    position inside the 32-bit word, BitSize a width in bits, and Label is OCTAL.
+
+    Encoding is the label's coding - BNR, BCD, Discrete or ISO5 - stated on the message and
+    overridable per field.  DataType is the field's data type, which is a different thing
+    and keeps its own name.
+
+    Used="false" marks a field that carries no meaning - reserved, spare or padding.  It
+    replaces guessing from the name, so a real field may now be called SpareCapacity.
+
+    Ref names a shared enumeration from the CommonEnums table below.  A field with neither
+    Ref nor <Enum> children declares no states.
+
+    That name is an INTERNAL reference: no test script ever writes it, so it may be changed
+    freely - the next conversion keeps whatever it finds here.  It is the field's own name
+    where that identifies the set, and an allocated E-number where several differently named
+    fields share one.  It never comes from the states themselves, so adding a state renames
+    nothing.
+-->
+<A429Messages Version="2">
+    <Common>
+        <CommonEnums>
+            <EnumDef Name="SDI">
+                <Enum Name="INSTALLATION_NUMBER_ALL_CALL">0</Enum>
+                <Enum Name="INSTALLATION_NUMBER_ONE">1</Enum>
+            </EnumDef>
+        </CommonEnums>
+    </Common>
+
+    <Message Name="SelectedCourseBNR" Label="100" Encoding="BNR">
+        <Field Name="Label" Used="false" DataType="UInt8" StartBit="1" BitSize="8"/>
+        <Field Name="SDI" DataType="Enum" StartBit="9" BitSize="2" DefaultValue="INSTALLATION_NUMBER_ALL_CALL" Ref="SDI"/>
+        <Field Name="Course" DataType="BNR" StartBit="11" BitSize="16" MinValue="0" MaxValue="359.9" Resolution="0.0055"/>
+    </Message>
+</A429Messages>

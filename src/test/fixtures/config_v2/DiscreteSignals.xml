@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!--
+    Format 2: one ATTRIBUTE per value.  An attribute that is left out takes its default:
+
+        BitSize        1    the signal's width; one pin carries one bit
+
+    Name and Type are always written.  Type is Input or Output; a message that is neither
+    is skipped by the reader.
+
+    Ref names a shared enumeration from the CommonEnums table below.  A signal with neither
+    Ref nor <Enum> children declares no states.
+-->
+<DiscreteMessages Version="2">
+    <Common>
+        <CommonEnums>
+            <EnumDef Name="FunctionalTest">
+                <Enum Name="TEST_OFF">0</Enum>
+                <Enum Name="TEST_ON">1</Enum>
+            </EnumDef>
+            <EnumDef Name="PowerOnOff">
+                <Enum Name="POWER_OFF">0</Enum>
+                <Enum Name="POWER_ON">1</Enum>
+            </EnumDef>
+            <EnumDef Name="TAStatus1">
+                <Enum Name="TA_OFF">0</Enum>
+                <Enum Name="TA_ON">1</Enum>
+            </EnumDef>
+        </CommonEnums>
+    </Common>
+
+    <Message Name="PowerOnOff" Type="Input" Ref="PowerOnOff"/>
+    <Message Name="FunctionalTest" Type="Input" Ref="FunctionalTest"/>
+    <Message Name="TAStatus1" Type="Output" Ref="TAStatus1"/>
+</DiscreteMessages>

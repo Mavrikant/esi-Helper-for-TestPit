@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<Partitions Version="2">
+    <Common>
+        <CommonEnums>
+            <EnumDef Name="Value">
+                <Enum Name="FAILURE">0</Enum>
+                <Enum Name="SUCCESS">1</Enum>
+            </EnumDef>
+        </CommonEnums>
+    </Common>
+    <Partition Name="HSI">
+        <Port Type="Memory" Name="RNEGeneralWritePSAlive">
+            <Message>
+                <Field Name="Value" DataType="UInt32"/>
+            </Message>
+        </Port>
+        <Port Type="Memory" Name="RNEGeneralWriteLedStatus">
+            <Message>
+                <Field Name="LedStatus" DataType="UInt32" StartBit="0" BitSize="1"/>
+                <Field Name="Pad" DataType="UInt32" StartBit="1" BitSize="31"/>
+            </Message>
+        </Port>
+    </Partition>
+    <Partition Name="TEST">
+        <Port Type="Memory" Name="MBPBITStatus">
+            <Message>
+                <Field Name="Value" DataType="Enum" Ref="Value"/>
+            </Message>
+        </Port>
+    </Partition>
+</Partitions>

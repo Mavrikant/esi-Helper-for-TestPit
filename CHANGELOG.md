@@ -4,6 +4,23 @@ All notable changes to the **esi Helper for TestPit** extension will be document
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.4]
+
+Catch-up with TestPit v1.3.6.19 (Source r2370): the second form of the bus message configuration files.
+
+### Added
+- **Configuration format 2 is read, and format 1 still is.** TestPit v1.3.6.19 accepts a second shape for the message configuration files — one **attribute** per value instead of one child element, `Version="2"` on the root, no `<Fields>` / `<Enums>` wrappers, and the states that repeat across a file defined once in `<Common><CommonEnums>` and taken by `Ref="…"`. Both shapes are now indexed by the same reader, so completion, hover, enum checking and range checking work the same whichever form a project's configs are in — and a project that never converts its files notices nothing. The mechanism is the engine's own: one accessor takes the attribute where there is one and the child element otherwise (`XMLConfigParser::getNodeValue`), which is why format 2 kept the element names it replaced.
+- **The names format 2 respelled are read on both spellings**, the newer one first: a field's `Name` (was `FieldName` on A429), `DataType` (was `Type` on VOR/ILS, external data and the software-test ports), `BitSize` (was `Size` on A429, 1553 and discrete), `DefaultValue` (was `Default` on 1553), and a message's `Encoding` (was `Type` on A429). `<EnumDef>` and `<Enums>` are both accepted as a set of states, wrapped or unwrapped, and the external-data root is read as `<EDRoot>` or `<Root>`.
+- **`Used="false"` is understood.** A reserved / spare / padding field is still offered and never called unknown — TestPit keeps its name — but hover says the value written there is ignored, and completion marks it *reserved*. Where the file does not state it, the name rule the engine has always guessed with (`Reserved…`, `Spare…`, `Pad…`, `FutureSpare`) is the fallback, so format 1 files gain the same hint.
+- **Defaults a format 2 file leaves out are supplied**, as the engine supplies them: a discrete signal with no `BitSize` is one bit (version-gated — a format 1 file that omits it means nothing of the kind), an A429 field stating neither bound is a constant rather than a range, and a `DefaultValue` that only repeats the default is simply absent.
+
+### Fixed
+- **A discrete signal whose name contains `#` was indexed under a name no script can write.** TestPit strips every `#` out of a discrete name (`TAStatus#1` → `TAStatus1`), which is how the cable file spells it and the only form a script can use; the extension kept the sharp, so the signal's fields resolved to nothing and were silently never checked. It now strips them too — in both formats.
+- **A superseded `<name>.v1.xml` beside a converted file is ignored** when a whole folder is indexed. `convert_config --replace` leaves the format 1 original there, and reading both let the older file's contents into the index.
+
+### Verified
+- Both formats are checked to build the *same* index: the fixture folder `src/test/fixtures/config_v2` is `src/test/fixtures/config` put through TestPit's own converter, and the suite asserts every connection, message and field agrees, naming the handful of things conversion is allowed to drop. The same comparison was run over the delivered configurations — NEOCAS, RNE, Sim, VOR/ILS and external data, ~4,800 fields — with no difference.
+
 ## [0.4.3]
 
 Catch-up with the TestPit comparison-engine work (Source r2341–r2345): the new `match` parameter, and a section-tag reader that matches the engine's own.

@@ -60,7 +60,8 @@ describe("xmlIndex", () => {
       assert.strictEqual(msg!.label, 100);
       assert.strictEqual(msg!.direction, "Output");
       assert.strictEqual(msg!.type, "BNR");
-      assert.strictEqual(msg!.fields.length, 3);
+      // Label1..3 (the bits 1..8 placeholders) + SDI + Course
+      assert.strictEqual(msg!.fields.length, 5);
     });
 
     it("parses Enum fields with their enum values", () => {
@@ -96,6 +97,19 @@ describe("xmlIndex", () => {
       assert.strictEqual(msg!.fields[0].dataType, "Enum");
       assert.strictEqual(msg!.fields[0].enums?.length, 2);
       assert.ok(idx.connections.has("DIS_PowerOnOff"));
+    });
+
+    it("strips '#' out of a discrete signal name, the way TestPit does", () => {
+      // DiscreteConfigType.cpp: TAStatus#1 -> TAStatus1, which is how the cable
+      // file spells it and the only form a script can write.
+      assert.ok(idx.messages.has("TAStatus1"), "expected TAStatus1");
+      assert.strictEqual(idx.messages.has("TAStatus#1"), false);
+      assert.ok(idx.connections.has("DIS_TAStatus1"));
+      assert.strictEqual(idx.connections.has("DIS_TAStatus#1"), false);
+      assert.strictEqual(
+        idx.resolveConnectionMessage("DIS_TAStatus1")?.fields[0].enums?.length,
+        2
+      );
     });
 
     it("registers each discrete signal under the DIS_ prefix (Discrete_ is not a valid tag)", () => {

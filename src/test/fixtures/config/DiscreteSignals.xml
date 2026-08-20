@@ -20,4 +20,14 @@
             <Enum Name="TEST_ON">1</Enum>
         </Enums>
     </Message>
+    <Message>
+        <Name>TAStatus#1</Name>
+        <Type>Output</Type>
+        <Count>1</Count>
+        <Size>1</Size>
+        <Enums>
+            <Enum Name="TA_OFF">0</Enum>
+            <Enum Name="TA_ON">1</Enum>
+        </Enums>
+    </Message>
 </DiscreteMessages>

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Root>
+    <References>
+        <Device Type="A429">
+            <Channels>
+                <Channel Name="RADALT" Card="1" Core="0" Channel="19" Speed="100000"/>
+            </Channels>
+        </Device>
+    </References>
+    <Devices>
+        <Device Type="A429">
+            <Connection Name="L164RadioAltitude" Ref="RADALT"/>
+        </Device>
+    </Devices>
+</Root>

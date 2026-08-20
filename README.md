@@ -57,6 +57,8 @@ The extension reads the profiles and their config-file paths straight from **Tes
 
 On first use this is exported once and cached in the extension's global storage; switching profiles reads the cache, and **Reload TestPit Settings** re-exports it. The `TestPit.exe` path is **not** in the registry, so it's picked once via a dialog and remembered.
 
+**Both configuration formats are read.** TestPit v1.3.6.19 introduced a second shape for the message configuration files — one attribute per value instead of one child element, `Version="2"` on the root, and the states that repeat across a file defined once under `<Common><CommonEnums>` and taken by `Ref`. Files in either shape index identically, so there is nothing to change either way, and a converted and unconverted project behave the same. Note that **Run Validity Check** hands the script to your configured `TestPit.exe`: a format 2 configuration needs TestPit v1.3.6.19 or newer, and an older executable will report one as unreadable even though the editor reads it fine.
+
 ### Settings
 
 All `esihelper.*` settings are **user-scoped (machine-wide)** — they live in your VS Code _User_ settings, never in `.vscode/settings.json`.

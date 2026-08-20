@@ -6,8 +6,11 @@ import {
   boolOrUndef,
   parseConnectionName,
   parseEnumsBlock,
-  parseElementStyleField,
-  parseAttributeStyleField,
+  parseField,
+  nodeValue,
+  formatVersion,
+  XML_CONFIG_VERSION_LEGACY,
+  XML_CONFIG_VERSION_LATEST,
 } from "../../lib/xmlIndex";
 import { renderConnection } from "../../lib/renderComponent";
 
@@ -47,15 +50,92 @@ describe("xmlIndex helpers", () => {
     });
   });
 
-  it("parseEnumsBlock and parseElement/Attribute field parsers", () => {
-    const enums = parseEnumsBlock({ Enum: [{ "@_Name": "A", "#text": "1" }] });
-    assert.strictEqual(enums.length, 1);
-    const elem = parseElementStyleField({ FieldName: "F", DataType: "Enum", Enums: { Enum: [{ "@_Name": "X", "#text": "5" }] } }, "M");
-    assert.strictEqual(elem.name, "F");
-    assert.strictEqual(elem.parentMessage, "M");
-    const attrib = parseAttributeStyleField({ "@_Name": "G", "@_DataType": "UInt8", "@_Default": "3" }, "N");
-    assert.strictEqual(attrib.name, "G");
-    assert.strictEqual(attrib.defaultValue, "3");
+  it("nodeValue takes the attribute first and the child element second", () => {
+    assert.strictEqual(nodeValue({ "@_Name": "A", Name: "B" }, "Name"), "A");
+    assert.strictEqual(nodeValue({ Name: "B" }, "Name"), "B");
+    assert.strictEqual(nodeValue({}, "Name"), undefined);
+    // An empty value counts as absent, the way TestPit's own accessor treats it.
+    assert.strictEqual(nodeValue({ "@_Name": "" }, "Name"), undefined);
+    assert.strictEqual(nodeValue({ Name: "" }, "Name"), undefined);
+  });
+
+  it("formatVersion reads Version off the root, defaulting to format 1", () => {
+    assert.strictEqual(formatVersion({}), XML_CONFIG_VERSION_LEGACY);
+    assert.strictEqual(formatVersion({ "@_Version": "2" }), XML_CONFIG_VERSION_LATEST);
+    assert.strictEqual(formatVersion({ "@_Version": "1" }), XML_CONFIG_VERSION_LEGACY);
+  });
+
+  it("parseEnumsBlock reads wrapped and unwrapped states alike", () => {
+    // No wrapper, <Enums> (format 1) and <EnumDef> (format 2) all read.
+    assert.strictEqual(parseEnumsBlock({ Enum: [{ "@_Name": "A", "#text": "1" }] }).length, 1);
+    assert.strictEqual(parseEnumsBlock({ Enums: { Enum: [{ "@_Name": "A", "#text": "1" }] } }).length, 1);
+    assert.strictEqual(parseEnumsBlock({ EnumDef: { Enum: [{ "@_Name": "A", "#text": "1" }] } }).length, 1);
+    // <ValidEnums> sits beside <Enums> in a format 1 field and is never read.
+    const both = parseEnumsBlock({
+      Enums: { Enum: [{ "@_Name": "A", "#text": "1" }] },
+      ValidEnums: { Enum: [{ "@_Name": "B", "#text": "2" }] },
+    });
+    assert.deepStrictEqual(both.map((e) => e.name), ["A"]);
+  });
+
+  it("parseField reads a format 1 field and its format 2 twin the same way", () => {
+    const v1 = parseField(
+      {
+        FieldName: "F",
+        DataType: "Enum",
+        StartBit: "9",
+        Size: "2",
+        DefaultValue: "X",
+        Enums: { Enum: [{ "@_Name": "X", "#text": "5" }] },
+      },
+      "M"
+    );
+    const v2 = parseField(
+      {
+        "@_Name": "F",
+        "@_DataType": "Enum",
+        "@_StartBit": "9",
+        "@_BitSize": "2",
+        "@_DefaultValue": "X",
+        EnumDef: { Enum: [{ "@_Name": "X", "#text": "5" }] },
+      },
+      "M"
+    );
+    assert.deepStrictEqual(v1, v2);
+    assert.strictEqual(v1.name, "F");
+    assert.strictEqual(v1.size, "2");
+    assert.strictEqual(v1.parentMessage, "M");
+    assert.strictEqual(v1.enums?.[0].value, "5");
+  });
+
+  it("parseField takes 1553's Default as DefaultValue and resolves Ref", () => {
+    const common = new Map([[ "Validity", [{ name: "VALID", value: "1" }] ]]);
+    const legacy = parseField({ "@_Name": "G", "@_DataType": "UInt8", "@_Default": "3" }, "N");
+    assert.strictEqual(legacy.name, "G");
+    assert.strictEqual(legacy.defaultValue, "3");
+    const shared = parseField(
+      { "@_Name": "H", "@_DataType": "Enum", "@_Ref": "Validity" },
+      "N",
+      common
+    );
+    assert.deepStrictEqual(shared.enums, [{ name: "VALID", value: "1" }]);
+    // A Ref that resolves to nothing leaves the field stateless rather than
+    // guessing - TestPit reports the dangling reference when it loads the file.
+    const dangling = parseField(
+      { "@_Name": "I", "@_DataType": "Enum", "@_Ref": "Nope" },
+      "N",
+      common
+    );
+    assert.deepStrictEqual(dangling.enums, []);
+  });
+
+  it("parseField marks a reserved field, stated or named", () => {
+    assert.strictEqual(parseField({ "@_Name": "Pad", "@_Used": "false" }, "M").used, false);
+    assert.strictEqual(parseField({ "@_Name": "SpareCapacity", "@_Used": "true" }, "M").used, true);
+    // No Used: the name rule TestPit has always guessed with is the fallback.
+    assert.strictEqual(parseField({ "@_Name": "Reserved1" }, "M").used, false);
+    assert.strictEqual(parseField({ "@_Name": "FutureSpare" }, "M").used, false);
+    assert.strictEqual(parseField({ "@_Name": "Course" }, "M").used, undefined);
   });
 
   it("renderConnection renders '... more' when fields > 12", () => {

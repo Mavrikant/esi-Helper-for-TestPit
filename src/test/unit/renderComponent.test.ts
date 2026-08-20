@@ -35,7 +35,7 @@ describe("renderComponent", () => {
       const conn = idx.connections.get("429_L100SelectedCourseBNR_input1")!;
       const md = renderConnection(conn, idx);
       assert.match(md.value, /SelectedCourseBNR/);
-      assert.match(md.value, /Fields.*3/);
+      assert.match(md.value, /Fields.*5/);
       assert.match(md.value, /SDI/);
       assert.match(md.value, /Course/);
     });

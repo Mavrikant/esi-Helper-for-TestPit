@@ -59,6 +59,11 @@ export function renderField(
   const vsc: typeof vscode = require("vscode");
   const md = new vsc.MarkdownString(undefined, true);
   md.appendMarkdown(`**${field.name}**${field.dataType ? ` _(${field.dataType})_` : ""}\n\n`);
+  // Say it before anything else: TestPit parses a reserved field and keeps its
+  // name, then ignores whatever a script assigns to it.
+  if (field.used === false) {
+    md.appendMarkdown(`- ⚠ Reserved — TestPit ignores any value written here.\n`);
+  }
   const rangeBits: string[] = [];
   if (field.minValue !== undefined && field.minValue !== "-") {
     rangeBits.push(`min \`${field.minValue}\``);

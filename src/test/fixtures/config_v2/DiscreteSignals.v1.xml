@@ -1,0 +1,18 @@
+<?xml version="1.0"?>
+<!--
+    A superseded format 1 original, the way `convert_config --replace` leaves one
+    beside the file it converted. Folder mode must ignore it, so this copy carries
+    a signal that exists nowhere else: SupersededSignal must never reach the index.
+-->
+<DiscreteMessages>
+    <Message>
+        <Name>SupersededSignal</Name>
+        <Type>Input</Type>
+        <Count>1</Count>
+        <Size>1</Size>
+        <Enums>
+            <Enum Name="OFF">0</Enum>
+            <Enum Name="ON">1</Enum>
+        </Enums>
+    </Message>
+</DiscreteMessages>

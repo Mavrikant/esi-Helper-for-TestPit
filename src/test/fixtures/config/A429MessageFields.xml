@@ -9,6 +9,27 @@
         <MaxPeriod>55.000000</MaxPeriod>
         <Fields>
             <Field>
+                <FieldName>Label1</FieldName>
+                <DataType>UInt8</DataType>
+                <StartBit>1</StartBit>
+                <Size>2</Size>
+                <DefaultValue>1</DefaultValue>
+            </Field>
+            <Field>
+                <FieldName>Label2</FieldName>
+                <DataType>UInt8</DataType>
+                <StartBit>3</StartBit>
+                <Size>3</Size>
+                <DefaultValue>0</DefaultValue>
+            </Field>
+            <Field>
+                <FieldName>Label3</FieldName>
+                <DataType>UInt8</DataType>
+                <StartBit>6</StartBit>
+                <Size>3</Size>
+                <DefaultValue>0</DefaultValue>
+            </Field>
+            <Field>
                 <FieldName>SDI</FieldName>
                 <DataType>Enum</DataType>
                 <StartBit>9</StartBit>
@@ -30,13 +51,6 @@
                 <Resolution>0.0055</Resolution>
                 <DefaultValue>0</DefaultValue>
                 <Unit>deg</Unit>
-            </Field>
-            <Field>
-                <FieldName>Label1</FieldName>
-                <DataType>UInt8</DataType>
-                <StartBit>1</StartBit>
-                <Size>2</Size>
-                <DefaultValue>1</DefaultValue>
             </Field>
         </Fields>
     </Message>

@@ -83,6 +83,11 @@ export interface FieldDef {
   unit?: string;
   enums?: EnumDef[];
   vc?: boolean;
+  /** `false` where the field carries no meaning — reserved, spare or padding.
+   *  TestPit keeps such a field's name but ignores any value a script gives it
+   *  ("reserved or restricted"). Recorded so hover and completion can say so;
+   *  never enforced here. Undefined where nothing decides it either way. */
+  used?: boolean;
   parentMessage: string;     // "SelectedCourseBNR" — the message name this field belongs to
 }
 
@@ -133,6 +138,139 @@ const parser = new XMLParser({
   parseTagValue: false,
   trimValues: true,
 });
+
+/**
+ * Configuration file format, stated as `Version` on the root element — the two
+ * TestPit itself knows (Core/XMLConfigParser.h):
+ *
+ *   1 — one child ELEMENT per value:  <Message><Name>X</Name>…   (no Version means this)
+ *   2 — one ATTRIBUTE per value:      <Message Name="X" …>
+ *
+ * Both are read by the same ingesters below. There is no second code path: every
+ * value goes through `nodeValue`, which takes the attribute when the node has one
+ * and the child element of the same name otherwise — which is exactly why format 2
+ * kept the element names it replaced. A configuration in the field needs no change.
+ */
+export const XML_CONFIG_VERSION_LEGACY = 1;
+export const XML_CONFIG_VERSION_LATEST = 2;
+
+/** Which shape a file was written in. Only the discrete reader branches on it
+ *  (its BitSize default differs between the two); everything else reads both. */
+export function formatVersion(container: Record<string, unknown>): number {
+  const stated = numOrUndef(container["@_Version"]);
+  return stated !== undefined && stated >= XML_CONFIG_VERSION_LATEST
+    ? XML_CONFIG_VERSION_LATEST
+    : XML_CONFIG_VERSION_LEGACY;
+}
+
+/**
+ * Port of `XMLConfigParser::getNodeValue` — the whole of the two-format
+ * mechanism: the attribute when the node has one, the child element of the same
+ * name otherwise. An empty value counts as absent, the way the engine's accessor
+ * treats it (there it falls through to the caller's default).
+ */
+export function nodeValue(
+  node: Record<string, unknown>,
+  tag: string
+): string | undefined {
+  const attribute = node[`@_${tag}`];
+  const value = attribute !== undefined ? str(attribute) : str(node[tag]);
+  return value === undefined || value === "" ? undefined : value;
+}
+
+/**
+ * The first of `tags` the node actually states. Only a handful of names were
+ * respelled for format 2 (Name/FieldName, DataType/Type, BitSize/Size,
+ * DefaultValue/Default, Encoding/Type); format 2's spelling always goes first,
+ * so a converted file wins and a format 1 file falls through to its own.
+ */
+function anyNodeValue(
+  node: Record<string, unknown>,
+  ...tags: string[]
+): string | undefined {
+  for (const tag of tags) {
+    const value = nodeValue(node, tag);
+    if (value !== undefined) {
+      return value;
+    }
+  }
+  return undefined;
+}
+
+/** Port of `XMLConfigParser::isEnumDefinitionNode` — format 2 calls a set of
+ *  states <EnumDef>, format 1 calls it <Enums>, and both are taken everywhere. */
+const ENUM_DEFINITION_TAGS = ["EnumDef", "Enums"] as const;
+
+/** The node the states of `node` are written in, if any. */
+function enumContainer(
+  node: Record<string, unknown>
+): Record<string, unknown> | undefined {
+  for (const tag of ENUM_DEFINITION_TAGS) {
+    const wrapper = asArray<unknown>(node[tag])[0];
+    if (wrapper && typeof wrapper === "object") {
+      return wrapper as Record<string, unknown>;
+    }
+  }
+  // No wrapper: the states sit straight in the node. Looked at ONLY when there
+  // is no wrapper — a format 1 field carries a second <ValidEnums> block beside
+  // its <Enums>, and TestPit has never read that one.
+  return node.Enum !== undefined ? node : undefined;
+}
+
+/**
+ * Port of `XMLConfigParser::resolveEnums` — `Ref="X"` takes the shared set of
+ * states named X from the file's <Common><CommonEnums> table, no `Ref` takes the
+ * states written in the node itself.
+ *
+ * Only ever called on a <Field>, and on a discrete <Message> (which IS its one
+ * value): in the software-test configuration `Ref` spells three different things,
+ * naming a shared PORT on <Port> and a shared MESSAGE on <Message>, and only on a
+ * field does it name states.
+ *
+ * A `Ref` that resolves to nothing leaves the field with no states rather than
+ * guessing — TestPit reports the dangling reference when it loads the file.
+ */
+function resolveEnums(
+  node: Record<string, unknown>,
+  commonEnums?: Map<string, EnumDef[]>
+): EnumDef[] {
+  const ref = nodeValue(node, "Ref");
+  if (ref !== undefined) {
+    return commonEnums?.get(ref) ?? [];
+  }
+  return parseEnumsBlock(node);
+}
+
+/**
+ * Whether a field or word carries meaning, read the way TestPit reads it: the
+ * file's own `Used` when it states one (format 2), and otherwise the name rule
+ * the engine has always guessed with — A429 ignores anything starting Reserved,
+ * Spare or Pad plus FutureSpare, 1553 ignores a word starting Spare.
+ *
+ * The format 1 positional label rule (the first three fields of every A429
+ * message, whatever they are called) is deliberately NOT reproduced: it names a
+ * field by position rather than by anything the file says, and nothing here acts
+ * on the answer — it is shown, never enforced.
+ */
+function isNodeUsed(
+  node: Record<string, unknown>,
+  name: string
+): boolean | undefined {
+  const stated = nodeValue(node, "Used");
+  if (stated !== undefined) {
+    return stated.toLowerCase() === "true";
+  }
+  return isIgnoredName(name) ? false : undefined;
+}
+
+function isIgnoredName(name: string): boolean {
+  return (
+    name === "FutureSpare" ||
+    name.startsWith("Reserved") ||
+    name.startsWith("Spare") ||
+    name.startsWith("Pad")
+  );
+}
 
 const CONNECTION_NAME_PATTERN = /^L(\d+)([A-Z][A-Za-z0-9]*?)(?:_\w+)?$/;
 // Maps the `<Device Type="...">` XML attribute on MessageConfig devices to
@@ -251,7 +389,15 @@ export function parseConfigFolder(configFolderpath: string): XmlIndex {
   }
 
   for (const entry of entries) {
-    if (!entry.toLowerCase().endsWith(".xml")) {
+    const lower = entry.toLowerCase();
+    if (!lower.endsWith(".xml")) {
+      continue;
+    }
+    // `convert_config --replace` keeps the format 1 original beside the file it
+    // converted, as <name>.v1.xml. Both are readable configurations, so folder
+    // mode would ingest the superseded one as well — skip it, the way TRT's own
+    // readers of these files do.
+    if (lower.endsWith(".v1.xml")) {
       continue;
     }
     const fullPath = path.join(configFolderpath, entry);
@@ -370,16 +516,19 @@ function ingestVORILSMessageFields(root: Record<string, unknown>, index: XmlInde
   // VORILSMessageFields.xml has a different shape than A429/1553:
   //   <Messages>
   //     <InputMessages>
-  //       <Message Name="..." Id="..." Size="...">
-  //         <Field Name="..." Type="Enum|UInt32|DoubleDegree|..." StartBit="..." BitSize="...">
-  //           <Enums>...</Enums>             # for Enum
+  //       <Message Name="..." Id="...">
+  //         <Field Name="..." DataType="Enum|UInt32|DoubleDegree|..." StartBit="..." BitSize="...">
+  //           <EnumDef>...</EnumDef>         # for Enum   (<Enums> in format 1)
   //           <Encoding Type="BNR" MinValue="..." MaxValue="..." Resolution="..."/>  # for numeric
   //         </Field>
   //       </Message>
   //     </InputMessages>
   //     <OutputMessages> ... </OutputMessages>
   //   </Messages>
+  // This one is written by hand, so format 2 leaves its states where their
+  // author put them rather than lifting them into the shared table.
   const container = (root.Messages as Record<string, unknown> | undefined) ?? root;
+  const commonEnums = collectCommonEnums(container);
   for (const groupKey of ["InputMessages", "OutputMessages"]) {
     const group = container[groupKey] as Record<string, unknown> | undefined;
     if (!group) {
@@ -389,7 +538,7 @@ function ingestVORILSMessageFields(root: Record<string, unknown>, index: XmlInde
     const direction = groupKey === "InputMessages" ? "Input" : "Output";
     for (const msg of messages) {
       const m = msg as Record<string, unknown>;
-      const name = str(m["@_Name"]);
+      const name = nodeValue(m, "Name");
       if (!name) {
         continue;
       }
@@ -401,7 +550,9 @@ function ingestVORILSMessageFields(root: Record<string, unknown>, index: XmlInde
       };
       const fields = asArray(m.Field);
       for (const f of fields) {
-        def.fields.push(parseVORILSField(f as Record<string, unknown>, name));
+        def.fields.push(
+          parseVORILSField(f as Record<string, unknown>, name, commonEnums)
+        );
       }
       registerMessage(index, def);
       // Synthesize a canonical VORILS1_<MessageName> connection so completion
@@ -423,22 +574,18 @@ function ingestVORILSMessageFields(root: Record<string, unknown>, index: XmlInde
 
 function parseVORILSField(
   f: Record<string, unknown>,
-  parentMessage: string
+  parentMessage: string,
+  commonEnums?: Map<string, EnumDef[]>
 ): FieldDef {
-  const field: FieldDef = {
-    name: str(f["@_Name"]) ?? "",
-    dataType: str(f["@_Type"]),
-    startBit: str(f["@_StartBit"]),
-    size: str(f["@_BitSize"]),
-    enums: parseEnumsBlock(f.Enums),
-    parentMessage,
-  };
+  const field = parseField(f, parentMessage, commonEnums);
   // Numeric-typed fields carry a nested <Encoding> with min/max/resolution.
+  // It is the field's own coding, not the shared kind of Encoding A429 states
+  // on a message, and it stays a child element in both formats.
   const encoding = f.Encoding as Record<string, unknown> | undefined;
   if (encoding) {
-    field.minValue = str(encoding["@_MinValue"]);
-    field.maxValue = str(encoding["@_MaxValue"]);
-    field.resolution = str(encoding["@_Resolution"]);
+    field.minValue = nodeValue(encoding, "MinValue");
+    field.maxValue = nodeValue(encoding, "MaxValue");
+    field.resolution = nodeValue(encoding, "Resolution");
   }
   return field;
 }
@@ -448,26 +595,35 @@ function ingestA429MessageFields(root: Record<string, unknown>, index: XmlIndex)
     (root.A429Messages as Record<string, unknown> | undefined) ??
     (root.VORILSMessages as Record<string, unknown> | undefined) ??
     root;
+  const commonEnums = collectCommonEnums(container);
   const messages = asArray(container.Message);
   for (const msg of messages) {
     const m = msg as Record<string, unknown>;
-    const name = str(m.Name);
+    const name = nodeValue(m, "Name");
     if (!name) {
       continue;
     }
     const def: MessageDef = {
       name,
       bus: "429",
-      label: numOrUndef(m.Label),
-      direction: str(m.Direction),
-      type: str(m.Type),
-      minPeriod: numOrUndef(m.MinPeriod),
-      maxPeriod: numOrUndef(m.MaxPeriod),
+      label: numOrUndef(nodeValue(m, "Label")),
+      // Direction, MinPeriod and MaxPeriod are format 1 only — nothing in
+      // TestPit ever read them, so format 2 leaves them out.
+      direction: nodeValue(m, "Direction"),
+      // The label's coding: BNR, BCD, Discrete or ISO5. Format 1 calls it Type,
+      // which reads as if it were a field's DataType and is not; format 2 says
+      // Encoding, on the message as the default and on a field as the override.
+      type: anyNodeValue(m, "Encoding", "Type"),
+      minPeriod: numOrUndef(nodeValue(m, "MinPeriod")),
+      maxPeriod: numOrUndef(nodeValue(m, "MaxPeriod")),
       fields: [],
     };
-    const fields = asArray((m.Fields as Record<string, unknown> | undefined)?.Field);
+    // Format 1 wraps the fields in <Fields>; format 2 writes <Field> straight
+    // into the message.
+    const wrapper = m.Fields as Record<string, unknown> | undefined;
+    const fields = asArray<unknown>(wrapper ? wrapper.Field : m.Field);
     for (const f of fields) {
-      def.fields.push(parseElementStyleField(f as Record<string, unknown>, name));
+      def.fields.push(parseField(f as Record<string, unknown>, name, commonEnums));
     }
     registerMessage(index, def);
   }
@@ -476,17 +632,18 @@ function ingestA429MessageFields(root: Record<string, unknown>, index: XmlIndex)
 function ingestMilStd1553Fields(root: Record<string, unknown>, index: XmlIndex): void {
   const container =
     (root.MilStd1553Messages as Record<string, unknown> | undefined) ?? root;
+  const commonEnums = collectCommonEnums(container);
   const messages = asArray(container.Message);
   for (const msg of messages) {
     const m = msg as Record<string, unknown>;
-    const name = str(m["@_Name"]);
+    const name = nodeValue(m, "Name");
     if (!name) {
       continue;
     }
     const def: MessageDef = {
       name,
       bus: "1553",
-      direction: str(m["@_Direction"]),
+      direction: nodeValue(m, "Direction"),
       fields: [],
     };
     // 1553 fields are nested under <Word> elements and are referenced in
@@ -496,10 +653,18 @@ function ingestMilStd1553Fields(root: Record<string, unknown>, index: XmlIndex):
     const words = asArray(m.Word);
     for (const word of words) {
       const w = word as Record<string, unknown>;
-      const wordName = str(w["@_Name"]);
+      const wordName = nodeValue(w, "Name");
+      // On this bus it is the WORD that is marked rather than the field, and
+      // TestPit drops an unused word along with every field in it. They stay in
+      // the index so a script writing one is never called unknown, carrying the
+      // mark so hover and completion can say the value will be ignored.
+      const wordUsed = isNodeUsed(w, wordName ?? "");
       const fields = asArray(w.Field);
       for (const f of fields) {
-        const field = parseAttributeStyleField(f as Record<string, unknown>, name);
+        const field = parseField(f as Record<string, unknown>, name, commonEnums);
+        if (wordUsed === false) {
+          field.used = false;
+        }
         if (wordName) {
           field.name = `${wordName}.${field.name}`;
         }
@@ -513,25 +678,40 @@ function ingestMilStd1553Fields(root: Record<string, unknown>, index: XmlIndex):
 function ingestDiscreteSignals(root: Record<string, unknown>, index: XmlIndex): void {
   const container =
     (root.DiscreteMessages as Record<string, unknown> | undefined) ?? root;
+  const commonEnums = collectCommonEnums(container);
+  // One pin carries one bit, so format 2 leaves the width out at 1. A format 1
+  // file that omits it means nothing of the kind — TestPit reads 0 there and
+  // refuses the signal where a step uses it — so the default is version-gated.
+  const defaultSize =
+    formatVersion(container) >= XML_CONFIG_VERSION_LATEST ? "1" : undefined;
   const messages = asArray(container.Message);
   for (const msg of messages) {
     const m = msg as Record<string, unknown>;
-    const name = str(m.Name);
+    // TestPit strips every '#' out of a discrete name, in either format
+    // (DiscreteConfigType.cpp): TAStatus#1 becomes TAStatus1, which is the
+    // spelling the cable file uses and the one a script writes. Format 2 files
+    // are converted with the sharps already gone; a format 1 file still has
+    // them, and without this the signal would be indexed under a name no
+    // script can name - so its fields would silently never be checked.
+    const name = nodeValue(m, "Name")?.split("#").join("");
     if (!name) {
       continue;
     }
     const def: MessageDef = {
       name,
       bus: "DIS",
-      direction: str(m.Type),
+      direction: nodeValue(m, "Type"),
       fields: [],
     };
-    const enums = parseEnumsBlock(m.Enums);
+    // A discrete signal IS its single value, so its states sit on the MESSAGE:
+    // by Ref into the shared table, or written in the message itself.
+    const enums = resolveEnums(m, commonEnums);
+    const size = anyNodeValue(m, "BitSize", "Size") ?? defaultSize;
     if (enums.length > 0) {
       def.fields.push({
         name: "value",
         dataType: "Enum",
-        size: str(m.Size),
+        size,
         enums,
         parentMessage: name,
       });
@@ -539,7 +719,7 @@ function ingestDiscreteSignals(root: Record<string, unknown>, index: XmlIndex): 
       def.fields.push({
         name: "value",
         dataType: "UInt",
-        size: str(m.Size),
+        size,
         parentMessage: name,
       });
     }
@@ -581,15 +761,18 @@ function ingestMemoryPorts(root: Record<string, unknown>, index: XmlIndex): void
 
   for (const part of asArray(container.Partition)) {
     const p = part as Record<string, unknown>;
-    const partitionName = str(p["@_Name"]);
+    const partitionName = nodeValue(p, "Name");
     for (const port of asArray(p.Port)) {
       const portObj = port as Record<string, unknown>;
-      const localName = str(portObj["@_Name"]);
+      const localName = nodeValue(portObj, "Name");
       if (!localName) {
         continue;
       }
       const inlineMessage = portObj.Message as Record<string, unknown> | undefined;
-      const ref = str(portObj["@_Ref"]);
+      // Ref on a PORT names a common port, not a set of states — in this one
+      // configuration the same spelling means three different things, and only
+      // on a <Field> does it name states.
+      const ref = nodeValue(portObj, "Ref");
 
       let messageName: string;
       let bus: Bus = "Mem";
@@ -597,12 +780,14 @@ function ingestMemoryPorts(root: Record<string, unknown>, index: XmlIndex): void
 
       if (inlineMessage) {
         // RNE-style: the message is defined inline on the partition's port.
-        const portType = str(portObj["@_Type"]);
+        const portType = nodeValue(portObj, "Type");
         bus = (portType && PORT_TYPE_TO_BUS[portType]) || "Mem";
-        messageName = str(inlineMessage["@_Name"]) ?? localName;
+        // Format 2 leaves the message's Name out where it only repeated the
+        // port's, which is what it did on 842 of 918 ports.
+        messageName = nodeValue(inlineMessage, "Name") ?? localName;
         const def: MessageDef = { name: messageName, bus, fields: [] };
         for (const f of asArray(inlineMessage.Field)) {
-          def.fields.push(parseRefField(f as Record<string, unknown>, messageName, commonEnums));
+          def.fields.push(parseField(f as Record<string, unknown>, messageName, commonEnums));
         }
         registerMessage(index, def);
         isInlineMem = bus === "Mem";
@@ -657,7 +842,13 @@ function ingestMemoryPorts(root: Record<string, unknown>, index: XmlIndex): void
   }
 }
 
-/** Collect named enum groups from a file's <Common><CommonEnums>. */
+/**
+ * Port of `XMLConfigParser::parseCommonEnums` — the sets of states a whole file
+ * shares, from <Common><CommonEnums> under its root, which any field then takes
+ * by `Ref="<name>"`. External data and the software test configuration have been
+ * written this way for years; format 2 gives the other four buses the same table
+ * rather than repeating a set of states once per field that uses it.
+ */
 function collectCommonEnums(container: Record<string, unknown>): Map<string, EnumDef[]> {
   const map = new Map<string, EnumDef[]>();
   const common = container.Common as Record<string, unknown> | undefined;
@@ -665,11 +856,15 @@ function collectCommonEnums(container: Record<string, unknown>): Map<string, Enu
   if (!commonEnums) {
     return map;
   }
-  for (const group of asArray(commonEnums.Enums)) {
-    const g = group as Record<string, unknown>;
-    const name = str(g["@_Name"]);
-    if (name) {
-      map.set(name, parseEnumsBlock(g));
+  for (const tag of ENUM_DEFINITION_TAGS) {
+    for (const group of asArray<unknown>(commonEnums[tag])) {
+      const g = group as Record<string, unknown>;
+      const name = str(g["@_Name"]);
+      // A repeated name is refused by TestPit rather than silently shadowed;
+      // keep the first here so the index matches what it would have loaded.
+      if (name && !map.has(name)) {
+        map.set(name, parseEnumsBlock(g));
+      }
     }
   }
   return map;
@@ -692,17 +887,17 @@ function collectCommonPorts(
   }
   for (const port of asArray(commonPorts.Port)) {
     const portObj = port as Record<string, unknown>;
-    const portName = str(portObj["@_Name"]);
+    const portName = nodeValue(portObj, "Name");
     if (!portName) {
       continue;
     }
-    const portType = str(portObj["@_Type"]);
+    const portType = nodeValue(portObj, "Type");
     const bus: Bus = (portType && PORT_TYPE_TO_BUS[portType]) || "Mem";
     const message = portObj.Message as Record<string, unknown> | undefined;
-    const messageName = message ? str(message["@_Name"]) ?? portName : portName;
+    const messageName = (message ? nodeValue(message, "Name") : undefined) ?? portName;
     const def: MessageDef = { name: messageName, bus, fields: [] };
     for (const f of asArray(message?.Field)) {
-      def.fields.push(parseRefField(f as Record<string, unknown>, messageName, commonEnums));
+      def.fields.push(parseField(f as Record<string, unknown>, messageName, commonEnums));
     }
     registerMessage(index, def);
     map.set(portName, { messageName, bus });
@@ -711,33 +906,22 @@ function collectCommonPorts(
 }
 
 /**
- * Attribute-style field parser that also resolves an enum table referenced by
- * @Ref against the file's CommonEnums (ports + ED messages). Falls back to an
- * inline <Enums> block when there's no Ref.
- */
-function parseRefField(
-  f: Record<string, unknown>,
-  parentMessage: string,
-  commonEnums: Map<string, EnumDef[]>
-): FieldDef {
-  const field = parseAttributeStyleField(f, parentMessage);
-  const ref = str(f["@_Ref"]);
-  if (ref && commonEnums.has(ref)) {
-    field.enums = commonEnums.get(ref);
-  }
-  return field;
-}
-
-/**
  * EDMessageFields.xml (External Data / DTIF, ARINC 735B). Shape:
- *   <Root><Common><CommonEnums>…</CommonEnums></Common>
- *         <Messages><Message Name="TypeN">
- *           <Field Name="…" Type="Enum" Ref="DisplayMatrix"/> …
- *         </Message></Messages></Root>
+ *   <EDRoot><Common><CommonEnums>…</CommonEnums></Common>
+ *           <Messages><Message Name="TypeN">
+ *             <Field Name="…" DataType="Enum" Ref="DisplayMatrix"/> …
+ *           </Message></Messages></EDRoot>
  * Messages are referenced in scripts as [ED_<MessageName>] (e.g. [ED_Type1]).
+ *
+ * Format 1 calls the root <Root>, which the cable file also uses; format 2 says
+ * <EDRoot>. No reader has ever tested a root tag — they all go straight for its
+ * children — so both spellings are taken here.
  */
 function ingestEDMessageFields(root: Record<string, unknown>, index: XmlIndex): void {
-  const container = (root.Root as Record<string, unknown> | undefined) ?? root;
+  const container =
+    (root.EDRoot as Record<string, unknown> | undefined) ??
+    (root.Root as Record<string, unknown> | undefined) ??
+    root;
   const commonEnums = collectCommonEnums(container);
   const messagesNode = container.Messages as Record<string, unknown> | undefined;
   if (!messagesNode) {
@@ -745,13 +929,13 @@ function ingestEDMessageFields(root: Record<string, unknown>, index: XmlIndex): 
   }
   for (const msg of asArray(messagesNode.Message)) {
     const m = msg as Record<string, unknown>;
-    const name = str(m["@_Name"]);
+    const name = nodeValue(m, "Name");
     if (!name) {
       continue;
     }
     const def: MessageDef = { name, bus: "ED", fields: [] };
     for (const f of asArray(m.Field)) {
-      def.fields.push(parseRefField(f as Record<string, unknown>, name, commonEnums));
+      def.fields.push(parseField(f as Record<string, unknown>, name, commonEnums));
     }
     registerMessage(index, def);
     for (const prefix of PREFIXES_BY_BUS["ED"]) {
@@ -766,50 +950,61 @@ function ingestEDMessageFields(root: Record<string, unknown>, index: XmlIndex): 
   }
 }
 
-export function parseElementStyleField(
+/**
+ * The one field reader, for every bus and both formats. `nodeValue` takes an
+ * attribute or a child element of the same name, so the only per-format
+ * knowledge left is the handful of names format 2 actually respelled — and each
+ * of those takes both spellings, the newer one first.
+ */
+export function parseField(
   f: Record<string, unknown>,
-  parentMessage: string
+  parentMessage: string,
+  commonEnums?: Map<string, EnumDef[]>
 ): FieldDef {
+  // Name everywhere in format 2, the way 1553, external data, VOR/ILS and the
+  // software test configuration always spelled it; A429 format 1 says FieldName.
+  const name = anyNodeValue(f, "Name", "FieldName") ?? "";
   return {
-    name: str(f.FieldName) ?? "",
-    dataType: str(f.DataType),
-    startBit: str(f.StartBit),
-    size: str(f.Size),
-    minValue: str(f.MinValue),
-    maxValue: str(f.MaxValue),
-    resolution: str(f.Resolution),
-    defaultValue: str(f.DefaultValue),
-    unit: str(f.Unit),
-    enums: parseEnumsBlock(f.Enums),
-    vc: boolOrUndef(f.VC),
+    name,
+    // The field's data type. VOR/ILS, external data and the software test
+    // configuration called it Type in format 1, which is a word that means five
+    // different things across these files; DataType means only this one.
+    dataType: anyNodeValue(f, "DataType", "Type"),
+    startBit: nodeValue(f, "StartBit"),
+    // A width in BITS. A429 and 1553 called it Size, which is a width in BYTES
+    // on a message elsewhere; BitSize is what the other configurations say.
+    size: anyNodeValue(f, "BitSize", "Size"),
+    minValue: nodeValue(f, "MinValue"),
+    maxValue: nodeValue(f, "MaxValue"),
+    resolution: nodeValue(f, "Resolution"),
+    // 1553 format 1 says Default and TestPit did not encode it — it put zero on
+    // the bus for a field a script left out. Format 2 says DefaultValue on every
+    // bus and encodes it, which is why the reader is gated on the SPELLING.
+    defaultValue: anyNodeValue(f, "DefaultValue", "Default"),
+    // Unit and VC are format 1 only; nothing in TestPit reads either.
+    unit: nodeValue(f, "Unit"),
+    enums: resolveEnums(f, commonEnums),
+    vc: boolOrUndef(nodeValue(f, "VC")),
+    used: isNodeUsed(f, name),
     parentMessage,
   };
 }
 
-export function parseAttributeStyleField(
-  f: Record<string, unknown>,
-  parentMessage: string
-): FieldDef {
-  return {
-    name: str(f["@_Name"]) ?? "",
-    dataType: str(f["@_DataType"]) ?? str(f["@_Type"]),
-    startBit: str(f["@_StartBit"]),
-    size: str(f["@_Size"]) ?? str(f["@_BitSize"]),
-    minValue: str(f["@_MinValue"]),
-    maxValue: str(f["@_MaxValue"]),
-    resolution: str(f["@_Resolution"]),
-    defaultValue: str(f["@_Default"]),
-    unit: str(f["@_Unit"]),
-    enums: parseEnumsBlock(f.Enums),
-    parentMessage,
-  };
-}
-
+/**
+ * The states a node declares, in any of the three shapes TestPit accepts:
+ * wrapped in <EnumDef> (format 2), wrapped in <Enums> (format 1), or written
+ * straight into the node with no wrapper at all. All three are read in either
+ * format — the engine is deliberately unfussy about a thing it understands.
+ */
 export function parseEnumsBlock(value: unknown): EnumDef[] {
   if (!value || typeof value !== "object") {
     return [];
   }
-  const enums = asArray((value as Record<string, unknown>).Enum);
+  const container = enumContainer(value as Record<string, unknown>);
+  if (!container) {
+    return [];
+  }
+  const enums = asArray<unknown>(container.Enum);
   const out: EnumDef[] = [];
   for (const e of enums) {
     const obj = e as Record<string, unknown>;
