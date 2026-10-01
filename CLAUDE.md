@@ -62,11 +62,13 @@ src/test/fixtures/config/      # XML fixtures for xmlIndex tests (RNE-style at r
 | Command | What it does |
 |---|---|
 | `npm run compile` | `tsc -p ./` → `out/` |
-| `npm test` | `compile` then `mocha` (`out/test/unit/**/*.test.js`) — 237 passing |
+| `npm test` | `compile` then `mocha` (`out/test/unit/**/*.test.js`) — 262 passing |
 | `npm run coverage` | `c8 npm test` (config in [.c8rc.json](.c8rc.json); vscode-touching glue excluded) |
 | `npm run lint` | ESLint (flat config) — needs Node ≥ 20.19 / 22 |
 | F5 | Extension Development Host (uses [.vscode/launch.json](.vscode/launch.json); run `npm run watch` alongside) |
 | `npx @vscode/vsce package` | build the `.vsix` |
+
+TypeScript runs side by side: `tsc` is TS 7 (`@typescript/native` → `npm:typescript@^7`), while `typescript` is aliased to `npm:@typescript/typescript6` because typescript-eslint needs the TS 6 API (TS 7.0 ships none). Keep both aliases until typescript-eslint supports TS ≥ 7.1.
 
 `tsc` does not prune stale outputs — after deleting/renaming a source file, wipe `out/` or you'll run/ship stale `.js` (and old tests will appear to still pass).
 
