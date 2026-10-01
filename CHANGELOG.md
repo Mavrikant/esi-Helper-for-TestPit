@@ -4,6 +4,18 @@ All notable changes to the **esi Helper for TestPit** extension will be document
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.5]
+
+Dependency refresh — no change in what the extension does.
+
+### Changed
+- **Requires VS Code 1.140 or newer** (was 1.120). The extension is now built against the 1.140 API definitions, and VS Code requires `engines.vscode` to cover them; an older VS Code keeps 0.4.4 until it is updated.
+- **`fast-xml-parser` 5.8.0 → 5.11.2**, the one runtime dependency (it reads the TestPit XML configs).
+- **Build toolchain brought up to date:** compiled with TypeScript 7.0, run side by side with TypeScript 6.0 for typescript-eslint, which does not support 7.0 yet. Also updated: ESLint 10.11, typescript-eslint 8.71, mocha 12, c8 12, `@vscode/test-electron` 3, `@types/node` 26. The JavaScript TypeScript 7 emits differs from 6.0's only in helper-variable naming and line breaks.
+
+### Security
+- Development-only advisories cleared (`npm audit` reports none): js-yaml (GHSA-2883-xcg3-v3hh), brace-expansion (GHSA-q2hr-2g5m-vwhr, GHSA-qhr7-859c-m2p7, GHSA-6j4f-fj2g-mc7p), serialize-javascript (GHSA-gfhx-hw2g-v5hg). None of these packages ship in the `.vsix`.
+
 ## [0.4.4]
 
 Catch-up with TestPit v1.3.6.19 (Source r2370): the second form of the bus message configuration files.
