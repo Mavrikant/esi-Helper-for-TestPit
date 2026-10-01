@@ -7,7 +7,7 @@
   "publisher": "karamandev",
   "repository": "https://github.com/Mavrikant/esi-Helper-for-TestPit",
   "engines": {
-    "vscode": "^1.120.0",
+    "vscode": "^1.140.0",
     "node": ">=22.0.0"
   },
   "categories": [
@@ -220,19 +220,20 @@
   },
   "devDependencies": {
     "@types/mocha": "^10.0.10",
-    "@types/node": "^25.9.8",
-    "@types/vscode": "^1.120.0",
-    "@typescript-eslint/eslint-plugin": "^8.70.1",
-    "@typescript-eslint/parser": "^8.70.1",
+    "@types/node": "^26.6.4",
+    "@types/vscode": "^1.140.0",
+    "@typescript-eslint/eslint-plugin": "^8.71.0",
+    "@typescript-eslint/parser": "^8.71.0",
+    "@typescript/native": "npm:typescript@^7.0.2",
     "@vscode/test-electron": "^3.1.0",
     "c8": "^12.0.0",
     "eslint": "^10.11.0",
-    "mocha": "^12.0.2",
+    "mocha": "^12.0.3",
     "mock-require": "^3.0.3",
-    "typescript": "^6.0.3"
+    "typescript": "npm:@typescript/typescript6@^6.0.2"
   },
   "dependencies": {
-    "fast-xml-parser": "^5.11.1"
+    "fast-xml-parser": "^5.11.2"
   },
   "c8": {
     "exclude": [
