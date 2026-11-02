@@ -13,21 +13,27 @@ on:
 
 jobs:
   build-and-test:
-    name: Build and Test on ${{ matrix.os }}
-    env:
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+    # The Node 26 jobs keep their existing check names; only the extra
+    # floor job is suffixed.
+    name: Build and Test on ${{ matrix.os }}${{ matrix.node != '26' && format(' (Node {0})', matrix.node) || '' }}
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
+        # Current Node.js LTS on every OS ...
+        node: ['26']
+        include:
+          # ... plus the engines.node floor (package.json: >=22) on Linux.
+          - os: ubuntu-latest
+            node: '22'
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
       - name: Install Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
-          node-version: '22'
+          node-version: ${{ matrix.node }}
           cache: 'npm'
       - name: Install dependencies
         run: npm ci
@@ -41,7 +47,7 @@ jobs:
           set -o pipefail
           npm run coverage 2>&1 | tee coverage-output.txt
       - name: Post coverage to job summary
-        if: always() && runner.os == 'Linux'
+        if: always() && runner.os == 'Linux' && matrix.node == '26'
         shell: bash
         run: |
           {
@@ -54,7 +60,7 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
       - name: Upload HTML coverage report
-        if: always() && runner.os == 'Linux'
+        if: always() && runner.os == 'Linux' && matrix.node == '26'
         uses: actions/upload-artifact@v7
         with:
           name: coverage-html
@@ -64,8 +70,6 @@ jobs:
 
   release:
     name: Release extension
-    env:
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
     needs: [build-and-test]
@@ -73,11 +77,11 @@ jobs:
       contents: write
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
       - name: Install Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
-          node-version: '22'
+          node-version: '26'
           cache: 'npm'
       - name: Install dependencies
         run: npm ci

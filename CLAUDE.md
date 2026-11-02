@@ -70,6 +70,8 @@ src/test/fixtures/config/      # XML fixtures for xmlIndex tests (RNE-style at r
 
 TypeScript runs side by side: `tsc` is TS 7 (`@typescript/native` → `npm:typescript@^7`), while `typescript` is aliased to `npm:@typescript/typescript6` because typescript-eslint needs the TS 6 API (TS 7.0 ships none). Keep both aliases until typescript-eslint supports TS ≥ 7.1.
 
+`overrides` in `package.json` force `glob` ≥ 14.0.3 and `minimatch` ≥ 11.0.4 (GHSA-3g3m-2fjr-6pw4, GHSA-g3hv-75wg-m249): mocha, c8, ESLint and typescript-eslint still ask for the unpatched glob 13 / minimatch 10 lines. Dev-only — neither ships in the `.vsix`. Drop each override once every dependent asks for the patched major itself (`npm ls glob minimatch` shows no `overridden`).
+
 `tsc` does not prune stale outputs — after deleting/renaming a source file, wipe `out/` or you'll run/ship stale `.js` (and old tests will appear to still pass).
 
 ## Common tasks
