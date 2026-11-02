@@ -4,6 +4,19 @@ All notable changes to the **esi Helper for TestPit** extension will be document
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.6]
+
+Dependency refresh — no change in what the extension does.
+
+### Changed
+- **Requires VS Code 1.144 or newer** (was 1.140). The extension is now built against the 1.144 API definitions, and VS Code requires `engines.vscode` to cover them; an older VS Code keeps 0.4.5 until it is updated.
+- **The XML reader's helper packages updated:** `fast-xml-parser` stays on 5.11.2 (still the latest), while the packages it ships with move to `fast-xml-builder` 1.3.1, `strnum` 2.5.1 and `xml-naming` 0.3.0.
+- **Build toolchain brought up to date:** ESLint 10.14, typescript-eslint 8.72, `@types/node` 26.6.6. Still compiled with TypeScript 7.0, run side by side with TypeScript 6.0 for typescript-eslint, which does not support 7.x yet.
+- **CI tests on Node.js 26** (the current LTS) on Windows, macOS and Linux, plus Node.js 22, the oldest supported, on Linux; releases are built on Node.js 26. GitHub Actions updated to `actions/checkout` v7 and `actions/setup-node` v7.
+
+### Security
+- Development-only advisories cleared (`npm audit` reports none): serialize-javascript (GHSA-m5mm-p8h7-m29v), glob (GHSA-3g3m-2fjr-6pw4), minimatch (GHSA-g3hv-75wg-m249). glob and minimatch are pinned to their patched releases through `overrides`, because mocha, c8, ESLint and typescript-eslint still ask for the older lines. None of these packages ship in the `.vsix`.
+
 ## [0.4.5]
 
 Dependency refresh — no change in what the extension does.

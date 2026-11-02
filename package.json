@@ -3,11 +3,11 @@
   "displayName": "esi Helper for TestPit",
   "description": "Provides syntax highlighting, validation, and code snippets for esi files used in the TestPit tool.",
   "icon": "images/TestPitIcon.ico",
-  "version": "0.4.5",
+  "version": "0.4.6",
   "publisher": "karamandev",
   "repository": "https://github.com/Mavrikant/esi-Helper-for-TestPit",
   "engines": {
-    "vscode": "^1.140.0",
+    "vscode": "^1.144.0",
     "node": ">=22.0.0"
   },
   "categories": [
@@ -220,20 +220,24 @@
   },
   "devDependencies": {
     "@types/mocha": "^10.0.10",
-    "@types/node": "^26.6.4",
-    "@types/vscode": "^1.140.0",
-    "@typescript-eslint/eslint-plugin": "^8.71.0",
-    "@typescript-eslint/parser": "^8.71.0",
+    "@types/node": "^26.6.6",
+    "@types/vscode": "^1.144.0",
+    "@typescript-eslint/eslint-plugin": "^8.72.1",
+    "@typescript-eslint/parser": "^8.72.1",
     "@typescript/native": "npm:typescript@^7.0.2",
     "@vscode/test-electron": "^3.1.0",
     "c8": "^12.0.0",
-    "eslint": "^10.11.0",
+    "eslint": "^10.14.0",
     "mocha": "^12.0.3",
     "mock-require": "^3.0.3",
     "typescript": "npm:@typescript/typescript6@^6.0.2"
   },
   "dependencies": {
     "fast-xml-parser": "^5.11.2"
+  },
+  "overrides": {
+    "glob": "^14.0.3",
+    "minimatch": "^11.0.4"
   },
   "c8": {
     "exclude": [
