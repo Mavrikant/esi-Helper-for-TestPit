@@ -4,7 +4,7 @@ All notable changes to the **esi Helper for TestPit** extension will be document
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.5.0]
 
 Editor features: an outline, tag-based folding, a step picker, more quick fixes, smarter completion, inlay hints, keyword hover, theme-aware colours, Format Selection, and a validity check that no longer runs on every keystroke.
 
