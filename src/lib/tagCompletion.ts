@@ -7,6 +7,7 @@
  * Tag lines are classified by parseSectionTag.ts and nowhere else — a
  * one-liner `[NAME/]` therefore never lands on a stack here.
  */
+import { nextStepNumber } from "./nextStepNumber";
 import { parseSectionTagLine } from "./parseSectionTag";
 import {
   isStepSectionName,
@@ -37,15 +38,65 @@ export type TagPosition =
   | "other"; // inside a message block or a section not known here
 
 interface StructuralSection {
-  /** Label and filter text; also the tag name unless `nameSnippet` is set. */
+  /** Label and filter text; also the tag name unless `isStep` is set. */
   name: string;
   detail: string;
   /** Positions this section belongs in — it is ranked first there. */
   validIn: readonly TagPosition[];
-  /** Snippet form of the name, for a name that needs filling in. */
-  nameSnippet?: string;
+  /**
+   * `[STEP <id>]`: the name needs an id, written as a tab stop holding the
+   * next number of the file's own numbering (nextStepNumber.ts).
+   */
+  isStep?: boolean;
   /** Written as `[NAME/]`: opens and closes on one line, no closing tag. */
   oneLiner?: boolean;
+  /**
+   * What a brand-new block is filled with, instead of an empty line: the
+   * lines between the tags, written relative to the tag's own column, in
+   * snippet syntax (tab stops numbered from 1). These are the multi-line
+   * bodies snippets.json used to carry — one list entry per section now.
+   */
+  body?: readonly string[];
+}
+
+const STEP_DEFINITION_BODY: readonly string[] = [
+  "    Step Description      = $1",
+  "    Step Requirements     = $2",
+  "    Step Dependencies     = N/A$3",
+  "    Step Conditions       = <pre>",
+  "                                <br/> $4",
+  "                                <br/> $5",
+  "                            </pre>",
+  "    Step Expected Results = <pre>",
+  "                                <br/> $6",
+  "                            </pre>",
+];
+
+/** Label of the second STEP entry: the step with all three parts filled in. */
+export const STEP_SKELETON_LABEL = "STEP (full skeleton)";
+
+/** Suffix of the second entry of a connection: the block plus its field lines. */
+export const WITH_FIELDS_SUFFIX = " (with fields)";
+
+/**
+ * The inside of a full step, relative to the `[STEP <id>]` column. Tab stop 1
+ * is the step id, so the stops here start at 2.
+ */
+function stepSkeletonBody(): string[] {
+  const definition = STEP_DEFINITION_BODY.map(
+    (line) => INDENT + line.replace(/\$(\d)/g, (_m, n: string) => `$${Number(n) + 1}`)
+  );
+  return [
+    `${INDENT}[${SEC_STEP_DEFINITION}]`,
+    ...definition,
+    `${INDENT}[/${SEC_STEP_DEFINITION}]`,
+    `${INDENT}[${SEC_STEP_INPUTS}]`,
+    `${INDENT}${INDENT}$8`,
+    `${INDENT}[/${SEC_STEP_INPUTS}]`,
+    `${INDENT}[${SEC_STEP_OUTPUTS}]`,
+    `${INDENT}${INDENT}$9`,
+    `${INDENT}[/${SEC_STEP_OUTPUTS}]`,
+  ];
 }
 
 const COMMAND_POSITIONS: readonly TagPosition[] = [
@@ -60,25 +111,64 @@ const COMMAND_POSITIONS: readonly TagPosition[] = [
  * usually has them.
  */
 export const STRUCTURAL_SECTIONS: readonly StructuralSection[] = [
-  { name: SEC_VARIABLES, detail: "Constant macros for this file", validIn: ["root"] },
-  { name: SEC_TEST_DEFINITION, detail: "Test description, used in the report", validIn: ["root"] },
+  {
+    name: SEC_VARIABLES,
+    detail: "Constant macros for this file",
+    validIn: ["root"],
+    body: ["    %$1% = $2"],
+  },
+  {
+    name: SEC_TEST_DEFINITION,
+    detail: "Test description, used in the report",
+    validIn: ["root"],
+    body: [
+      "    Test Description   = $1",
+      "    Test Configuration = $2",
+      "    Test Dependencies  = $3",
+    ],
+  },
   { name: SEC_TEST_STEPS, detail: "Holds the steps of the test", validIn: ["root"] },
   {
     name: "STEP",
     detail: "A test step: [STEP <id>]",
     validIn: ["testSteps"],
-    nameSnippet: "STEP ${1:10}",
+    isStep: true,
   },
-  { name: SEC_STEP_DEFINITION, detail: "Description, requirements and expected results of the step", validIn: ["step"] },
+  {
+    name: SEC_STEP_DEFINITION,
+    detail: "Description, requirements and expected results of the step",
+    validIn: ["step"],
+    body: STEP_DEFINITION_BODY,
+  },
   { name: SEC_STEP_INPUTS, detail: "Messages and commands sent in this step", validIn: ["step"] },
   { name: SEC_STEP_OUTPUTS, detail: "Messages expected in this step", validIn: ["step"] },
   { name: SEC_INCLUDE, detail: "Run another .esi file here", validIn: ["step", "root"] },
-  { name: "STEP GET_DUMP", detail: "Step that collects the configured memory dump", validIn: ["testSteps"] },
+  {
+    name: "STEP GET_DUMP",
+    detail: "Step that collects the configured memory dump",
+    validIn: ["testSteps"],
+    body: [`    [${SEC_STEP_INPUTS}]`, `    [/${SEC_STEP_INPUTS}]`],
+  },
   { name: "TIMELIMIT", detail: "Delay, in ms (time = …)", validIn: ["stepInputs"] },
-  { name: SEC_MANUAL_VERIFY, detail: "Operator pass/fail prompt", validIn: ["stepOutputs"] },
-  { name: SEC_EXTERNAL_VERIFY, detail: "Verdict read from a result file", validIn: ["stepOutputs"] },
+  {
+    name: SEC_MANUAL_VERIFY,
+    detail: "Operator pass/fail prompt",
+    validIn: ["stepOutputs"],
+    body: ["    text = $1"],
+  },
+  {
+    name: SEC_EXTERNAL_VERIFY,
+    detail: "Verdict read from a result file",
+    validIn: ["stepOutputs"],
+    body: ["    result file = $1"],
+  },
   { name: SEC_STEP_DUMP, detail: "One-liner section: [STEP DUMP/]", validIn: ["stepOutputs"], oneLiner: true },
-  { name: "CMD_EXECUTE", detail: "Run a host executable or script", validIn: COMMAND_POSITIONS },
+  {
+    name: "CMD_EXECUTE",
+    detail: "Run a host executable or script",
+    validIn: COMMAND_POSITIONS,
+    body: ["    system call  = $1", "    wait timeout = %TIMEOUT%"],
+  },
   { name: "CMD_INSTRUCTION", detail: "Blocking instruction to the operator", validIn: COMMAND_POSITIONS },
   { name: "CMD_SWMemoryWrite", detail: "Write a binary file into a memory region", validIn: COMMAND_POSITIONS },
 ];
@@ -96,6 +186,11 @@ export interface OpenSection {
 
 export interface TagCompletionEntry {
   label: string;
+  /**
+   * Connection entries: the connection's full name. Differs from `label` on
+   * the "with fields" variant.
+   */
+  connectionName?: string;
   /** "section" = structural name, "connection" = from the XML index, "close" = closing tag. */
   source: "section" | "connection" | "close";
   detail?: string;
@@ -274,6 +369,16 @@ function tailOf(
   return { tagLine, endCol: character, writeBracket: blank, restIsEmpty: blank };
 }
 
+export interface TagCompletionOptions {
+  /**
+   * The lines a new block of this connection usually needs, as key names
+   * (`time`, then the message's fields). When it returns some, and the tag is
+   * typed on an empty line inside [STEP INPUTS] / [STEP OUTPUTS], a second,
+   * lower-ranked "with fields" entry is offered beside the plain tag.
+   */
+  skeletonKeys?: (connectionName: string) => readonly string[] | undefined;
+}
+
 /**
  * Compute tag completions for a cursor inside `[…` (opening) or `[/…`
  * (closing).
@@ -284,6 +389,7 @@ function tailOf(
  * @param partial          text typed between the `[` (or `[/`) and the cursor
  * @param closing          true when the cursor follows `[/`
  * @param connectionNames  full connection names from the XML index (may be empty)
+ * @param options          optional extras (the "with fields" block variant)
  */
 export function computeTagCompletions(
   documentText: string,
@@ -291,7 +397,8 @@ export function computeTagCompletions(
   character: number,
   partial: string,
   closing: boolean,
-  connectionNames: Iterable<string>
+  connectionNames: Iterable<string>,
+  options: TagCompletionOptions = {}
 ): TagCompletionResult | undefined {
   const lines = documentText.split(/\r?\n/);
   if (lineIndex < 0 || lineIndex >= lines.length) {
@@ -350,7 +457,8 @@ export function computeTagCompletions(
     name: string,
     nameSnippet: string | undefined,
     oneLiner: boolean,
-    alreadyClosed: boolean
+    alreadyClosed: boolean,
+    body?: readonly string[]
   ): { insertText: string; isSnippet: boolean } => {
     if (oneLiner) {
       // `[NAME/]` closes itself — never a closing tag below it.
@@ -359,9 +467,11 @@ export function computeTagCompletions(
     if (freshLine && !alreadyClosed && !blockClosedBelow) {
       const snippetName = nameSnippet ?? escapeSnippet(name);
       const indent = escapeSnippet(lineIndent);
+      const inside = body
+        ? body.map((bodyLine) => indent + bodyLine).join("\n")
+        : `${indent}${INDENT}$0`;
       return {
-        insertText:
-          `${snippetName}]\n${indent}${INDENT}$0\n${indent}[/${snippetName}]`,
+        insertText: `${snippetName}]\n${inside}\n${indent}[/${snippetName}]`,
         isSnippet: true,
       };
     }
@@ -371,35 +481,81 @@ export function computeTagCompletions(
     return { insertText: name + bracket, isSnippet: false };
   };
 
+  // A new step is proposed the number the file's own numbering leads to.
+  const stepNameSnippet = `STEP \${1:${nextStepNumber(lines, lineIndex)}}`;
+
   const entries: TagCompletionEntry[] = [];
   STRUCTURAL_SECTIONS.forEach((section, i) => {
     const valid = section.validIn.includes(position);
-    const alreadyClosed = section.nameSnippet
-      ? stepClosedBelow
-      : closedBelow.has(section.name);
+    const isStep = section.isStep === true;
+    const alreadyClosed = isStep ? stepClosedBelow : closedBelow.has(section.name);
+    const rank = `${valid ? "0" : "2"}${pad(i)}`;
     entries.push({
       label: section.name,
       source: "section",
       detail: section.detail,
       ...openText(
         section.name,
-        section.nameSnippet,
+        isStep ? stepNameSnippet : undefined,
         section.oneLiner === true,
-        alreadyClosed
+        alreadyClosed,
+        section.body
       ),
       filterText: section.name,
-      sortText: `${valid ? "0" : "2"}${pad(i)}`,
+      sortText: rank,
     });
+    // The whole step - definition, inputs, outputs - as a second entry right
+    // below the plain one. Only where a new block is being written.
+    if (isStep && freshLine && !alreadyClosed && !blockClosedBelow) {
+      entries.push({
+        label: STEP_SKELETON_LABEL,
+        source: "section",
+        detail: "A test step with its definition, inputs and outputs",
+        ...openText(section.name, stepNameSnippet, false, false, stepSkeletonBody()),
+        filterText: section.name,
+        sortText: `${rank}+`,
+      });
+    }
   });
 
-  const connectionRank = CONNECTION_POSITIONS.includes(position) ? "1" : "3";
+  const inMessageSection = CONNECTION_POSITIONS.includes(position);
+  const connectionRank = inMessageSection ? "1" : "3";
   for (const name of connectionNames) {
+    const alreadyClosed = closedBelow.has(name);
     entries.push({
       label: name,
+      connectionName: name,
       source: "connection",
-      ...openText(name, undefined, false, closedBelow.has(name)),
+      ...openText(name, undefined, false, alreadyClosed),
       filterText: name,
       sortText: `${connectionRank}${name}`,
+    });
+    if (!inMessageSection || !freshLine || alreadyClosed || blockClosedBelow) {
+      continue;
+    }
+    const keys = options.skeletonKeys?.(name);
+    if (!keys || keys.length === 0) {
+      continue;
+    }
+    const width = Math.max(...keys.map((k) => k.length));
+    entries.push({
+      label: name + WITH_FIELDS_SUFFIX,
+      connectionName: name,
+      source: "connection",
+      detail: `block with ${keys.join(", ")}`,
+      ...openText(
+        name,
+        undefined,
+        false,
+        false,
+        keys.map(
+          (key, k) => `${INDENT}${escapeSnippet(key.padEnd(width))} = $${k + 1}`
+        )
+      ),
+      filterText: name,
+      // A blank sorts before every name character, so the variant sits right
+      // under its plain tag and above longer names sharing the prefix.
+      sortText: `${connectionRank}${name} +`,
     });
   }
 

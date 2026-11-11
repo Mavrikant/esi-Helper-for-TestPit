@@ -201,7 +201,11 @@ const A708_TAG_PREFIX = "708_";
 // are always an "unexpected output field in input message" — safe to flag
 // regardless of bus. Bus-specific output params (validity/angle/…) are
 // deliberately excluded to stay conservative.
-const OUTPUT_ONLY_IN_INPUT = new Set(["occurrence", "synchronize", "match"]);
+export const OUTPUT_ONLY_IN_INPUT: ReadonlySet<string> = new Set([
+  "occurrence",
+  "match",
+  "synchronize",
+]);
 
 interface StackEntry {
   name: string;

@@ -9,7 +9,7 @@ import { createCsvCellLookup } from "./lib/csv";
 import { MacroIssue, validateMacros } from "./lib/macros";
 import { StepIssue, checkSteps } from "./lib/stepChecks";
 import { createMacroResolver } from "./providers/macroResolver";
-import { getActiveProjectIndex } from "./lib/projectIndexCache";
+import { getActiveProjectIndex, onIndexChanged } from "./lib/projectIndexCache";
 import { onActiveProfileChanged } from "./lib/profileRegistry";
 import { getOutputChannel } from "./lib/outputChannel";
 
@@ -75,13 +75,16 @@ export function registerComponentDiagnostics(): vscode.Disposable {
   };
 
   const onProfileChange = onActiveProfileChanged(() => revalidateAll());
+  // A config XML edited on disk rebuilds the index without a profile change.
+  const onConfigFileChange = onIndexChanged(() => revalidateAll());
 
   return vscode.Disposable.from(
     collection,
     onChange,
     onOpen,
     onClose,
-    onProfileChange
+    onProfileChange,
+    onConfigFileChange
   );
 }
 

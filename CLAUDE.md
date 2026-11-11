@@ -28,7 +28,7 @@ src/
 ├── diagnostics.ts            # live validity check: onDidChangeTextDocument → validityScheduler (600 ms debounce) → TestPit.exe (heavy). ONE "esi-testpit" collection; exports runValidityCheckForDocument (shared with the command). Skips silently if no exe.
 ├── componentDiagnostics.ts   # "esi-components" DiagnosticCollection; in-process XML-index validation + CSV-cell lookup
 ├── statusBar.ts              # bottom-right profile item (shows active profile; click → picker)
-├── formatter.ts              # registerEsiFormatter (Shift+Alt+F) + registerFormatOnSave (tabs→spaces always; full format when refactorDocumentOnSave)
+├── formatter.ts              # registerEsiFormatter (Shift+Alt+F) + registerEsiRangeFormatter (Format Selection) + registerFormatOnSave (tabs→spaces always; full format when refactorDocumentOnSave); all emit per-line edits via lib/lineEdits.ts
 ├── commands/                 # one file per command, each exports register*(): Disposable
 │   ├── selectProfile.ts         # QuickPick of registry profiles (+ "Change TestPit executable…")
 │   ├── reloadRegistry.ts        # re-export the registry
@@ -38,7 +38,10 @@ src/
 │   ├── gotoMatchingTag.ts       # [NAME] <-> [/NAME]; from inside a block → its opener (lib/tagPairs.ts)
 │   └── updateStepNumbers.ts / refactorDocument.ts
 ├── providers/                # IntelliSense, wired in extension.ts
-│   ├── completion.ts / hover.ts / semanticTokens.ts
+│   ├── completion.ts / hover.ts
+│   ├── semanticTokens.ts        # thin glue over lib/semanticTokens.ts; re-requests on onIndexChanged
+│   ├── keywordHover.ts          # hover for parameter keys + structural section tags (lib/keywordDocs.ts); silent wherever hover.ts answers
+│   ├── inlayHints.ts            # enum name / unit / range after numeric values (lib/inlayHints.ts); settings esihelper.inlayHints.*
 │   ├── codeActions.ts           # the ONE code-action provider: "esi Helper" diagnostics → lib/quickFixes | macros | stepChecks (routed by diagnostic code) → CodeActions
 │   ├── macroNavigation.ts       # %MACRO% definition / references / rename / highlight (logic in lib/macros.ts)
 │   ├── macroResolver.ts         # fs/editor side of lib/macros.ts: reads `include file` targets (open editor first, then disk by mtime)
@@ -51,14 +54,21 @@ src/
     ├── testpitRegistry.ts       # reg export → RegistryModel { defaultProfile, profiles[], configs: {<profile>: {cable,a429,m1553,discrete,partition,vorils,ed}} }
     ├── pluginStore.ts           # globalStorage JSON: testpitExe, activeProfile, cached registry; owns onActiveProfileChanged
     ├── profileRegistry.ts       # orchestration: ensureRegistryLoaded/reloadRegistry, getProfiles/getActiveProfileName/setActiveProfile, getActiveConfigs, getTestpitExe/ensureTestpitExe/pickTestpitExe, promptForExeIfUnset
-    ├── projectIndexCache.ts     # XmlIndex for the active profile via parseConfigFiles; FileSystemWatcher on each resolved config file; getActiveProjectIndex()/registerIndexLifecycle()
+    ├── projectIndexCache.ts     # XmlIndex for the active profile via parseConfigFiles; FileSystemWatcher on each resolved config file; getActiveProjectIndex()/registerIndexLifecycle(); owns onIndexChanged
     ├── xmlIndex.ts              # parseConfigFiles(configs) [route-by-role] + parseConfigFolder(dir) [filename, tests]; Ref resolution; ingesters; COMPONENT_TAG_PREFIXES
-    ├── esiContext.ts           # cursor → EsiContext (tagName | closeTagName | fieldName | fieldValue | variableRef | other)
+    ├── esiContext.ts           # cursor → EsiContext (tagName | closeTagName | fieldName | fieldValue | variableRef | other); exports findEnclosingBlock (on parseSectionTagLine)
     ├── parseSectionTag.ts      # ONE source of section-tag grammar: [NAME] / [/NAME] / one-liner [NAME/] + the sloppy forms TestPit repairs
     ├── sectionNames.ts         # ONE source of structural section names (SEC_*) + isStepSectionName (STEP <id> vs STEP INPUTS/OUTPUTS/DEFINITION/DUMP)
     ├── esiOutline.ts           # pure: buildOutline(text) tree + foldingRanges(text) (sections, <pre> bodies, # runs); recovers from unclosed/mismatched tags
     ├── listSteps.ts            # [STEP n] blocks + Step Description/Requirements for the goto-step picker; findStepByQuery / findStepAtLine
-    ├── tagCompletion.ts        # pure tag-completion decisions: names offered after `[` / `[/`, replace range, snippet text (auto closing tag)
+    ├── tagCompletion.ts        # pure tag-completion decisions: names offered after `[` / `[/`, replace range, snippet text (auto closing tag); STRUCTURAL_SECTIONS[].body = the section templates (were snippets.json); "STEP (full skeleton)" + "<conn> (with fields)" variants
+    ├── nextStepNumber.ts       # next `[STEP n]` proposal in the file's own numbering (gap, zero padding, in-between)
+    ├── fieldCompletion.ts      # field-name completion decisions (hide assigned keys, order, output-only params by block direction) + skeletonKeys for "with fields"
+    ├── csvValueCompletion.ts   # `.csv` file / `line:N col:M` value completion (one readdirSync per request, capped)
+    ├── keywordDocs.ts          # pure: hover text for PARAMETER_FIELDS keys and structural sections (summary/placement read from STRUCTURAL_SECTIONS)
+    ├── inlayHints.ts           # pure: computeInlayHints(text, index, range?, options?) → enum name / unit / [min..max]
+    ├── semanticTokens.ts       # pure: computeSemanticTokens(text, index); types class/property/enumMember/keyword; modifiers defaultLibrary (= not known to be wrong), deprecated (= used === false)
+    ├── lineEdits.ts            # formatted text → minimal per-line edits; selection → line span
     ├── bareConnectionLookup.ts # bare name → connection for hover, matchers derived from COMPONENT_TAG_PREFIXES
     ├── componentValidator.ts   # pure: text + index → ComponentIssue[] (each may carry `fix: IssueFixData`); optional CsvLookup; exports ASSIGNMENT_RE
     ├── quickFixes.ts           # pure: issue → plain edits (createFixContext / findIssues / computeQuickFixes / computeFixAll / applyEdits)
@@ -90,7 +100,7 @@ src/test/fixtures/config/      # XML fixtures for xmlIndex tests (RNE-style at r
 | Command | What it does |
 |---|---|
 | `npm run compile` | `tsc -p ./` → `out/` |
-| `npm test` | `compile` then `mocha` (`out/test/unit/**/*.test.js`) — 654 passing |
+| `npm test` | `compile` then `mocha` (`out/test/unit/**/*.test.js`) — 780 passing |
 | `npm run coverage` | `c8 npm test` (config in [.c8rc.json](.c8rc.json); vscode-touching glue excluded) |
 | `npm run lint` | ESLint (flat config) — needs Node ≥ 20.19 / 22 |
 | F5 | Extension Development Host (uses [.vscode/launch.json](.vscode/launch.json); run `npm run watch` alongside) |
@@ -116,7 +126,9 @@ TypeScript runs side by side: `tsc` is TS 7 (`@typescript/native` → `npm:types
 3. Declare it in `contributes.commands` + add `onCommand:extension.myCommand` to `activationEvents` in [package.json](package.json).
 
 ### Change syntax colours
-Two places, both in `package.json` `contributes.configurationDefaults`: `editor.semanticTokenColorCustomizations.rules` (`class`/`property`/`enumMember`/`keyword` for `esi`) and `editor.tokenColorCustomizations.textMateRules` (scopes from [syntaxes/esi.json](syntaxes/esi.json): `comment.line.number-sign.esi`, `entity.name.tag.esi`, `keyword.other.field.esi`, `variable.other.macro.esi`, `string.other.path.esi`, `string.quoted.double.esi`, `constant.language.esi`, `constant.numeric.esi`, `source.esi`). Some elements appear in both layers (semantic wins) — change both to recolour consistently.
+Two places, both in `package.json` `contributes.configurationDefaults`: `editor.semanticTokenColorCustomizations.rules` (`class`/`property`/`enumMember`/`keyword` for `esi`) and `editor.tokenColorCustomizations.textMateRules` (scopes from [syntaxes/esi.json](syntaxes/esi.json): `comment.line.number-sign.esi`, `entity.name.tag.esi`, `keyword.other.field.esi`, `variable.other.macro.esi`, `string.other.path.esi`, `string.quoted.double.esi`, `constant.language.esi`, `constant.numeric.esi`, `source.esi`, plus `entity.name.tag.step.esi`, `entity.name.tag.section.esi`, `punctuation.definition.tag.close.esi`, `keyword.other.unit.esi`, `keyword.operator.comparison.esi`, `meta.tag.markup.esi`, `keyword.other.csv-ref.esi`; `keyword.operator.assignment.esi` has no colour rule on purpose). Some elements appear in both layers (semantic wins) — change both to recolour consistently.
+
+Every colour exists **twice in each setting**: the top-level (dark/default) rules and the light palette under the one multi-theme key (`[Default Light Modern][Light Modern]…[Default High Contrast Light]`, exact built-in theme ids — no `[*Light*]` wildcard, it would match dark themes with "Light" in the name). Change both; `syntaxColours.test.ts` fails if the light block misses a rule or a colour drops below 4.5:1 contrast. The section-name list in the grammar's `section-tags` rule and the exclusion list in `step-tags` must mirror `src/lib/sectionNames.ts` (`esiGrammar.test.ts` checks it; the grammar regexes must stay within syntax common to JS and Oniguruma — no Oniguruma engine is installed for tests).
 
 ## Conventions & gotchas
 
@@ -135,9 +147,10 @@ Two places, both in `package.json` `contributes.configurationDefaults`: `editor.
 - **CRLF.** Every `.split("\n")` on document text must be `.split(/\r?\n/)` — Windows `.esi` files leave trailing `\r` that breaks `$`-anchored regexes.
 - **CSV cell refs** (`field = file.csv line:N col:M`) are detected in `componentValidator` before the generic enum check, for enum fields and (range-checked like a literal) numeric fields. The fs-touching lookup is `createCsvCellLookup` in [csv.ts](src/lib/csv.ts) — the only one; [componentDiagnostics.ts](src/componentDiagnostics.ts) makes one per pass. The ref grammar is `parseCsvCellRef` in [fileRefs.ts](src/lib/fileRefs.ts); don't write another CSV-ref regex.
 - **One resolve rule for referenced files:** `resolveScriptRelative` ([fileRefs.ts](src/lib/fileRefs.ts)) — relative to the folder of the script that names the file. CSV refs, document links and macro include-following all use it. TestPit's own rule is unknown, which is why links are existence-gated and an unreadable include silences the macro checks instead of raising anything.
+- **`onIndexChanged` ([projectIndexCache.ts](src/lib/projectIndexCache.ts)) is the "index-derived results are stale" signal** — fired after a profile switch / registry reload AND after a config-file change on disk (which raises no `onActiveProfileChanged`). Inlay hints, semantic tokens and component diagnostics subscribe to it; anything new that the editor does not re-request by itself should too.
 - **Macro checks only speak when they can know.** `validateMacros` reports only for a root script (`[TEST STEPS]` / `[TEST DEFINITION]`) whose includes were ALL read; otherwise nothing. `%TIMEOUT%` is in `ASSUMED_EXTERNAL_MACROS`. Don't relax either — an include fragment gets its macros from its includer.
 - **Exactly one code-action provider** ([codeActions.ts](src/providers/codeActions.ts)), routing on the diagnostic `code` (`isStepIssueKind` / `isMacroIssueKind` / component kinds). Don't register a second one — fixes would be offered twice. `toDiagnostic` in `componentDiagnostics.ts` must keep each issue's exact range and `code`; that is how the issue is re-found.
-- **Providers that share a position must not both answer.** VS Code shows only ONE DocumentHighlight provider's result (first non-empty), so `providers/tagPairs.ts` stands down on a `%MACRO%`; hovers ARE merged, so `providers/hover.ts` stands down on a CSV cell ref (`csvHover.ts` owns it); the XML definition provider returns nothing for a macro.
+- **Providers that share a position must not both answer.** VS Code shows only ONE DocumentHighlight provider's result (first non-empty), so `providers/tagPairs.ts` stands down on a `%MACRO%`; hovers ARE merged, so `providers/hover.ts` stands down on a CSV cell ref (`csvHover.ts` owns it); the XML definition provider returns nothing for a macro; `providers/keywordHover.ts` stands down on a `%MACRO%`, on any word naming a connection, and on a key that is a real field of the enclosing message (`hover.ts` owns those).
 - **The index stores only `sourceFile`** (on `ConnectionDef` / `MessageDef`); line/column are found lazily by [xmlLocate.ts](src/lib/xmlLocate.ts). Don't add positions to the index.
 - **Tag pairing** ([tagPairs.ts](src/lib/tagPairs.ts)) duplicates the stack walk of `componentValidator` (a closer pairs with the nearest same-named opener, case-sensitive; one-liners never stacked). Change the two together. Linked editing needs `"[esi]": {"editor.linkedEditing": true}` in `configurationDefaults` and is offered only with the cursor inside the name.
 - **Step renumbering edits digits only** (never a whole-document replace — that reset the cursor and folding) and never touches step numbers in prose / `Step Dependencies`.
@@ -148,7 +161,11 @@ Two places, both in `package.json` `contributes.configurationDefaults`: `editor.
 - **Outline / folding / step list / tag completion are tolerant by design** — they run on half-typed scripts, so they recover (stray closers ignored, unclosed sections run to EOF) instead of bailing. Tags come from `parseSectionTagLine`; one-liners are leaves and never stacked, same as in `validateStructure`.
 - **Quick fixes are computed by pure code and re-validated.** Diagnostics can't carry fix data across the VS Code API, so `codeActions.ts` re-runs the validators per request and matches issues by kind + range; each unbalanced-tag candidate edit is applied and re-validated, and dropped unless it clears the issue without creating a new structural one. No fix for `%macro%` values, and no "replace" fix on a CSV cell ref. Keep the logic in `lib/quickFixes.ts`, not the provider.
 - **Tag completion owns the closing `]`** — on a tag line the replace range runs through the auto-closed `]` and the item writes its own, so don't shorten the range (you get `]]`). `/` is a completion trigger only for `[/`; a `/` elsewhere must return nothing.
-- **Snippet bodies must be formatter-stable** — `snippets.test.ts` runs every body (tabstops expanded) through `formatEsi` and requires it unchanged. After editing `snippets.json` or the formatter, regenerate the bodies rather than relaxing the test.
+- **Section templates live in `tagCompletion.ts` `STRUCTURAL_SECTIONS[].body`, not in `snippets.json`** (which keeps only `FUNC_` / `PART_`, the two with no completion counterpart). Don't re-add a snippet for a section the completion list offers — it shows up as a duplicate entry. A body is inserted only for a brand-new tag on an empty line. All bodies must be formatter-stable: `snippets.test.ts` and `tagCompletion.test.ts` run each (tabstops expanded) through `formatEsi` and require it unchanged; regenerate the bodies rather than relaxing the tests. `keywordDocs.ts` `SECTION_NOTES` names the template keys — update it when a body's keys change.
+- **Formatting returns per-line edits** ([lineEdits.ts](src/lib/lineEdits.ts)) — never a whole-document replace (it resets cursor and folds), except as the fallback when line counts disagree. This relies on the formatter never adding or removing a line; Format Selection computes the full-document result and keeps only the selected lines, and returns nothing rather than touch lines outside the selection.
+- **Semantic highlighting is enabled under `"[esi]"` only.** Don't re-add a global `editor.semanticHighlighting.enabled` or `"enabled": true` inside `editor.semanticTokenColorCustomizations` — both switch it on for every language (`syntaxColours.test.ts` guards this).
+- **Output-only parameters have ONE list**: `OUTPUT_ONLY_IN_INPUT` in `componentValidator.ts`; `fieldCompletion.ts` derives its list (and display order) from it.
+- **Inlay hints and keyword cards state only what the repo evidences.** Units are echoed from the XML (`Unit` is format-1 documentation; nothing in TestPit reads it), hints appear only for one bare decimal literal, and parameters without a documented meaning get only their class. Don't add guessed semantics.
 - **`findStepLine` matches literally** — never build a `RegExp` from what the user typed.
 - **Formatter `=` alignment** ([formatEsi.ts](src/lib/formatEsi.ts)): aligns `key =` per group (section instance, or bracket-depth in `tier` scope). `<pre>` openers participate (their bodies shift to follow the aligned `<pre>`); hanging multi-line continuations (indented more than their key) are kept verbatim. `[TEST/STEP DEFINITION]` prose is left alone except its keys.
 - **`<pre>` blocks are column-anchored** (content at `preCol+INDENT`, `</pre>` at `preCol`) — not depth-based. Don't revert to depth-based or verbatim pass-through.

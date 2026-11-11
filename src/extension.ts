@@ -12,10 +12,16 @@ import { registerShowValidationInfo } from "./commands/showValidationInfo";
 import { registerGotoMatchingTag } from "./commands/gotoMatchingTag";
 import { registerLiveDiagnostics } from "./diagnostics";
 import { registerProjectStatusBar } from "./statusBar";
-import { registerEsiFormatter, registerFormatOnSave } from "./formatter";
+import {
+  registerEsiFormatter,
+  registerEsiRangeFormatter,
+  registerFormatOnSave,
+} from "./formatter";
 import { registerIndexLifecycle } from "./lib/projectIndexCache";
 import { registerEsiCompletionProvider } from "./providers/completion";
 import { registerEsiHoverProvider } from "./providers/hover";
+import { registerEsiKeywordHoverProvider } from "./providers/keywordHover";
+import { registerEsiInlayHintsProvider } from "./providers/inlayHints";
 import { registerEsiSemanticTokensProvider } from "./providers/semanticTokens";
 import { registerEsiCodeActionsProvider } from "./providers/codeActions";
 import { registerEsiDocumentSymbolProvider } from "./providers/documentSymbols";
@@ -52,10 +58,13 @@ export function activate(context: vscode.ExtensionContext): void {
     registerProjectStatusBar(),
     registerLiveDiagnostics(),
     registerEsiFormatter(),
+    registerEsiRangeFormatter(),
     registerFormatOnSave(),
     registerIndexLifecycle(),
     registerEsiCompletionProvider(),
     registerEsiHoverProvider(),
+    registerEsiKeywordHoverProvider(),
+    registerEsiInlayHintsProvider(),
     registerEsiSemanticTokensProvider(),
     registerEsiCodeActionsProvider(),
     registerEsiDocumentSymbolProvider(),

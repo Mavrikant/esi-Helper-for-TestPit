@@ -3,11 +3,14 @@ import { parseSectionTagLine } from "../../lib/parseSectionTag";
 import {
   computeTagCompletions,
   openSectionsBefore,
+  STEP_SKELETON_LABEL,
   STRUCTURAL_SECTIONS,
   TagCompletionEntry,
   TagCompletionResult,
   tagPositionOf,
+  WITH_FIELDS_SUFFIX,
 } from "../../lib/tagCompletion";
+import { formatEsi } from "../../lib/formatEsi";
 
 const CONNECTIONS = ["429_L100", "1553_Foo", "PART_HSI_Alive"];
 
@@ -67,7 +70,7 @@ function apply(lines: string[], label: string): string[] {
   if (e.isSnippet) {
     text = text
       .replace(/\$\{\d+:([^}]*)\}/g, "$1")
-      .replace(/\$0/g, "")
+      .replace(/\$\d/g, "")
       .replace(/\\([\\$}])/g, "$1");
   }
   let head = line.slice(0, result.startCol);
@@ -162,7 +165,9 @@ describe("tagCompletion", () => {
     it("offers the structural sections when there are no connections", () => {
       const r = computeTagCompletions("[", 0, 1, "", false, []);
       assert.ok(r);
-      assert.strictEqual(r.entries.length, STRUCTURAL_SECTIONS.length);
+      // Every section, plus the full-skeleton variant of STEP.
+      assert.strictEqual(r.entries.length, STRUCTURAL_SECTIONS.length + 1);
+      assert.ok(r.entries.every((e) => e.source === "section"));
     });
 
     it("ranks root sections first at file level", () => {
@@ -181,7 +186,11 @@ describe("tagCompletion", () => {
     it("ranks STEP first inside [TEST STEPS]", () => {
       const r = complete(["[TEST STEPS]", "    [|]", "[/TEST STEPS]"]);
       assert.strictEqual(r.position, "testSteps");
-      assert.deepStrictEqual(ranked(r).slice(0, 2), ["STEP", "STEP GET_DUMP"]);
+      assert.deepStrictEqual(ranked(r).slice(0, 3), [
+        "STEP",
+        STEP_SKELETON_LABEL,
+        "STEP GET_DUMP",
+      ]);
     });
 
     it("ranks the step parts first inside a step", () => {
@@ -238,7 +247,8 @@ describe("tagCompletion", () => {
       assert.deepStrictEqual(apply(["[42|   # c"], "429_L100"), ["[429_L100   # c"]);
       assert.deepStrictEqual(apply(["[TEST STEPS]", "[STEP 10]", "[/STEP 10]", "[STEP 2|"], "STEP GET_DUMP").slice(3), [
         "[STEP GET_DUMP]",
-        "    ",
+        "    [STEP INPUTS]",
+        "    [/STEP INPUTS]",
         "[/STEP GET_DUMP]",
       ]);
     });
@@ -295,8 +305,8 @@ describe("tagCompletion", () => {
       const lines = ["[TEST STEPS]", "\t[|", "[/TEST STEPS]"];
       const r = complete(lines, "\r\n");
       assert.strictEqual(
-        entry(r, "STEP GET_DUMP").insertText,
-        "STEP GET_DUMP]\n\t    $0\n\t[/STEP GET_DUMP]"
+        entry(r, "TEST STEPS").insertText,
+        "TEST STEPS]\n\t    $0\n\t[/TEST STEPS]"
       );
     });
 
@@ -453,6 +463,161 @@ describe("tagCompletion", () => {
       const r = complete(["[A]", "    x = [/|"]);
       assert.strictEqual(r.entries[0].insertText, "A");
       assert.strictEqual(r.entries[0].lineIndent, undefined);
+    });
+  });
+
+  describe("new step number", () => {
+    const stepInsert = (lines: string[]): string => entry(complete(lines), "STEP").insertText;
+
+    it("continues the file's numbering instead of a fixed id", () => {
+      const lines = ["[TEST STEPS]", "[STEP 10]", "[/STEP 10]", "[STEP 20]", "[/STEP 20]", "[|]", "[/TEST STEPS]"];
+      assert.strictEqual(stepInsert(lines), "STEP ${1:30}]\n    $0\n[/STEP ${1:30}]");
+    });
+
+    it("puts the number on a tag that gets no closing tag too", () => {
+      const lines = ["[TEST STEPS]", "[STEP 5]", "[/STEP 5]", "[|]", "    x", "[/STEP 99]", "[/TEST STEPS]"];
+      const e = entry(complete(lines), "STEP");
+      assert.strictEqual(e.insertText, "STEP ${1:10}]");
+      // Nothing new is being written: no skeleton variant either.
+      assert.ok(!complete(lines).entries.some((x) => x.label === STEP_SKELETON_LABEL));
+    });
+  });
+
+  describe("section bodies (one entry per section)", () => {
+    const fresh = complete(["[|]"]);
+
+    it("has no two entries with the same label", () => {
+      const labels = fresh.entries.map((e) => e.label);
+      assert.strictEqual(new Set(labels).size, labels.length);
+    });
+
+    it("fills a new block with the section's own lines", () => {
+      assert.deepStrictEqual(apply(["[STEP 10]", "    [|]", "[/STEP 10]"], "STEP DEFINITION").slice(1, -1), [
+        "    [STEP DEFINITION]",
+        "        Step Description      = ",
+        "        Step Requirements     = ",
+        "        Step Dependencies     = N/A",
+        "        Step Conditions       = <pre>",
+        "                                    <br/> ",
+        "                                    <br/> ",
+        "                                </pre>",
+        "        Step Expected Results = <pre>",
+        "                                    <br/> ",
+        "                                </pre>",
+        "    [/STEP DEFINITION]",
+      ]);
+      assert.strictEqual(
+        entry(fresh, "CMD_EXECUTE").insertText,
+        "CMD_EXECUTE]\n    system call  = $1\n    wait timeout = %TIMEOUT%\n[/CMD_EXECUTE]"
+      );
+      assert.strictEqual(entry(fresh, "VARIABLES").insertText, "VARIABLES]\n    %$1% = $2\n[/VARIABLES]");
+    });
+
+    it("keeps the body out when only the name is replaced", () => {
+      const e = entry(complete(["[STEP 10]", "    [STEP IN|PUTS]", "    [/STEP INPUTS]", "[/STEP 10]"]), "STEP DEFINITION");
+      assert.strictEqual(e.insertText, "STEP DEFINITION]");
+    });
+
+    it("offers the full step skeleton right below the plain STEP", () => {
+      const lines = ["[TEST STEPS]", "    [STEP 10]", "    [/STEP 10]", "    [|]", "[/TEST STEPS]"];
+      const r = complete(lines);
+      const skeleton = entry(r, STEP_SKELETON_LABEL);
+      assert.strictEqual(skeleton.filterText, "STEP");
+      assert.ok(skeleton.isSnippet);
+      assert.ok(skeleton.sortText > entry(r, "STEP").sortText);
+      assert.ok(skeleton.sortText < entry(r, "STEP GET_DUMP").sortText);
+      // Tab stop 1 is the id (mirrored in the closing tag); 2..9 follow in order.
+      assert.deepStrictEqual(
+        skeleton.insertText.match(/\$\{1:20\}|\$\d/g),
+        ["${1:20}", "$2", "$3", "$4", "$5", "$6", "$7", "$8", "$9", "${1:20}"]
+      );
+      const out = apply(lines, STEP_SKELETON_LABEL).slice(3, -1);
+      assert.strictEqual(out[0], "    [STEP 20]");
+      assert.strictEqual(out[1], "        [STEP DEFINITION]");
+      assert.strictEqual(out[2], "            Step Description      = ");
+      assert.deepStrictEqual(out.slice(-7), [
+        "        [STEP INPUTS]",
+        "            ",
+        "        [/STEP INPUTS]",
+        "        [STEP OUTPUTS]",
+        "            ",
+        "        [/STEP OUTPUTS]",
+        "    [/STEP 20]",
+      ]);
+    });
+
+    it("writes bodies the formatter leaves alone", () => {
+      const labels = [...STRUCTURAL_SECTIONS.filter((s) => s.body).map((s) => s.name), STEP_SKELETON_LABEL];
+      assert.ok(labels.length > 5);
+      for (const label of labels) {
+        // Typed text in every tab stop: an empty one is a whitespace-only
+        // line, which the formatter rightly trims.
+        const text =
+          "[" +
+          entry(fresh, label)
+            .insertText.replace(/\$\{\d+:([^}]*)\}/g, "$1")
+            .replace(/\$\d/g, "x");
+        assert.strictEqual(formatEsi(text).replace(/\n+$/, ""), text, label);
+      }
+    });
+  });
+
+  describe("component block with fields", () => {
+    const keys = (name: string): string[] | undefined =>
+      name === "429_L100" ? ["time", "SDI", "Mode.SelectedCourse"] : undefined;
+    const run = (lines: string[]): TagCompletionResult => {
+      const lineIndex = lines.findIndex((l) => l.includes("|"));
+      const character = lines[lineIndex].indexOf("|");
+      const clean = lines.map((l, i) => (i === lineIndex ? stripMarker(l) : l));
+      const partial = clean[lineIndex].slice(clean[lineIndex].lastIndexOf("[", character) + 1, character);
+      const r = computeTagCompletions(clean.join("\n"), lineIndex, character, partial, false, CONNECTIONS, {
+        skeletonKeys: keys,
+      });
+      assert.ok(r);
+      return r;
+    };
+    const label = "429_L100" + WITH_FIELDS_SUFFIX;
+
+    it("is a second, lower-ranked entry beside the plain tag", () => {
+      const r = run(["[STEP 10]", "[STEP INPUTS]", "    [|]", "[/STEP INPUTS]", "[/STEP 10]"]);
+      const plain = entry(r, "429_L100");
+      const withFields = entry(r, label);
+      assert.strictEqual(plain.insertText, "429_L100]\n        $0\n    [/429_L100]");
+      assert.strictEqual(
+        withFields.insertText,
+        [
+          "429_L100]",
+          "        time                = $1",
+          "        SDI                 = $2",
+          "        Mode.SelectedCourse = $3",
+          "    [/429_L100]",
+        ].join("\n")
+      );
+      assert.strictEqual(withFields.connectionName, "429_L100");
+      assert.strictEqual(withFields.filterText, "429_L100");
+      assert.ok(withFields.sortText > plain.sortText);
+      // …and above a longer name sharing the prefix.
+      assert.ok(withFields.sortText < `${plain.sortText}A`);
+      assert.ok(!withFields.preselect);
+      // (Dedented: the formatter indents by depth, and this text has no parents.)
+      const text = "[" + withFields.insertText.replace(/\$\d/g, "x").replace(/\n {4}/g, "\n");
+      assert.strictEqual(formatEsi(text).replace(/\n+$/, ""), text);
+    });
+
+    it("is offered only for a connection with known keys", () => {
+      const r = run(["[STEP OUTPUTS]", "[|]", "[/STEP OUTPUTS]"]);
+      assert.ok(r.entries.some((e) => e.label === label));
+      assert.ok(!r.entries.some((e) => e.label === "1553_Foo" + WITH_FIELDS_SUFFIX));
+    });
+
+    it("is not offered outside the message sections or on an existing block", () => {
+      const none = (lines: string[]): void =>
+        assert.ok(!run(lines).entries.some((e) => e.label.endsWith(WITH_FIELDS_SUFFIX)), lines.join("/"));
+      none(["[|]"]);
+      none(["[STEP 10]", "[|]", "[/STEP 10]"]);
+      // Renaming a tag whose block is already there.
+      none(["[STEP INPUTS]", "  [42|9_OLD]", "    time = 1", "  [/429_OLD]", "[/STEP INPUTS]"]);
+      none(["[STEP INPUTS]", "  [|]", "    time = 1", "  [/429_OLD]", "[/STEP INPUTS]"]);
     });
   });
 });

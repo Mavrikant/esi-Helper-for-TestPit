@@ -18,10 +18,25 @@
 			"include": "#strings"
 		},
 		{
+			"include": "#markup"
+		},
+		{
+			"include": "#step-tags"
+		},
+		{
+			"include": "#section-tags"
+		},
+		{
 			"include": "#tags"
 		},
 		{
+			"include": "#occurrence-operator"
+		},
+		{
 			"include": "#field-keys"
+		},
+		{
+			"include": "#csv-cell-refs"
 		},
 		{
 			"include": "#file-paths"
@@ -34,32 +49,38 @@
 		},
 		{
 			"include": "#numbers"
+		},
+		{
+			"include": "#numbers-with-unit"
 		}
 	],
 	"repository": {
 		"definition-section": {
-			"comment": "TEST/STEP DEFINITION blocks hold prose values. Inside them only comments, macros and the fixed field keys are highlighted — numbers, literals and constants in descriptions are left as default text.",
+			"comment": "TEST/STEP DEFINITION blocks hold prose values. Inside them only comments, macros, strings, the <pre>/<br/> markup and the field keys are highlighted — numbers, units, operators, literals and constants in descriptions are left as default text.",
 			"begin": "(\\[)(TEST DEFINITION|STEP DEFINITION)(\\])",
 			"beginCaptures": {
 				"1": {
 					"name": "punctuation.definition.tag.begin.esi"
 				},
 				"2": {
-					"name": "entity.name.tag.esi"
+					"name": "entity.name.tag.section.esi"
 				},
 				"3": {
 					"name": "punctuation.definition.tag.end.esi"
 				}
 			},
-			"end": "(\\[/)(TEST DEFINITION|STEP DEFINITION)(\\])",
+			"end": "(\\[)(/)(TEST DEFINITION|STEP DEFINITION)(\\])",
 			"endCaptures": {
 				"1": {
 					"name": "punctuation.definition.tag.begin.esi"
 				},
 				"2": {
-					"name": "entity.name.tag.esi"
+					"name": "punctuation.definition.tag.close.esi"
 				},
 				"3": {
+					"name": "entity.name.tag.section.esi"
+				},
+				"4": {
 					"name": "punctuation.definition.tag.end.esi"
 				}
 			},
@@ -73,6 +94,9 @@
 				},
 				{
 					"include": "#strings"
+				},
+				{
+					"include": "#markup"
 				},
 				{
 					"include": "#field-keys"
@@ -89,33 +113,123 @@
 			"match": "%[A-Za-z0-9_]+%",
 			"name": "variable.other.macro.esi"
 		},
-		"tags": {
-			"comment": "Section / component tags: [NAME], [/NAME] and the one-liner [NAME/] (opens and closes on one line). Both slashes are punctuation, so the tag name colours the same in all three forms. Component connections ([429_…], [ED_…], …) are re-coloured by the semantic-token provider.",
-			"match": "(\\[)(/?)([^\\[\\]]+?)(/?)(\\])",
+		"markup": {
+			"comment": "The <pre> … </pre> / <br/> markup of multi-line description values. Plain single-line matches, deliberately NOT a begin/end region: an unclosed <pre> must never swallow the rest of the file.",
+			"match": "</?pre>|<br[ \\t]*/?>",
+			"name": "meta.tag.markup.esi"
+		},
+		"step-tags": {
+			"comment": "[STEP <id>], [/STEP <id>] and the one-liner [STEP <id>/] — a step itself, as opposed to the fixed STEP DEFINITION / INPUTS / OUTPUTS / DUMP parts of one. Mirrors isStepSectionName() in src/lib/sectionNames.ts.",
+			"match": "(\\[)(/?)(STEP (?!(?:DEFINITION|INPUTS|OUTPUTS|DUMP)/?\\])[^\\[\\]]+?)(/?)(\\])",
 			"captures": {
 				"1": {
 					"name": "punctuation.definition.tag.begin.esi"
 				},
 				"2": {
-					"name": "punctuation.definition.tag.begin.esi"
+					"name": "punctuation.definition.tag.close.esi"
 				},
 				"3": {
-					"name": "entity.name.tag.esi"
+					"name": "entity.name.tag.step.esi"
 				},
 				"4": {
-					"name": "punctuation.definition.tag.end.esi"
+					"name": "punctuation.definition.tag.close.esi"
 				},
 				"5": {
 					"name": "punctuation.definition.tag.end.esi"
 				}
 			}
 		},
-		"field-keys": {
-			"comment": "Any `key =` left-hand side (section keys like 'Step Description', 'system call', 'result file', 'time', message field names, …). Coloured as a keyword; message field keys inside component blocks are re-coloured (orange) by the semantic-token provider.",
-			"match": "^[ \\t]*([A-Za-z][A-Za-z0-9_. ]*?)(?=\\s*=)",
+		"section-tags": {
+			"comment": "The fixed structural sections. The list mirrors src/lib/sectionNames.ts (a unit test keeps the two in step).",
+			"match": "(\\[)(/?)(VARIABLES|INCLUDE|TEST DEFINITION|TEST STEPS|STEP DEFINITION|STEP INPUTS|STEP OUTPUTS|STEP DUMP|MANUAL_VERIFY|EXTERNAL_VERIFY)(/?)(\\])",
+			"captures": {
+				"1": {
+					"name": "punctuation.definition.tag.begin.esi"
+				},
+				"2": {
+					"name": "punctuation.definition.tag.close.esi"
+				},
+				"3": {
+					"name": "entity.name.tag.section.esi"
+				},
+				"4": {
+					"name": "punctuation.definition.tag.close.esi"
+				},
+				"5": {
+					"name": "punctuation.definition.tag.end.esi"
+				}
+			}
+		},
+		"tags": {
+			"comment": "Every other tag — component connections ([429_…], [ED_…], …; re-coloured by the semantic-token provider) and anything unrecognised: [NAME], [/NAME] and the one-liner [NAME/] (opens and closes on one line). The closing slash of either form gets its own scope so the name colours the same in all three forms.",
+			"match": "(\\[)(/?)([^\\[\\]]+?)(/?)(\\])",
+			"captures": {
+				"1": {
+					"name": "punctuation.definition.tag.begin.esi"
+				},
+				"2": {
+					"name": "punctuation.definition.tag.close.esi"
+				},
+				"3": {
+					"name": "entity.name.tag.esi"
+				},
+				"4": {
+					"name": "punctuation.definition.tag.close.esi"
+				},
+				"5": {
+					"name": "punctuation.definition.tag.end.esi"
+				}
+			}
+		},
+		"occurrence-operator": {
+			"comment": "The optional '<' / '>' in front of an `occurrence` count (occurrence = >3). Limited to `occurrence`: it is the only key the validator knows to take a comparison operator.",
+			"match": "^[ \\t]*(occurrence)[ \\t]*(=)[ \\t]*([<>])(?=[ \\t]*[0-9])",
 			"captures": {
 				"1": {
 					"name": "keyword.other.field.esi"
+				},
+				"2": {
+					"name": "keyword.operator.assignment.esi"
+				},
+				"3": {
+					"name": "keyword.operator.comparison.esi"
+				}
+			}
+		},
+		"field-keys": {
+			"comment": "Any `key =` left-hand side (section keys like 'Step Description', 'system call', 'result file', 'time', message field names, …). Coloured as a keyword; message field keys inside component blocks are re-coloured (orange) by the semantic-token provider.",
+			"match": "^[ \\t]*([A-Za-z][A-Za-z0-9_. ]*?)[ \\t]*(=)",
+			"captures": {
+				"1": {
+					"name": "keyword.other.field.esi"
+				},
+				"2": {
+					"name": "keyword.operator.assignment.esi"
+				}
+			}
+		},
+		"csv-cell-refs": {
+			"comment": "The cell address of a CSV value reference: `<file>.csv line:<N> col:<M>` (same shape as parseCsvCellRef in src/lib/fileRefs.ts, case-insensitive). The file itself is coloured by file-paths; this rule starts right after the `.csv`.",
+			"match": "(?<=\\.[cC][sS][vV])[ \\t]+([lL][iI][nN][eE])[ \\t]*(:)[ \\t]*([0-9]+)[ \\t]+([cC][oO][lL])[ \\t]*(:)[ \\t]*([0-9]+)",
+			"name": "meta.csv-ref.esi",
+			"captures": {
+				"1": {
+					"name": "keyword.other.csv-ref.esi"
+				},
+				"2": {
+					"name": "punctuation.separator.csv-ref.esi"
+				},
+				"3": {
+					"name": "constant.numeric.esi"
+				},
+				"4": {
+					"name": "keyword.other.csv-ref.esi"
+				},
+				"5": {
+					"name": "punctuation.separator.csv-ref.esi"
+				},
+				"6": {
+					"name": "constant.numeric.esi"
 				}
 			}
 		},
@@ -142,6 +256,18 @@
 			"comment": "Integers, decimals, hex and signed/exponent forms — only as standalone tokens, never inside identifiers like DO-260B_11503.",
 			"match": "(?<![\\w.])[+-]?(?:0[xX][0-9a-fA-F]+|[0-9]+(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?)(?![\\w.])",
 			"name": "constant.numeric.esi"
+		},
+		"numbers-with-unit": {
+			"comment": "A decimal number with a unit suffix glued on (10ms, 2.5s, 400Hz). Purely lexical, from a fixed list of common unit spellings — it says nothing about which units TestPit accepts. Listed after `numbers`, so hex (0x1F) and exponent (1e5) forms are taken there first.",
+			"match": "(?<![\\w.])([+-]?[0-9]+(?:\\.[0-9]+)?)(ms|us|ns|sec|s|min|Hz|kHz|MHz|GHz|deg|rad|ft|nm|NM|km|m|kts|kt|mV|V|mA|dBm|dB)(?![\\w.])",
+			"captures": {
+				"1": {
+					"name": "constant.numeric.esi"
+				},
+				"2": {
+					"name": "keyword.other.unit.esi"
+				}
+			}
 		}
 	}
 }

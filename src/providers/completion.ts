@@ -7,25 +7,25 @@ import {
   renderField,
 } from "../lib/renderComponent";
 import { computeTagCompletions } from "../lib/tagCompletion";
+import {
+  computeFieldNameCompletions,
+  skeletonKeys,
+} from "../lib/fieldCompletion";
+import {
+  csvFileEntries,
+  csvTailEntry,
+  csvValueContext,
+  CsvValueEntry,
+  listCsvFiles,
+} from "../lib/csvValueCompletion";
+import { PARAMETER_FIELDS } from "../lib/componentValidator";
+import { resolveScriptRelative } from "../lib/fileRefs";
 import { FieldDef } from "../lib/xmlIndex";
 import {
   computeMacroCompletions,
   describeMacroDefinitions,
 } from "../lib/macros";
 import { createMacroResolver, macroFileLabel } from "./macroResolver";
-
-// Common cross-bus parameter fields offered in every message block. The
-// validator (componentValidator.PARAMETER_FIELDS) accepts a wider set incl.
-// bus-specific params (parity/value/angle/duration/image/…); those are left out
-// of completion so suggestions stay relevant to the typical case.
-const COMMON_PARAMETER_FIELDS = [
-  "time",
-  "period",
-  "interval",
-  "occurrence",
-  "count",
-  "match",
-];
 
 // The only two values `match` accepts (TestPit checkMatchValue). Offered
 // directly — `match` is a TestPit parameter, not an XML-indexed field, so
@@ -64,7 +64,13 @@ export function registerEsiCompletionProvider(): vscode.Disposable {
               position.character,
               ctx.partial,
               ctx.kind === "closeTagName",
-              index ? index.connections.keys() : []
+              index ? index.connections.keys() : [],
+              {
+                // The "with fields" variant of a component block: `time` plus
+                // the message's non-reserved fields (lib/fieldCompletion.ts).
+                skeletonKeys: (name) =>
+                  skeletonKeys(index?.resolveConnectionMessage(name)),
+              }
             );
             if (!tags) {
               return [];
@@ -91,10 +97,13 @@ export function registerEsiCompletionProvider(): vscode.Disposable {
               item.detail = entry.detail;
               const conn =
                 entry.source === "connection"
-                  ? index?.connections.get(entry.label)
+                  ? index?.connections.get(entry.connectionName ?? entry.label)
                   : undefined;
               if (conn && index) {
-                item.detail = conn.messageName ? `→ ${conn.messageName}` : conn.bus;
+                // The "with fields" variant keeps its own detail (its keys).
+                item.detail =
+                  entry.detail ??
+                  (conn.messageName ? `→ ${conn.messageName}` : conn.bus);
                 item.documentation = renderConnection(conn, index);
               }
               item.range = replaceRange;
@@ -126,28 +135,31 @@ export function registerEsiCompletionProvider(): vscode.Disposable {
             });
           }
           case "fieldName": {
+            // Which names to offer (already-assigned keys hidden, output-only
+            // parameters kept out of [STEP INPUTS], reserved fields last) is
+            // decided in lib/fieldCompletion.ts.
             const fieldRange = computeIdentifierRange(document, position);
-            const items: vscode.CompletionItem[] = COMMON_PARAMETER_FIELDS.map((name) => {
+            const message = index?.resolveConnectionMessage(ctx.messageName);
+            return computeFieldNameCompletions(
+              document.getText().split(/\r?\n/),
+              position.line,
+              message
+            ).map((entry) => {
+              if (entry.field && message) {
+                const item = fieldToItem(entry.field, message, fieldRange);
+                item.sortText = entry.sortText;
+                return item;
+              }
               const item = new vscode.CompletionItem(
-                name,
+                entry.name,
                 vscode.CompletionItemKind.Keyword
               );
               item.detail = "TestPit parameter field";
               item.range = fieldRange;
-              item.filterText = name;
+              item.filterText = entry.name;
+              item.sortText = entry.sortText;
               return item;
             });
-            if (!index) {
-              return items;
-            }
-            const message = index.resolveConnectionMessage(ctx.messageName);
-            if (!message) {
-              return items;
-            }
-            for (const field of message.fields) {
-              items.push(fieldToItem(field, message, fieldRange));
-            }
-            return items;
           }
           case "fieldValue": {
             // `match` is answered without the index — it needs no config.
@@ -164,17 +176,22 @@ export function registerEsiCompletionProvider(): vscode.Disposable {
                 return item;
               });
             }
-            if (!index) {
-              return [];
-            }
-            const message = index.resolveConnectionMessage(ctx.messageName);
+            const message = index?.resolveConnectionMessage(ctx.messageName);
             const field = message?.fields.find((f) => f.name === ctx.fieldName);
-            if (!field) {
-              return [];
+            // A message field's value may come from a CSV cell; a parameter's
+            // (time, count, …) is not read that way by the validator, so the
+            // CSV entries are kept to fields.
+            const items: vscode.CompletionItem[] = PARAMETER_FIELDS.has(
+              ctx.fieldName
+            )
+              ? []
+              : csvValueItems(document, position);
+            if (!field || !message) {
+              return items;
             }
             const valueRange = computeIdentifierRange(document, position);
             if (field.enums && field.enums.length > 0) {
-              return field.enums.map((e) => {
+              for (const e of field.enums) {
                 const item = new vscode.CompletionItem(
                   e.name,
                   vscode.CompletionItemKind.EnumMember
@@ -183,10 +200,10 @@ export function registerEsiCompletionProvider(): vscode.Disposable {
                 item.documentation = renderEnum(e, field, message);
                 item.range = valueRange;
                 item.filterText = e.name;
-                return item;
-              });
+                items.push(item);
+              }
+              return items;
             }
-            const items: vscode.CompletionItem[] = [];
             const pushNumeric = (value: string | undefined, label: string): void => {
               if (value === undefined || value === "" || value === "-") {
                 return;
@@ -251,6 +268,58 @@ export function registerEsiCompletionProvider(): vscode.Disposable {
     "=",
     "."
   );
+}
+
+/**
+ * The value-from-CSV entries for the cursor: the `.csv` files beside the
+ * script (or in the folder typed so far), or the ` line:N col:M` tail once a
+ * `.csv` name stands there. What applies, and the replace range, come from
+ * lib/csvValueCompletion.ts. Ranked below the field's own values.
+ */
+function csvValueItems(
+  document: vscode.TextDocument,
+  position: vscode.Position
+): vscode.CompletionItem[] {
+  const csv = csvValueContext(
+    document.lineAt(position.line).text,
+    position.character
+  );
+  if (!csv) {
+    return [];
+  }
+  let entries: CsvValueEntry[];
+  if (csv.kind === "tail") {
+    entries = [csvTailEntry()];
+  } else if (document.uri.scheme === "file") {
+    entries = csvFileEntries(
+      listCsvFiles(
+        resolveScriptRelative(document.uri.fsPath, `${csv.dirPart}.`)
+      )
+    );
+  } else {
+    // An unsaved script has no folder to look in.
+    entries = [];
+  }
+  const range = new vscode.Range(
+    position.line,
+    csv.startCol,
+    position.line,
+    csv.endCol
+  );
+  return entries.map((entry) => {
+    const item = new vscode.CompletionItem(
+      entry.label,
+      entry.kind === "tail"
+        ? vscode.CompletionItemKind.Snippet
+        : vscode.CompletionItemKind.File
+    );
+    item.detail = entry.detail;
+    item.insertText = new vscode.SnippetString(entry.insertText);
+    item.range = range;
+    item.filterText = entry.filterText;
+    item.sortText = entry.sortText;
+    return item;
+  });
 }
 
 function fieldToItem(

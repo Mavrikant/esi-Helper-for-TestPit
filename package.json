@@ -161,22 +161,91 @@
           "scope": "machine",
           "default": "section",
           "description": "How field '=' signs are aligned when formatting .esi files (Format Document, or save when refactorDocumentOnSave is on). User-scoped only — cannot be set per workspace."
+        },
+        "esihelper.inlayHints.enumNames": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show the enum name after a numeric value assigned to a field that has an enum table in the active profile's XML config."
+        },
+        "esihelper.inlayHints.units": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show the unit declared in the active profile's XML config after a numeric field value."
+        },
+        "esihelper.inlayHints.ranges": {
+          "type": "boolean",
+          "default": false,
+          "description": "Show the MinValue..MaxValue range declared in the active profile's XML config after a numeric field value."
         }
       }
     },
     "configurationDefaults": {
-      "editor.semanticHighlighting.enabled": true,
       "[esi]": {
         "editor.semanticHighlighting.enabled": true,
         "editor.linkedEditing": true
       },
       "editor.semanticTokenColorCustomizations": {
-        "enabled": true,
         "rules": {
-          "class:esi": "#4BC8AF",
-          "property:esi": "#FA8072",
-          "enumMember:esi": "#F0E04A",
-          "keyword:esi": "#569CD6"
+          "class:esi": {
+            "foreground": "#4BC8AF",
+            "italic": true
+          },
+          "class.defaultLibrary:esi": {
+            "foreground": "#4BC8AF",
+            "italic": false
+          },
+          "property:esi": {
+            "foreground": "#FA8072",
+            "italic": true
+          },
+          "property.defaultLibrary:esi": {
+            "foreground": "#FA8072",
+            "italic": false
+          },
+          "enumMember:esi": {
+            "foreground": "#F0E04A",
+            "italic": true
+          },
+          "enumMember.defaultLibrary:esi": {
+            "foreground": "#F0E04A",
+            "italic": false
+          },
+          "keyword:esi": "#569CD6",
+          "*.deprecated:esi": {
+            "strikethrough": true
+          }
+        },
+        "[Default Light Modern][Light Modern][Default Light+][Light+][Light 2026][Visual Studio Light][Quiet Light][Solarized Light][Default High Contrast Light]": {
+          "rules": {
+            "class:esi": {
+              "foreground": "#0B6E60",
+              "italic": true
+            },
+            "class.defaultLibrary:esi": {
+              "foreground": "#0B6E60",
+              "italic": false
+            },
+            "property:esi": {
+              "foreground": "#B0321E",
+              "italic": true
+            },
+            "property.defaultLibrary:esi": {
+              "foreground": "#B0321E",
+              "italic": false
+            },
+            "enumMember:esi": {
+              "foreground": "#735C00",
+              "italic": true
+            },
+            "enumMember.defaultLibrary:esi": {
+              "foreground": "#735C00",
+              "italic": false
+            },
+            "keyword:esi": "#0B5CAD",
+            "*.deprecated:esi": {
+              "strikethrough": true
+            }
+          }
         }
       },
       "editor.tokenColorCustomizations": {
@@ -197,6 +266,26 @@
             "scope": "entity.name.tag.esi",
             "settings": {
               "foreground": "#4BC8AF"
+            }
+          },
+          {
+            "scope": "entity.name.tag.section.esi",
+            "settings": {
+              "foreground": "#4BC8AF",
+              "fontStyle": "bold"
+            }
+          },
+          {
+            "scope": "entity.name.tag.step.esi",
+            "settings": {
+              "foreground": "#FF79C6",
+              "fontStyle": "bold"
+            }
+          },
+          {
+            "scope": "punctuation.definition.tag.close.esi",
+            "settings": {
+              "foreground": "#9DA5B4"
             }
           },
           {
@@ -234,8 +323,134 @@
             "settings": {
               "foreground": "#66FFFF"
             }
+          },
+          {
+            "scope": "keyword.other.unit.esi",
+            "settings": {
+              "foreground": "#9CDCFE"
+            }
+          },
+          {
+            "scope": "keyword.operator.comparison.esi",
+            "settings": {
+              "foreground": "#A6E22E"
+            }
+          },
+          {
+            "scope": "meta.tag.markup.esi",
+            "settings": {
+              "foreground": "#B0926C"
+            }
+          },
+          {
+            "scope": "keyword.other.csv-ref.esi",
+            "settings": {
+              "foreground": "#B392F0"
+            }
           }
-        ]
+        ],
+        "[Default Light Modern][Light Modern][Default Light+][Light+][Light 2026][Visual Studio Light][Quiet Light][Solarized Light][Default High Contrast Light]": {
+          "textMateRules": [
+            {
+              "scope": "source.esi",
+              "settings": {
+                "foreground": "#333333"
+              }
+            },
+            {
+              "scope": "comment.line.number-sign.esi",
+              "settings": {
+                "foreground": "#3F6F2F"
+              }
+            },
+            {
+              "scope": "entity.name.tag.esi",
+              "settings": {
+                "foreground": "#0B6E60"
+              }
+            },
+            {
+              "scope": "entity.name.tag.section.esi",
+              "settings": {
+                "foreground": "#0B6E60",
+                "fontStyle": "bold"
+              }
+            },
+            {
+              "scope": "entity.name.tag.step.esi",
+              "settings": {
+                "foreground": "#A3158F",
+                "fontStyle": "bold"
+              }
+            },
+            {
+              "scope": "punctuation.definition.tag.close.esi",
+              "settings": {
+                "foreground": "#5A6472"
+              }
+            },
+            {
+              "scope": "keyword.other.field.esi",
+              "settings": {
+                "foreground": "#0B5CAD"
+              }
+            },
+            {
+              "scope": "variable.other.macro.esi",
+              "settings": {
+                "foreground": "#7A5200"
+              }
+            },
+            {
+              "scope": "string.other.path.esi",
+              "settings": {
+                "foreground": "#6F42C1"
+              }
+            },
+            {
+              "scope": "string.quoted.double.esi",
+              "settings": {
+                "foreground": "#A3335B"
+              }
+            },
+            {
+              "scope": "constant.language.esi",
+              "settings": {
+                "foreground": "#00697A"
+              }
+            },
+            {
+              "scope": "constant.numeric.esi",
+              "settings": {
+                "foreground": "#00697A"
+              }
+            },
+            {
+              "scope": "keyword.other.unit.esi",
+              "settings": {
+                "foreground": "#2A6485"
+              }
+            },
+            {
+              "scope": "keyword.operator.comparison.esi",
+              "settings": {
+                "foreground": "#456E0E"
+              }
+            },
+            {
+              "scope": "meta.tag.markup.esi",
+              "settings": {
+                "foreground": "#775A3C"
+              }
+            },
+            {
+              "scope": "keyword.other.csv-ref.esi",
+              "settings": {
+                "foreground": "#5B3FA8"
+              }
+            }
+          ]
+        }
       }
     }
   },

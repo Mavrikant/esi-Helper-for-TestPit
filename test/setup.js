@@ -230,7 +230,7 @@ mock('vscode', {
     activeTextEditor: undefined,
   },
   languages: {
-    registerDocumentSemanticTokensProvider() { return { dispose() {} }; },
+    registerDocumentSemanticTokensProvider: keep('semanticTokens'),
     registerCompletionItemProvider() { return { dispose() {} }; },
     registerHoverProvider: keep('hover'),
     registerDefinitionProvider: keep('definition'),
@@ -244,7 +244,9 @@ mock('vscode', {
     registerFoldingRangeProvider: keep('foldingRange'),
     getDiagnostics() { return []; },
     createDiagnosticCollection() { return { clear() {}, set() {}, delete() {}, dispose() {} }; },
-    registerDocumentFormattingEditProvider() { return { dispose() {} }; },
+    registerDocumentFormattingEditProvider: keep('documentFormatting'),
+    registerDocumentRangeFormattingEditProvider: keep('documentRangeFormatting'),
+    registerInlayHintsProvider: keep('inlayHints'),
   },
   commands: {
     registerCommand(id, handler) {
@@ -269,8 +271,13 @@ mock('vscode', {
   ProgressLocation: { SourceControl: 1, Window: 10, Notification: 15 },
   TextEditorRevealType: { Default: 0, InCenter: 1, InCenterIfOutsideViewport: 2, AtTop: 3 },
   CompletionItemKind: {
-    Field: 4, Variable: 5, Class: 6, Module: 8, Value: 11, Keyword: 13, EnumMember: 19,
+    Field: 4, Variable: 5, Class: 6, Module: 8, Value: 11, Keyword: 13, Snippet: 14,
+    File: 16, EnumMember: 19,
   },
+  InlayHint: class InlayHint {
+    constructor(position, label, kind) { this.position = position; this.label = label; this.kind = kind; }
+  },
+  InlayHintKind: { Type: 1, Parameter: 2 },
   Hover: class Hover { constructor(contents, range) { this.contents = contents; this.range = range; } },
   TextEdit: { replace(range, newText) { return { range, newText }; } },
   Diagnostic,
