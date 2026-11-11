@@ -8,7 +8,11 @@
  *   - a macro is written `%NAME%`, NAME = letters, digits, underscore
  *     (syntaxes/esi.json `macros`);
  *   - `%NAME% = value` lines inside `[VARIABLES]` define macros
- *     (snippets.json `VARIABLES`; tagCompletion: "Constant macros for this file");
+ *     (snippets.json `VARIABLES`; tagCompletion: "Constant macros for this file").
+ *     Nothing here shows that TestPit limits definitions to that section, and
+ *     the user's TestPit authoring reference says a parent section (or a
+ *     `[DEFINITIONS]` block) may hold them too, so a line-leading
+ *     `%NAME% = value` counts as a definition in ANY section;
  *   - `%NAME% = value` lines also appear inside `[INCLUDE]` next to
  *     `include file = <path>` (esiOutline test: `%TESTSETUP% = SLTS`), i.e. an
  *     include can hand macros to the file it runs;
@@ -17,8 +21,10 @@
  * What is NOT known, and how it is handled:
  *   - whether a macro defined in an included file is visible to the includer,
  *     whether names are case-sensitive, whether definition order matters,
- *     whether TestPit has built-in / environment / command-line macros, and
- *     what an include path is relative to. So: every definition that can be
+ *     the full list of macros TestPit fills in itself (the ones the authoring
+ *     reference names are in ASSUMED_EXTERNAL_MACROS; environment /
+ *     command-line macros are unknown), and what an include path is relative
+ *     to. So: every definition that can be
  *     found (this file + readable includes) counts as "defined", order is
  *     ignored, "undefined" is a warning at most and is dropped whenever part of
  *     the picture is missing, and a case-only mismatch is only a hint.
@@ -45,20 +51,43 @@ const MAX_NAME_SUGGESTIONS = 3;
 
 /**
  * Names that are never reported as undefined although nothing in a script
- * defines them. `TIMEOUT`: the extension's own `[CMD_EXECUTE]` snippet writes
+ * defines them.
+ *
+ * `TARGETIP` … `SYNCTIME`: macros TestPit fills in itself at load / run time
+ * (`synchronize = pass` stores the receive time in `%SYNCTIME%`), per the
+ * user's TestPit authoring reference. That list is NOT verified against
+ * TestPit's source and may be incomplete.
+ *
+ * `TIMEOUT`: the extension's own `[CMD_EXECUTE]` snippet writes
  * `wait timeout = %TIMEOUT%` with no accompanying definition. Whether TestPit
  * supplies it or the author is expected to define it is not known here, so the
  * deliberate choice is to stay silent about it (it is still reported as
  * unused if a script defines it and never uses it, and it is not offered in
  * completion unless a script defines it).
  */
-export const ASSUMED_EXTERNAL_MACROS: ReadonlySet<string> = new Set(["TIMEOUT"]);
+export const ASSUMED_EXTERNAL_MACROS: ReadonlySet<string> = new Set([
+  "TIMEOUT",
+  "TARGETIP",
+  "FUNCTARGETIP",
+  "PARTITIONPORTNUMBER",
+  "FUNCTIONPORTNUMBER",
+  "REPORTDIR",
+  "SYSTEMTIME",
+  "SYNCTIME",
+]);
 
 export type MacroScope =
   /** `%X% = v` inside `[VARIABLES]`. */
   | "variables"
   /** `%X% = v` inside `[INCLUDE]` — handed to the included file. */
-  | "includeArgument";
+  | "includeArgument"
+  /**
+   * A line-leading `%X% = v` in any other section (a `[STEP n]`, a
+   * `[DEFINITIONS]` block, the top level, …). Inside a message block such a
+   * line may instead be a macro-named field key, so it is never "unused" and
+   * it also counts as a use of `X`.
+   */
+  | "section";
 
 export interface MacroDefinition {
   name: string;
@@ -222,7 +251,7 @@ export function scanMacros(text: string): MacroScan {
     const section = stack.length > 0 ? stack[stack.length - 1] : undefined;
     let definitionCol = -1;
 
-    if (!tag && (section === SEC_VARIABLES || section === SEC_INCLUDE)) {
+    if (!tag) {
       const def = DEFINITION_RE.exec(code);
       if (def) {
         definitionCol = code.indexOf("%");
@@ -232,7 +261,12 @@ export function scanMacros(text: string): MacroScan {
           line: lineNum,
           startCol: definitionCol,
           endCol: definitionCol + def[1].length + 2,
-          scope: section === SEC_VARIABLES ? "variables" : "includeArgument",
+          scope:
+            section === SEC_VARIABLES
+              ? "variables"
+              : section === SEC_INCLUDE
+                ? "includeArgument"
+                : "section",
         });
       } else if (section === SEC_INCLUDE) {
         const kv = KEY_VALUE_RE.exec(code);
@@ -435,6 +469,12 @@ export function validateMacros(
         usedLower.add(o.name.toLowerCase());
       }
     }
+    // `%X% = v` outside [VARIABLES]/[INCLUDE] may be a macro-named field key.
+    for (const d of scan.definitions) {
+      if (d.scope === "section") {
+        usedLower.add(d.name.toLowerCase());
+      }
+    }
   };
   collectUses(model.local);
   for (const inc of model.included) {
@@ -592,8 +632,8 @@ export type RenameTarget =
  * Can the macro under the cursor be renamed by editing THIS document only?
  * Refused when the rename would have to reach another file to stay correct:
  * the macro is not defined here, it is an `[INCLUDE]` argument (the included
- * file reads it under that name), or a file reached through an include uses or
- * defines the same name. On success the range is the NAME, without `%`.
+ * file reads it under that name), a file reached through an include uses or
+ * defines the same name, or an include could not be read (it may use it). On success the range is the NAME, without `%`.
  */
 export function prepareMacroRename(
   text: string,
@@ -626,6 +666,12 @@ export function prepareMacroRename(
     return {
       ok: false,
       reason: `%${at.name}% also appears in an included file (${elsewhere.key}); renaming it here would not rename it there.`,
+    };
+  }
+  if (model.unresolvedIncludes) {
+    return {
+      ok: false,
+      reason: `An included file could not be read, so %${at.name}% may be used there; renaming it here would not rename it there.`,
     };
   }
   return {
@@ -801,7 +847,9 @@ export function describeMacroDefinitions(
       const where =
         d.scope === "includeArgument"
           ? "passed to the included file in `[INCLUDE]`"
-          : "defined in `[VARIABLES]`";
+          : d.scope === "variables"
+            ? "defined in `[VARIABLES]`"
+            : "defined";
       const file = d.file === undefined ? "" : ` of included file \`${fileLabel(d.file)}\``;
       return `- ${codeSpan(d.value)} — ${where}${file}, line ${d.line + 1}`;
     })
@@ -836,7 +884,7 @@ export function renderMacroHover(
     return (
       head +
       "Not defined in this script or its includes. It is on the extension's list of names " +
-      "assumed to be supplied from outside the script, so it is not reported."
+      "assumed to be supplied by TestPit or from outside the script, so it is not reported."
     );
   }
   return head + "No definition found in this script or in the files it includes.";

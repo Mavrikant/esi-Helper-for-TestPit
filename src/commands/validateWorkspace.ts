@@ -117,7 +117,9 @@ export function registerValidateWorkspace(): vscode.Disposable {
     if (mine !== generation || !covered.has(uri.toString())) {
       return;
     }
-    publish(uri, "issues" in result ? result.issues : [], isLive(open));
+    // Re-read the open state: the file may have been (re)opened as esi while
+    // it was being read, and then the live collection owns it.
+    publish(uri, "issues" in result ? result.issues : [], isLive(findOpenDocument(uri)));
   };
 
   const run = async (): Promise<void> => {

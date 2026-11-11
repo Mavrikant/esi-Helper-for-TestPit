@@ -9,6 +9,7 @@
  * vscode-free. The folder listing takes an injectable `readdir`.
  */
 import * as fs from "fs";
+import { parseCsvCellRef } from "./fileRefs";
 
 /** Snippet text of the cell address; both numbers are 1-based (fileRefs.ts). */
 export const CSV_TAIL_SNIPPET = "line:${1:1} col:${2:1}";
@@ -119,8 +120,18 @@ interface DirEntryLike {
 }
 
 /**
- * Names of the `.csv` files directly in `dir`, sorted, capped. A folder that
- * cannot be read (missing, no access) simply has none.
+ * Is `name` a file name the reference parser reads back whole? A name with a
+ * blank, a parenthesis, `$`, a non-ASCII letter, … is not: inserting it would
+ * give text the extension does not treat as a CSV reference.
+ */
+function isReferableCsvName(name: string): boolean {
+  return parseCsvCellRef(`${name} line:1 col:1`)?.file === name;
+}
+
+/**
+ * Names of the `.csv` files directly in `dir`, sorted, capped — only those
+ * parseCsvCellRef accepts as a file name. A folder that cannot be read
+ * (missing, no access) simply has none.
  */
 export function listCsvFiles(
   dir: string,
@@ -135,7 +146,7 @@ export function listCsvFiles(
     return [];
   }
   return entries
-    .filter((e) => e.isFile() && /\.csv$/i.test(e.name))
+    .filter((e) => e.isFile() && /\.csv$/i.test(e.name) && isReferableCsvName(e.name))
     .map((e) => e.name)
     .sort((a, b) => a.localeCompare(b))
     .slice(0, limit);

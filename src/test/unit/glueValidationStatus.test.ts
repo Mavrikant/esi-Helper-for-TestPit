@@ -3,6 +3,7 @@ import * as os from "os";
 import * as path from "path";
 import * as vscode from "vscode";
 import {
+  isLiveTarget,
   isValidityRunning,
   onDidChangeValidityRun,
   runValidityCheckForDocument,
@@ -23,6 +24,21 @@ function fakeDocument(name: string, languageId: string): any {
     getText: () => "[TEST STEPS]\r\n[/TEST STEPS]\r\n",
   };
 }
+
+describe("live validation targets", () => {
+  it("takes on-disk .esi documents only", () => {
+    const esi = fakeDocument("a.esi", "esi");
+    assert.strictEqual(isLiveTarget(esi), true);
+    assert.strictEqual(isLiveTarget(fakeDocument("a.txt", "plaintext")), false);
+    assert.strictEqual(isLiveTarget({ ...esi, isClosed: true }), false);
+    assert.strictEqual(isLiveTarget(undefined), false);
+    // The `git:` side of a diff has the working copy's fsPath: validating it
+    // too would race on the same `<path>.temp` file.
+    const gitSide = { ...esi, uri: { ...esi.uri, scheme: "git" } };
+    assert.strictEqual(gitSide.uri.fsPath, esi.uri.fsPath);
+    assert.strictEqual(isLiveTarget(gitSide), false);
+  });
+});
 
 describe("validation status bar glue", () => {
   const saved: Record<string, unknown> = {};

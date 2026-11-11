@@ -132,11 +132,25 @@ export function runValidityCheckForDocument(
   );
 }
 
+/**
+ * Live validation is for on-disk .esi documents only. A virtual document
+ * (`git:` side of a diff, …) shares its fsPath with the working copy, and
+ * both would write / delete the same `<path>.temp` file.
+ */
+export function isLiveTarget(document: vscode.TextDocument | undefined): document is vscode.TextDocument {
+  return (
+    !!document &&
+    document.languageId === "esi" &&
+    document.uri.scheme === "file" &&
+    !document.isClosed
+  );
+}
+
 function handleDocumentChange(event: vscode.TextDocumentChangeEvent): void {
   const document = event?.document;
   // Only .esi buffers: other documents (incl. our own output channel) also
   // raise this event, and validating them would leave orphan .temp files.
-  if (!document || document.languageId !== "esi") {
+  if (!isLiveTarget(document)) {
     return;
   }
   // Fired without changes when only the dirty state flips (e.g. on save).
@@ -162,7 +176,7 @@ function scheduleOpenDocuments(): void {
     return;
   }
   for (const document of vscode.workspace.textDocuments) {
-    if (document.languageId === "esi" && !document.isClosed) {
+    if (isLiveTarget(document)) {
       scheduler.schedule(document.uri.toString());
     }
   }
@@ -192,7 +206,7 @@ async function runLiveCheck(key: string): Promise<void> {
   const document = vscode.workspace.textDocuments.find(
     (d) => d.uri.toString() === key
   );
-  if (!document || document.languageId !== "esi") {
+  if (!isLiveTarget(document)) {
     return;
   }
   // Re-checked here: the setting may have been turned off during the debounce.

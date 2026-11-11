@@ -93,6 +93,21 @@ describe("csvValueCompletion", () => {
       }
     });
 
+    it("offers only names the CSV-reference parser reads back", () => {
+      const names = ["A.CSV", "a(1).csv", "çıktı.csv", "data.csv", "my data.csv", "x$y.csv", "sub-1_b.v2.csv"];
+      const fake = (): { name: string; isFile(): boolean }[] =>
+        names.map((name) => ({ name, isFile: () => true }));
+      const listed = listCsvFiles("x", fake);
+      assert.deepStrictEqual(listed, ["A.CSV", "data.csv", "sub-1_b.v2.csv"]);
+      for (const entry of csvFileEntries(listed)) {
+        // Expand the snippet: unescape, tab stops → their defaults.
+        const inserted = entry.insertText
+          .replace(/\$\{\d+:(\d+)\}/g, "$1")
+          .replace(/\\([\\$}])/g, "$1");
+        assert.strictEqual(parseCsvCellRef(inserted)?.file, entry.label, inserted);
+      }
+    });
+
     it("has none for a folder that cannot be read, and honours the cap", () => {
       assert.deepStrictEqual(listCsvFiles(path.join(os.tmpdir(), "esi-no-such-folder-x")), []);
       const fake = (): { name: string; isFile(): boolean }[] =>

@@ -35,6 +35,12 @@ export interface FieldNode {
   description: string;
   field: FieldDef;
   message: MessageDef;
+  /**
+   * How many earlier fields of the message carry the same name (0 for the
+   * first / only one). Nothing stops a config repeating a field name, and
+   * the node id must still be unique. Absent = 0.
+   */
+  ordinal?: number;
 }
 
 export interface ConnectionNode {
@@ -170,6 +176,14 @@ export function buildComponentTree(
         }
       }
     }
+    // Counted over ALL fields, so an id does not change under a filter.
+    const seen = new Map<string, number>();
+    const ordinals = new Map<FieldDef, number>();
+    for (const f of allFields) {
+      const n = seen.get(f.name) ?? 0;
+      ordinals.set(f, n);
+      seen.set(f.name, n + 1);
+    }
     const node: ConnectionNode = {
       kind: "connection",
       name: connection.fullName,
@@ -186,6 +200,7 @@ export function buildComponentTree(
             description: fieldSummary(field),
             field,
             message,
+            ordinal: ordinals.get(field) ?? 0,
           }))
         : [],
     };
@@ -248,7 +263,10 @@ export function nodeId(node: ComponentNode): string {
     case "connection":
       return `conn:${node.name}`;
     case "field":
-      return `field:${node.connectionName}\u0000${node.name}`;
+      return (
+        `field:${node.connectionName}\u0000${node.name}` +
+        (node.ordinal ? `\u0000${node.ordinal}` : "")
+      );
   }
 }
 

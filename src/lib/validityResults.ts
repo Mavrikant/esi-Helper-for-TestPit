@@ -91,6 +91,8 @@ export interface ValiditySummary {
    * become diagnostics, so they are only visible in the output channel.
    */
   unlocated: number;
+  /** How many of `unlocated` are [Error]/[Fatal] lines. */
+  unlocatedErrors: number;
   /** One short sentence for a notification. */
   message: string;
 }
@@ -131,6 +133,7 @@ export function summarizeValidity(
       errors,
       warnings,
       unlocated,
+      unlocatedErrors,
       message:
         "TestPit produced no validation log - the script was NOT checked. See the output channel (is the TestPit executable path correct?).",
     };
@@ -165,5 +168,5 @@ export function summarizeValidity(
     }
     message = `TestPit validity check: ${parts.join(", ")}.`;
   }
-  return { outcome, errors, warnings, unlocated, message };
+  return { outcome, errors, warnings, unlocated, unlocatedErrors, message };
 }

@@ -83,10 +83,15 @@ describe("macros", () => {
       assert.strictEqual(scan.occurrences.length, 5);
     });
 
-    it("treats `%X% = v` outside [VARIABLES]/[INCLUDE] as a reference", () => {
+    it("gives `%X% = v` outside [VARIABLES]/[INCLUDE] its own scope", () => {
+      // It may define X for this section, or be a macro-named field key: it
+      // is recorded as a "section" definition, never as an undefined use.
       const scan = scanMacros(doc("[429_L1_M]", "    %FIELD% = 1", "[/429_L1_M]"));
-      assert.deepStrictEqual(scan.definitions, []);
-      assert.strictEqual(scan.occurrences[0].role, "reference");
+      assert.deepStrictEqual(
+        scan.definitions.map((d) => [d.name, d.value, d.line, d.startCol, d.endCol, d.scope]),
+        [["FIELD", "1", 1, 4, 11, "section"]]
+      );
+      assert.strictEqual(scan.occurrences[0].role, "definition");
     });
 
     it("counts a macro on the right of a definition as a reference", () => {
@@ -244,6 +249,91 @@ describe("macros", () => {
     });
   });
 
+  describe("definitions outside [VARIABLES]", () => {
+    const undefinedIn = (text: string): string[] =>
+      validateMacros(text)
+        .filter((i) => i.kind === "undefinedMacro")
+        .map((i) => i.identifier);
+
+    it("never reports the macros TestPit fills in itself", () => {
+      const text = doc(
+        "[TEST STEPS]",
+        "[STEP 10]",
+        "[CMD_EXECUTE]",
+        "system call = python x.py %TARGETIP% %PARTITIONPORTNUMBER% %FUNCTIONPORTNUMBER% %FUNCTARGETIP% %REPORTDIR% %SYSTEMTIME%",
+        "wait timeout = %TIMEOUT%",
+        "[/CMD_EXECUTE]",
+        "[STEP OUTPUTS]",
+        "[PART_A_B]",
+        "time offset = %SYNCTIME%",
+        "x = %NOPE%",
+        "[/PART_A_B]",
+        "[/STEP OUTPUTS]",
+        "[/STEP 10]",
+        "[/TEST STEPS]"
+      );
+      assert.deepStrictEqual(undefinedIn(text), ["NOPE"]);
+    });
+
+    it("takes a definition inside a [STEP n]", () => {
+      const text = doc(
+        "[TEST STEPS]",
+        "[STEP 10]",
+        "%LOCAL% = 5",
+        "[STEP INPUTS]",
+        "[429_X]",
+        "time = %LOCAL%",
+        "[/429_X]",
+        "[/STEP INPUTS]",
+        "[/STEP 10]",
+        "[/TEST STEPS]"
+      );
+      assert.deepStrictEqual(validateMacros(text), []);
+      const scan = scanMacros(text);
+      assert.deepStrictEqual(
+        scan.definitions.map((d) => [d.name, d.value, d.line, d.scope]),
+        [["LOCAL", "5", 2, "section"]]
+      );
+      assert.deepStrictEqual(
+        findMacroOccurrences(scan, "LOCAL").map((o) => [o.line, o.role]),
+        [[2, "definition"], [5, "reference"]]
+      );
+      assert.strictEqual(findMacroDefinitions(buildMacroModel(text), "LOCAL").length, 1);
+      assert.strictEqual(prepareMacroRename(text, 5, 8).ok, true);
+    });
+
+    it("takes a definition at top level and in a [DEFINITIONS] block", () => {
+      const use = ["[TEST STEPS]", "x = %A%", "[/TEST STEPS]"];
+      assert.deepStrictEqual(validateMacros(doc("%A% = 1", ...use)), []);
+      assert.deepStrictEqual(
+        validateMacros(doc("[DEFINITIONS]", "%A% = 1", "[/DEFINITIONS]", ...use)),
+        []
+      );
+    });
+
+    it("does not call such a definition unused, nor a variable used as a key", () => {
+      const text = doc(
+        "[VARIABLES]",
+        "%KEY% = Course",
+        "[/VARIABLES]",
+        "[TEST STEPS]",
+        "%NEVER_READ% = 1",
+        "[429_X]",
+        "%KEY% = 5",
+        "[/429_X]",
+        "[/TEST STEPS]"
+      );
+      assert.deepStrictEqual(validateMacros(text), []);
+    });
+
+    it("words the hover without naming a section it is not in", () => {
+      const text = doc("[TEST STEPS]", "%A% = 1", "x = %A%", "[/TEST STEPS]");
+      const hover = renderMacroHover(buildMacroModel(text), "A");
+      assert.ok(hover.includes("`1` — defined, line 2"), hover);
+      assert.ok(!hover.includes("[VARIABLES]"));
+    });
+  });
+
   describe("quick fixes", () => {
     const text = doc(
       "[VARIABLES]", //        0
@@ -330,6 +420,21 @@ describe("macros", () => {
       const text = doc("[VARIABLES]", "%S% = 1", "[/VARIABLES]", "[INCLUDE]", "include file = a.esi", "[/INCLUDE]");
       assert.strictEqual(prepareMacroRename(text, 1, 1, reader({ "a.esi": "x = %S%" })).ok, false);
       assert.strictEqual(prepareMacroRename(text, 1, 1, reader({ "a.esi": "x = 1" })).ok, true);
+    });
+
+    it("refuses when an include could not be read (it may use the name)", () => {
+      const withInclude = (includePath: string): string =>
+        doc("[VARIABLES]", "%A% = 1", "[/VARIABLES]", "[INCLUDE]", `include file = ${includePath}`, "[/INCLUDE]", "x=%A%");
+      const files = { "common.esi": "x = 1" };
+      assert.strictEqual(prepareMacroRename(withInclude("common.esi"), 1, 1, reader(files)).ok, true);
+      // Unreadable file, no reader at all, and a macro-valued path.
+      const missing = prepareMacroRename(withInclude("other.esi"), 1, 1, reader(files));
+      assert.ok(!missing.ok && missing.reason.includes("could not be read"));
+      assert.strictEqual(computeMacroRename(withInclude("other.esi"), 1, 1, "B").ok, false);
+      assert.strictEqual(
+        prepareMacroRename(withInclude("%DIR%common.esi"), 1, 1, reader(files)).ok,
+        false
+      );
     });
   });
 

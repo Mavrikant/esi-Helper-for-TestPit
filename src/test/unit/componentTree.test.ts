@@ -137,6 +137,41 @@ describe("componentTree — model", () => {
   });
 });
 
+describe("componentTree — repeated field names", () => {
+  const index = createEmptyIndex();
+  index.connections.set("429_X", {
+    fullName: "429_X",
+    bus: "429",
+    messageName: "M",
+  } as never);
+  const message = {
+    name: "M",
+    fields: [
+      field({ name: "Spare" }),
+      field({ name: "Data" }),
+      field({ name: "Spare" }),
+      field({ name: "Spare" }),
+    ],
+  };
+  index.resolveConnectionMessage = () => message as never;
+
+  it("gives every field of a message its own id", () => {
+    const fields = findConnectionNode(buildComponentTree(index), "429_X")!.fields;
+    const ids = fields.map(nodeId);
+    assert.strictEqual(new Set(ids).size, 4);
+    // The first occurrence and unrepeated names keep the plain id.
+    assert.strictEqual(ids[0], "field:429_X\u0000Spare");
+    assert.strictEqual(ids[1], "field:429_X\u0000Data");
+    assert.strictEqual(ids[2], "field:429_X\u0000Spare\u00001");
+  });
+
+  it("keeps an id stable under a filter", () => {
+    const all = findConnectionNode(buildComponentTree(index), "429_X")!.fields.map(nodeId);
+    const shown = findConnectionNode(buildComponentTree(index, "spare"), "429_X")!.fields.map(nodeId);
+    assert.deepStrictEqual(shown, [all[0], all[2], all[3]]);
+  });
+});
+
 describe("componentTree — field summary", () => {
   it("joins type, range, resolution, unit and enum count", () => {
     assert.strictEqual(

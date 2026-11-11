@@ -181,6 +181,21 @@ describe("validateWorkspace command (glue)", () => {
     assert.strictEqual(published.size, 1);
   });
 
+  it("does not republish a file reopened as esi while its close re-check ran", async () => {
+    // A language-mode switch fires close(old document) then open(new one).
+    const uri = write("reopen.esi", BROKEN);
+    found = [uri];
+    await run();
+    assert.strictEqual(published.size, 1);
+    const esiDoc = { uri, languageId: "esi", getText: () => BROKEN };
+    listeners.close({ uri, languageId: "plaintext", getText: () => BROKEN });
+    v.workspace.textDocuments = [esiDoc];
+    listeners.open(esiDoc);
+    assert.strictEqual(published.size, 0);
+    await settle();
+    assert.strictEqual(published.size, 0);
+  });
+
   it("follows a covered file changing or disappearing on disk", async () => {
     const uri = write("disk.esi", BROKEN);
     found = [uri];

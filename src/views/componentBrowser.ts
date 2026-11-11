@@ -26,6 +26,7 @@ export const GOTO_DEFINITION_COMMAND = "extension.componentBrowser.gotoDefinitio
 /** Context keys the package.json `when` clauses read. */
 const STATE_KEY = "esihelper.componentBrowser.state";
 const FILTERED_KEY = "esihelper.componentBrowser.filtered";
+const ACTIVE_KEY = "esihelper.active";
 
 /** `viewItem` values; ` hasDefinition` is appended when a source file is known. */
 const CONTEXT_CONNECTION = "esiConnection";
@@ -212,6 +213,9 @@ export function registerComponentBrowser(
     changed.fire();
   };
 
+  // Gates the view contribution (package.json): without it the view would
+  // sit in the Explorer of every window, TestPit workspace or not.
+  void vsc.commands.executeCommand("setContext", ACTIVE_KEY, true);
   sync();
 
   return vsc.Disposable.from(

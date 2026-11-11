@@ -145,9 +145,25 @@ describe("testDiscovery: mapValidityToSteps", () => {
 
   it("fails the script for an error TestPit gave no line for", () => {
     // summarizeValidity says "errors" although no located issue is an error.
-    const result = mapValidityToSteps(steps, [], ERRORS);
+    // That error may concern any step, so no step is cleared as passed.
+    const result = mapValidityToSteps(steps, [], { ...ERRORS, unlocatedErrors: 1 });
     assert.strictEqual(result.status, "failed");
-    assert.ok(result.steps.every((s) => s.status === "passed"));
+    assert.ok(result.steps.every((s) => s.status === "notChecked"));
+  });
+
+  it("keeps a located failure next to an error without a line number", () => {
+    const inStep = issue(6, "error");
+    const result = mapValidityToSteps(steps, [inStep], { ...ERRORS, unlocatedErrors: 1 });
+    assert.strictEqual(result.steps[0].status, "failed");
+    assert.ok(result.steps.slice(1).every((s) => s.status === "notChecked"));
+  });
+
+  it("still passes the other steps when every error has a line", () => {
+    const inStep = issue(6, "error");
+    const result = mapValidityToSteps(steps, [inStep], { ...ERRORS, unlocatedErrors: 0 });
+    assert.strictEqual(result.steps[0].status, "failed");
+    assert.ok(result.steps.length > 1);
+    assert.ok(result.steps.slice(1).every((s) => s.status === "passed"));
   });
 
   it("never passes anything when TestPit produced no validation log", () => {

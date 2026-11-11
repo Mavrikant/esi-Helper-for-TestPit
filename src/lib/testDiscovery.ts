@@ -67,7 +67,9 @@ export function discoverSteps(text: string): DiscoveredStep[] {
 /**
  * - `passed`: validated, no error reported (warnings do not fail an item);
  * - `failed`: validated, at least one error;
- * - `notChecked`: TestPit produced no validation log — nothing is known.
+ * - `notChecked`: TestPit produced no validation log — nothing is known; or
+ *   (steps only) the run has an error TestPit gave no line for, so a step
+ *   without an error of its own cannot be cleared.
  */
 export type ValidationStatus = "passed" | "failed" | "notChecked";
 
@@ -94,6 +96,8 @@ export interface ScriptValidation {
 export interface ValidityVerdict {
   outcome: ValidityOutcome;
   message: string;
+  /** [Error]/[Fatal] log lines without a line number. Absent = 0. */
+  unlocatedErrors?: number;
 }
 
 /**
@@ -124,7 +128,9 @@ export function stepContainingLine<T extends { line: number; endLine: number }>(
  *   - `errors`  → the script failed, even if no located issue is an error;
  *   - otherwise → the script passed.
  * A step fails only for an ERROR on one of its lines; a step with no issue,
- * or with warnings only, passes.
+ * or with warnings only, passes — unless the run has an error TestPit gave no
+ * line for: that error may concern any step (or mean validation stopped
+ * early), so such steps are `notChecked` rather than `passed`.
  */
 export function mapValidityToSteps(
   steps: readonly DiscoveredStep[],
@@ -161,6 +167,13 @@ export function mapValidityToSteps(
       }
     } else {
       target.warnings.push(issue);
+    }
+  }
+  if (checked && (verdict.unlocatedErrors ?? 0) > 0) {
+    for (const step of stepResults) {
+      if (step.status === "passed") {
+        step.status = "notChecked";
+      }
     }
   }
   return script;

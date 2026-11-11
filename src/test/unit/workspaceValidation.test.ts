@@ -167,6 +167,13 @@ describe("workspaceValidation", () => {
         })
       );
 
+    it("cancelled before the file search finished: not 'no files'", () => {
+      assert.deepStrictEqual(sum([], { totalFiles: 0, cancelled: true }), {
+        level: "warning",
+        message: "Workspace validation cancelled before any .esi file was checked.",
+      });
+    });
+
     it("no files", () => {
       assert.deepStrictEqual(sum([]), {
         level: "info",

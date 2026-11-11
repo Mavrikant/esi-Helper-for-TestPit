@@ -165,6 +165,13 @@ export interface SummaryMessage {
  */
 export function formatSummary(summary: WorkspaceSummary): SummaryMessage {
   if (summary.totalFiles === 0) {
+    if (summary.cancelled) {
+      // Cancelled during the file search: nothing says there are no files.
+      return {
+        level: "warning",
+        message: "Workspace validation cancelled before any .esi file was checked.",
+      };
+    }
     return { level: "info", message: "No .esi files found in the workspace." };
   }
   const parts: string[] = [];
