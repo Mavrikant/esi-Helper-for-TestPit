@@ -11,6 +11,12 @@ import {
 
 const CONNECTIONS = ["429_L100", "1553_Foo", "PART_HSI_Alive"];
 
+/** Remove the single `|` cursor marker from a line (no-op when absent). */
+function stripMarker(line: string): string {
+  const at = line.indexOf("|");
+  return at === -1 ? line : line.slice(0, at) + line.slice(at + 1);
+}
+
 /**
  * Run a completion at the `|` marker in `lines` (the marker is removed).
  * The partial / closing flag are derived the way esiContext does it.
@@ -19,7 +25,7 @@ function complete(lines: string[], eol = "\n"): TagCompletionResult {
   const lineIndex = lines.findIndex((l) => l.includes("|"));
   assert.notStrictEqual(lineIndex, -1, "test needs a | cursor marker");
   const character = lines[lineIndex].indexOf("|");
-  const clean = lines.map((l) => l.replace("|", ""));
+  const clean = lines.map((l, i) => (i === lineIndex ? stripMarker(l) : l));
   const before = clean[lineIndex].slice(0, character);
   let partial = before.slice(before.lastIndexOf("[") + 1);
   const closing = partial.startsWith("/");
@@ -56,7 +62,7 @@ function apply(lines: string[], label: string): string[] {
   const lineIndex = lines.findIndex((l) => l.includes("|"));
   const result = complete(lines);
   const e = entry(result, label);
-  const line = lines[lineIndex].replace("|", "");
+  const line = stripMarker(lines[lineIndex]);
   let text = e.insertText;
   if (e.isSnippet) {
     text = text
