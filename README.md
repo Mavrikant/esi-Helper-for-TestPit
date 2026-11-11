@@ -33,7 +33,13 @@
 - **Outline, breadcrumbs and Go to Symbol** (`Ctrl+Shift+O`) built from the section tags: TEST STEPS → STEP → STEP INPUTS / OUTPUTS → message blocks, each with its own icon. A step shows its `Step Description` beside its name. Keeps working on half-written scripts with unclosed or mismatched tags.
 - **Tag-based folding** — every multi-line section folds on its `[NAME]`…`[/NAME]` tags rather than on indentation, `<pre>…</pre>` bodies fold, and runs of `#` comment lines fold as comments.
 - **Component IntelliSense** for `429_…`, `1553_…`, `DIS_…`, `Mem_…`, `VORILS<N>_…`, `PART_<partition>_<port>`, and `ED_…` (External Data) tags. Connections, fields, enum values, and `%VARIABLE%` references are completed and hover-documented from the active profile's TestPit XML configs. Re-indexes automatically when the XMLs change.
-- **CSV-cell validation:** `field = file.csv line:N col:M` reads the referenced cell and validates its value against the field's enum table.
+- **`%MACRO%` navigation** — Go to Definition (`F12`), Find All References (`Shift+F12`), Rename (`F2`), occurrence highlighting, hover (value and where it is defined) and completion after `%` for `%NAME%` variables. A definition is a `%NAME% = value` line in `[VARIABLES]`, or one handed to an included file in an `[INCLUDE]` block; definitions and uses in files reached through `include file = …` are found too. Needs no profile.
+- **Macro checks** (no profile needed): a macro no definition was found for is a warning, an unused `[VARIABLES]` macro is faded, a name that differs from a definition only by case is a hint — with quick fixes "Change to '%NAME%'" and "Remove unused variable". They run only on a complete script (one with `[TEST STEPS]` / `[TEST DEFINITION]`) whose includes could all be read, so an include fragment is never flagged; `%TIMEOUT%` is never reported as undefined.
+- **Go to Definition into the TestPit config XML** — `F12` / `Ctrl+click` on a component tag, a field name or an enum value opens its `<Connection>` / `<Port>`, `<Message>`, `<Field>` or `<Enum>` in the active profile's config files (both config formats, shared `<Common>` definitions included). Hover cards carry an "Open definition" link.
+- **Matching tags** — with the cursor on `[NAME]` or `[/NAME]` both tags are highlighted; editing one name edits the other (`editor.linkedEditing`, on by default for `.esi`); **Go to Matching Tag** (`Ctrl+Shift+\`) jumps between them, or from inside a block to its opening tag.
+- **Clickable file references** — `Ctrl+click` opens the file named by a `file.csv line:N col:M` reference (at that cell), an `include file` / `result file` value, or any other path-shaped value. Paths resolve relative to the script's folder; a link appears only when the file exists.
+- **CSV cells:** `field = file.csv line:N col:M` reads the referenced cell (a real CSV reader: quoted fields, embedded commas and line breaks, CRLF, BOM) and validates it against the field's enum table, or against `MinValue`/`MaxValue` for a numeric field. Hovering the reference shows the cell's value, its column header and row, or says whether the file, line or column is missing.
+- **Step-number checks** — a step number used twice is a warning, a number lower than the previous step's is an information hint; both offer the quick fix **Renumber steps**.
 - **Enum value validation** by name **or number** — `SDI = INSTALLATION_NUMBER_ONE` and `SDI = 1` are both accepted, while an out-of-table value is flagged (matching TestPit's resolver). Macros/CSV/file references are skipped.
 - **Structural & conformance checks** (need no profile — they run even before you pick one): unbalanced/mismatched section tags; duplicate keys within a message block; A708 messages, `MANUAL_VERIFY`/`EXTERNAL_VERIFY`, or output-only fields (`occurrence`/`synchronize`/`match`) placed under `[STEP INPUTS]`; out-of-grammar `occurrence`/`match` values; and numeric values outside a field's `MinValue`/`MaxValue`. These mirror TestPit's own validator and are deliberately skipped for `%macro%`/CSV/include-sourced values, so they never false-positive. The tag reader matches TestPit's own, including the one-liner `[NAME/]` form and the sloppy shapes it repairs (`[[NAME]]`, `[//NAME]`, `[NAME] junk`, `[NAME`).
 - **Rich syntax highlighting** — distinct, theme-overridable colours for section tags, message fields, keys, enum values, `%MACRO%` references, file/folder paths, quoted strings, numbers, constants and comments. Resolved component identifiers carry a `defaultLibrary` semantic modifier so unknown/stale ones stand out.
@@ -42,7 +48,7 @@
 - **Quick fixes** (`Ctrl+.`) for the extension's own diagnostics: change an unknown component or field to the closest known name (a component's closing tag is renamed with it), pick an enum value (closest first), set an out-of-range value to the minimum or maximum, correct a `match` / `occurrence` value, remove a duplicate key or an output-only field under `[STEP INPUTS]`, add a missing `[/NAME]` or correct a mismatched one — plus "Fix all … in this file" for duplicate keys, output-only fields and out-of-range values.
 - **Multi-profile support driven by TestPit's own settings:** profiles and their config files are read from the Windows registry (`HKCU\Software\ESEN\TestPit`). The status-bar item (bottom-right) shows the active profile; click to switch via QuickPick.
 - **Snippets** for `[STEP]`, `[STEP DEFINITION]`, `[STEP INPUTS]`, `[STEP OUTPUTS]`, `[VARIABLES]`, `[FUNC_*]`, `[PART_*]`, `[CMD_EXECUTE]`, `[MANUAL_VERIFY]`, `[EXTERNAL_VERIFY]`, `[STEP GET_DUMP]`.
-- **Step renumbering** (sequential 10, 20, 30, …) and a **Go to Step picker** (`Ctrl+G`) that lists every step with its description — type a number or a word to filter, move through the list to preview, Enter to jump, Escape to go back.
+- **Step renumbering** (sequential 10, 20, 30, …; structure-aware — each closing tag takes its own opening tag's number, and only the digits are edited) and a **Go to Step picker** (`Ctrl+G`) that lists every step with its description — type a number or a word to filter, move through the list to preview, Enter to jump, Escape to go back.
 - **Open with TestPit** — launches the active script in the configured `TestPit.exe`.
 
 ## Getting started
@@ -71,13 +77,15 @@ All `esihelper.*` settings are **user-scoped (machine-wide)** — they live in y
 | `esihelper.refactorDocumentOnSave` | When `true`, runs the full ESI formatter (re-indent + `=` alignment) on save. (Tabs → 4 spaces happens on every save regardless.) |
 | `esihelper.alignmentScope` | `section` (default) aligns `=` within each block; `tier` aligns all blocks at the same bracket-depth together. |
 
+The extension also turns on the built-in `editor.linkedEditing` for `.esi` files, so renaming an opening tag renames its closing tag. To switch that off, add `"[esi]": { "editor.linkedEditing": false }` to your settings.
+
 ## Commands
 
 | Command | What it does | Keybinding |
 |---|---|---|
 | ESI Helper: Run Validity Check | Validate the current `.esi` against the active profile (`TestPit.exe --validateScriptOnly`) without blocking the editor. The full TestPit output goes to the output channel, the issues to the Problems panel, and a short summary ("n errors, n warnings" / "clean") is shown at the end. | — |
 | ESI Helper: Open with TestPit | Open the current script in the TestPit **GUI** (`TestPitw.exe`, derived from the configured executable's folder). | — |
-| ESI Helper: Update Step Numbers | Renumber `[STEP N]` blocks sequentially (10, 20, 30, …). | — |
+| ESI Helper: Update Step Numbers | Renumber `[STEP N]` blocks sequentially (10, 20, 30, …) and report what changed. Non-numeric steps (`[STEP GET_DUMP]`, `[STEP %N%]`) are left alone; step numbers written in prose or in `Step Dependencies` are not updated. | — |
 | ESI Helper: Refactor Document | Trim trailing whitespace and convert tabs to 4 spaces. | — |
 | ESI Helper: Show Processed File | Open TestPit's last preprocessed script (`Documents\Testpit\Preprocessed.esi`) side‑by‑side. | — |
 | ESI Helper: Select TestPit Profile | Switch the active profile (from the registry's `SettingPrefix`); also offers "Change TestPit executable…". | — |
@@ -85,6 +93,9 @@ All `esihelper.*` settings are **user-scoped (machine-wide)** — they live in y
 | ESI Helper: Pick TestPit Executable | Choose / re-point the console `TestPit.exe` used for validation. | — |
 | ESI Helper: Show Component Validation Info | Diagnostic dump: active profile, resolved config files, index size, and the current component‑validation issues. | — |
 | ESI Helper: Go to Step | Step picker: lists every `[STEP N]` with its Step Description (and Requirements). Type a number or text to filter; highlighting previews, Enter jumps, Escape returns. | `Ctrl+G` (when editing `.esi`) |
+| ESI Helper: Go to Matching Tag | Jump from `[NAME]` to its `[/NAME]` and back; from a line inside a block, to the opening tag of the innermost enclosing section. | `Ctrl+Shift+\` (when editing `.esi`; replaces the built-in Go to Bracket there) |
+| Go to Definition / Peek (built-in) | On a `%MACRO%`: its definition. On a component tag, field or enum value: its element in the TestPit config XML. | `F12` / `Ctrl+click` |
+| Find All References / Rename (built-in) | For `%MACRO%` variables. Rename is limited to the current file and is refused when an included file uses the name. | `Shift+F12` / `F2` |
 | Go to Symbol in Editor (built-in) | Jump to any section of the script; the same tree feeds the Outline view and breadcrumbs. | `Ctrl+Shift+O` |
 | Quick Fix (built-in) | Fixes for the extension's own diagnostics (see Highlights). | `Ctrl+.` |
 | Format Document (built-in) | ESI‑aware indentation **+ `=` alignment**. | `Shift+Alt+F` (when editing `.esi`) |

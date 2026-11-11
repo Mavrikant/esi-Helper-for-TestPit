@@ -1,12 +1,14 @@
 import * as vscode from "vscode";
-import * as fs from "fs";
 import * as path from "path";
 import {
   ComponentIssue,
-  CsvLookup,
   validateComponents,
   validateStructure,
 } from "./lib/componentValidator";
+import { createCsvCellLookup } from "./lib/csv";
+import { MacroIssue, validateMacros } from "./lib/macros";
+import { StepIssue, checkSteps } from "./lib/stepChecks";
+import { createMacroResolver } from "./providers/macroResolver";
 import { getActiveProjectIndex } from "./lib/projectIndexCache";
 import { onActiveProfileChanged } from "./lib/profileRegistry";
 import { getOutputChannel } from "./lib/outputChannel";
@@ -27,10 +29,15 @@ export function registerComponentDiagnostics(): vscode.Disposable {
     const text = document.getText();
     // Structural checks need no config, so they run even with no active
     // profile — the extension still catches tag/nesting mistakes.
-    const issues = validateStructure(text);
+    const issues: AnyIssue[] = validateStructure(text);
+    // Step-number hygiene and %MACRO% checks are config-free as well.
+    issues.push(...checkSteps(text));
+    issues.push(...validateMacros(text, createMacroResolver(document)));
     const index = getActiveProjectIndex();
     if (index) {
-      const csvLookup = makeCsvLookup(document.uri.fsPath);
+      // One lookup per pass: each referenced CSV is read (csv.ts, a real
+      // RFC-4180 reader) at most once, relative to the .esi file's folder.
+      const csvLookup = createCsvCellLookup(document.uri.fsPath);
       issues.push(...validateComponents(text, index, csvLookup));
     }
     collection.set(document.uri, issues.map(toDiagnostic));
@@ -78,49 +85,18 @@ export function registerComponentDiagnostics(): vscode.Disposable {
   );
 }
 
-/**
- * Build a per-validation-pass CSV cell lookup. CSV files are read at
- * most once per pass (cached by absolute path). Resolution: filename
- * is treated as relative to the .esi file's directory.
- *
- * Cell parsing is intentionally simple: lines split on \r?\n, cells
- * split on `,`, both 1-indexed, surrounding whitespace + double-quote
- * pair stripped. No support for embedded commas inside quoted cells —
- * if your fixtures need that we can swap in a real CSV parser later.
- */
-function makeCsvLookup(esiFilePath: string): CsvLookup {
-  const baseDir = path.dirname(esiFilePath);
-  const rowsCache = new Map<string, string[][] | undefined>();
-  return (filename, line, col) => {
-    const fullPath = path.resolve(baseDir, filename);
-    let rows = rowsCache.get(fullPath);
-    if (rows === undefined && !rowsCache.has(fullPath)) {
-      try {
-        const content = fs.readFileSync(fullPath, "utf-8");
-        rows = content.split(/\r?\n/).map((row) =>
-          row.split(",").map(cleanCsvCell)
-        );
-      } catch {
-        rows = undefined;
-      }
-      rowsCache.set(fullPath, rows);
-    }
-    if (!rows) {
-      return undefined;
-    }
-    return rows[line - 1]?.[col - 1];
-  };
-}
+type AnyIssue = ComponentIssue | StepIssue | MacroIssue;
 
-function cleanCsvCell(raw: string): string {
-  let s = raw.trim();
-  if (s.length >= 2 && s.startsWith('"') && s.endsWith('"')) {
-    s = s.slice(1, -1).replace(/""/g, '"');
-  }
-  return s;
-}
+const SEVERITY: Record<NonNullable<AnyIssue["severity"]>, vscode.DiagnosticSeverity> = {
+  error: vscode.DiagnosticSeverity.Error,
+  warning: vscode.DiagnosticSeverity.Warning,
+  information: vscode.DiagnosticSeverity.Information,
+  hint: vscode.DiagnosticSeverity.Hint,
+};
 
-function toDiagnostic(issue: ComponentIssue): vscode.Diagnostic {
+// The range and `code` are what providers/codeActions.ts uses to re-find the
+// issue behind a diagnostic — keep both exactly as the issue reports them.
+function toDiagnostic(issue: AnyIssue): vscode.Diagnostic {
   const range = new vscode.Range(
     issue.line,
     issue.startCol,
@@ -130,11 +106,13 @@ function toDiagnostic(issue: ComponentIssue): vscode.Diagnostic {
   const diag = new vscode.Diagnostic(
     range,
     issue.message,
-    issue.severity === "error"
-      ? vscode.DiagnosticSeverity.Error
-      : vscode.DiagnosticSeverity.Warning
+    // A component issue without a severity is a warning.
+    SEVERITY[issue.severity ?? "warning"]
   );
   diag.source = "esi Helper";
   diag.code = issue.kind;
+  if ("unnecessary" in issue && issue.unnecessary) {
+    diag.tags = [vscode.DiagnosticTag.Unnecessary];
+  }
   return diag;
 }

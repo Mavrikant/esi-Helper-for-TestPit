@@ -35,10 +35,17 @@ src/
 │   ├── pickExecutable.ts        # file dialog → store TestPit.exe
 │   ├── runValidityCheck.ts / openWithTestPit.ts / showValidationInfo.ts / showProcessedFile.ts
 │   ├── gotoStep.ts              # QuickPick of listSteps(); preview on highlight, restore on Escape, exact number wins on accept
+│   ├── gotoMatchingTag.ts       # [NAME] <-> [/NAME]; from inside a block → its opener (lib/tagPairs.ts)
 │   └── updateStepNumbers.ts / refactorDocument.ts
 ├── providers/                # IntelliSense, wired in extension.ts
 │   ├── completion.ts / hover.ts / semanticTokens.ts
-│   ├── codeActions.ts           # thin: "esi Helper" diagnostics → lib/quickFixes → CodeActions
+│   ├── codeActions.ts           # the ONE code-action provider: "esi Helper" diagnostics → lib/quickFixes | macros | stepChecks (routed by diagnostic code) → CodeActions
+│   ├── macroNavigation.ts       # %MACRO% definition / references / rename / highlight (logic in lib/macros.ts)
+│   ├── macroResolver.ts         # fs/editor side of lib/macros.ts: reads `include file` targets (open editor first, then disk by mtime)
+│   ├── xmlDefinition.ts         # F12 on component / field / enum → config XML (lib/xmlLocate.ts)
+│   ├── tagPairs.ts              # matching-tag highlight + linked editing of the two names
+│   ├── documentLinks.ts         # Ctrl+click on file refs that exist (lib/fileRefs.ts)
+│   ├── csvHover.ts              # hover on `file.csv line:N col:M`
 │   └── documentSymbols.ts / folding.ts   # thin: lib/esiOutline → DocumentSymbol / FoldingRange
 └── lib/                      # vscode-free where possible — unit-tested
     ├── testpitRegistry.ts       # reg export → RegistryModel { defaultProfile, profiles[], configs: {<profile>: {cable,a429,m1553,discrete,partition,vorils,ed}} }
@@ -55,6 +62,12 @@ src/
     ├── bareConnectionLookup.ts # bare name → connection for hover, matchers derived from COMPONENT_TAG_PREFIXES
     ├── componentValidator.ts   # pure: text + index → ComponentIssue[] (each may carry `fix: IssueFixData`); optional CsvLookup; exports ASSIGNMENT_RE
     ├── quickFixes.ts           # pure: issue → plain edits (createFixContext / findIssues / computeQuickFixes / computeFixAll / applyEdits)
+    ├── macros.ts               # pure, fs injected: %MACRO% scan / include-following model / validateMacros / rename / completion / hover text
+    ├── csv.ts                  # RFC-4180 reader + the ONE CSV cell lookup (createCsvCellLookup) + hover markdown
+    ├── fileRefs.ts             # file-reference detection (CSV cell, include/result file, path tokens) + resolveScriptRelative
+    ├── tagPairs.ts             # opener/closer pairing (same stack walk as componentValidator)
+    ├── xmlLocate.ts            # position-keeping XML scan: DefinitionTarget → file/line/col, found lazily; definitionLinkMarkdown for hover
+    ├── stepChecks.ts           # duplicate / out-of-order step numbers + the "Renumber steps" fix
     ├── suggest.ts              # edit-distance ranking for "Change to 'X'" (editDistance / rankSuggestions / suggest)
     ├── validityScheduler.ts    # pure, injectable timers: per-document trailing debounce + exactly one re-run + runExclusive (never two TestPit runs per file)
     ├── validityResults.ts      # pure: version gate (older result never overwrites newer) + summarizeValidity
@@ -65,9 +78,10 @@ src/
     ├── formatEsi.ts            # depth indenter + `=` alignment (section/tier scope) + column-anchored <pre>
     ├── refactorWhitespace.ts   # trailing trim + tabs → 4 spaces
     ├── toDiagnostic.ts         # ValidityIssue → Diagnostic, source "TestPit" (TESTPIT_DIAGNOSTIC_SOURCE)
-    ├── renumberSteps.ts / findStepLine.ts (literal match, goto-step fallback) / withTempScript.ts / outputChannel.ts
+    ├── renumberSteps.ts        # parseSectionTag + section stack; digit-only edits (planStepRenumber / applyStepNumberEdits)
+    ├── findStepLine.ts (literal match, goto-step fallback) / withTempScript.ts / outputChannel.ts
 
-test/setup.js                  # mock-require fake `vscode`; loaded via mocha --require. Records registered providers/commands in `vscode.__registered` (see glue.test.ts)
+test/setup.js                  # mock-require fake `vscode`; loaded via mocha --require. Records registered providers/commands in `vscode.__registered` (see glue.test.ts, glueNavigation.test.ts)
 src/test/fixtures/config/      # XML fixtures for xmlIndex tests (RNE-style at root; neocas/ for Ref/ED/ports)
 ```
 
@@ -76,7 +90,7 @@ src/test/fixtures/config/      # XML fixtures for xmlIndex tests (RNE-style at r
 | Command | What it does |
 |---|---|
 | `npm run compile` | `tsc -p ./` → `out/` |
-| `npm test` | `compile` then `mocha` (`out/test/unit/**/*.test.js`) — 483 passing |
+| `npm test` | `compile` then `mocha` (`out/test/unit/**/*.test.js`) — 654 passing |
 | `npm run coverage` | `c8 npm test` (config in [.c8rc.json](.c8rc.json); vscode-touching glue excluded) |
 | `npm run lint` | ESLint (flat config) — needs Node ≥ 20.19 / 22 |
 | F5 | Extension Development Host (uses [.vscode/launch.json](.vscode/launch.json); run `npm run watch` alongside) |
@@ -119,7 +133,14 @@ Two places, both in `package.json` `contributes.configurationDefaults`: `editor.
 - **`match` (parameter field, TestPit ≥ v1.3.6.15) takes only `any` or `next`.** It picks which record of the comparison window may answer an expected block: `next` is the default (the next record no other block has taken); `any` means any record in the window carrying these values. It is output-only on every bus, and TestPit's `checkMatchValue` **refuses** an unknown value rather than defaulting, so the extension reports one as an error. Case-sensitive; a `%macro%` value is exempt. Values are hardcoded (`MATCH_VALUES`) — it is an engine keyword, not an XML-indexed enum.
 - **`occurrence` and `match` are the ONLY parameters whose value the engine constrains** (`checkOccurrenceValue` / `checkMatchValue`); both are checked in `checkParameterValue`. Everything else in `PARAMETER_FIELDS` is accepted with any value. Keep that list in sync with `ScriptMessageValidator.cpp`'s per-bus `commonFields`/`outputFields` — only the single-token ones, since the multi-word params (`end time`, `time offset`, `clear time`, `frame count`, `return code`) never match `ASSIGNMENT_RE`. `value` is deliberately excluded: the XML index synthesizes a real enum-typed `value` field for `DIS_` messages.
 - **CRLF.** Every `.split("\n")` on document text must be `.split(/\r?\n/)` — Windows `.esi` files leave trailing `\r` that breaks `$`-anchored regexes.
-- **CSV cell refs** (`field = file.csv line:N col:M`) are detected in `componentValidator` before the generic enum check; the fs-touching `CsvLookup` is injected by [componentDiagnostics.ts](src/componentDiagnostics.ts) (cached per pass).
+- **CSV cell refs** (`field = file.csv line:N col:M`) are detected in `componentValidator` before the generic enum check, for enum fields and (range-checked like a literal) numeric fields. The fs-touching lookup is `createCsvCellLookup` in [csv.ts](src/lib/csv.ts) — the only one; [componentDiagnostics.ts](src/componentDiagnostics.ts) makes one per pass. The ref grammar is `parseCsvCellRef` in [fileRefs.ts](src/lib/fileRefs.ts); don't write another CSV-ref regex.
+- **One resolve rule for referenced files:** `resolveScriptRelative` ([fileRefs.ts](src/lib/fileRefs.ts)) — relative to the folder of the script that names the file. CSV refs, document links and macro include-following all use it. TestPit's own rule is unknown, which is why links are existence-gated and an unreadable include silences the macro checks instead of raising anything.
+- **Macro checks only speak when they can know.** `validateMacros` reports only for a root script (`[TEST STEPS]` / `[TEST DEFINITION]`) whose includes were ALL read; otherwise nothing. `%TIMEOUT%` is in `ASSUMED_EXTERNAL_MACROS`. Don't relax either — an include fragment gets its macros from its includer.
+- **Exactly one code-action provider** ([codeActions.ts](src/providers/codeActions.ts)), routing on the diagnostic `code` (`isStepIssueKind` / `isMacroIssueKind` / component kinds). Don't register a second one — fixes would be offered twice. `toDiagnostic` in `componentDiagnostics.ts` must keep each issue's exact range and `code`; that is how the issue is re-found.
+- **Providers that share a position must not both answer.** VS Code shows only ONE DocumentHighlight provider's result (first non-empty), so `providers/tagPairs.ts` stands down on a `%MACRO%`; hovers ARE merged, so `providers/hover.ts` stands down on a CSV cell ref (`csvHover.ts` owns it); the XML definition provider returns nothing for a macro.
+- **The index stores only `sourceFile`** (on `ConnectionDef` / `MessageDef`); line/column are found lazily by [xmlLocate.ts](src/lib/xmlLocate.ts). Don't add positions to the index.
+- **Tag pairing** ([tagPairs.ts](src/lib/tagPairs.ts)) duplicates the stack walk of `componentValidator` (a closer pairs with the nearest same-named opener, case-sensitive; one-liners never stacked). Change the two together. Linked editing needs `"[esi]": {"editor.linkedEditing": true}` in `configurationDefaults` and is offered only with the cursor inside the name.
+- **Step renumbering edits digits only** (never a whole-document replace — that reset the cursor and folding) and never touches step numbers in prose / `Step Dependencies`.
 - **Two diagnostic collections** — `diagnostics.ts` (single `esi-testpit`, source `TestPit`, runs TestPit.exe, heavy) and `componentDiagnostics.ts` (single `esi-components`, source `esi Helper`, in-process, cheap). Keep them separate, and keep the sources distinct: the code-action provider and Show Component Validation Info select diagnostics by source.
 - **The live validity check is debounced and never overlaps itself.** Every TestPit run for a document — live or the Run Validity Check command — goes through the one `validityScheduler` in `diagnostics.ts` (`runExclusive` for the command), because both write the same `<file>.temp`. Don't call `testpitRunner` for a validity check from anywhere else, don't go back to running per keystroke, and don't go back to `runValidityCheckSync` in the command (it freezes the UI). Results are published through the version gate in `validityResults.ts` so a slow run for old text can't overwrite a newer result; the previous diagnostics deliberately stay up until the next run finishes (no clear-on-keystroke flicker).
 - **Structural section names live in [sectionNames.ts](src/lib/sectionNames.ts)** — `SEC_*` and `isStepSectionName`. The validator, outline, tag completion and step list all import from it; don't re-declare `"STEP INPUTS"` & co. locally (a reserved name missing from one copy shows up as a bogus step, e.g. `[STEP DUMP/]` in the picker).

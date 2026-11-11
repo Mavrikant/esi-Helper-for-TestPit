@@ -8,6 +8,11 @@ import {
 } from "../lib/renderComponent";
 import { computeTagCompletions } from "../lib/tagCompletion";
 import { FieldDef } from "../lib/xmlIndex";
+import {
+  computeMacroCompletions,
+  describeMacroDefinitions,
+} from "../lib/macros";
+import { createMacroResolver, macroFileLabel } from "./macroResolver";
 
 // Common cross-bus parameter fields offered in every message block. The
 // validator (componentValidator.PARAMETER_FIELDS) accepts a wider set incl.
@@ -29,9 +34,6 @@ const MATCH_VALUE_HINTS: ReadonlyArray<[string, string]> = [
   ["next", "the default: the next record no other block has taken"],
   ["any", "any record of the window may answer this block"],
 ];
-
-const VARIABLE_BLOCK = /\[VARIABLES\]([\s\S]*?)\[\/VARIABLES\]/g;
-const VARIABLE_DECL = /%([A-Za-z_][A-Za-z0-9_]*)%/g;
 
 export function registerEsiCompletionProvider(): vscode.Disposable {
   return vscode.languages.registerCompletionItemProvider(
@@ -204,14 +206,37 @@ export function registerEsiCompletionProvider(): vscode.Disposable {
             return items;
           }
           case "variableRef": {
-            const variables = collectInScopeVariables(document.getText());
-            return variables.map((name) => {
+            // Names, values, replace range and insert text all come from
+            // lib/macros.ts. The range starts at the opening `%` and the
+            // insert text is the whole `%NAME%`, so it comes out the same
+            // whether or not a closing `%` is already there.
+            const macros = computeMacroCompletions(
+              document.getText(),
+              position.line,
+              position.character,
+              createMacroResolver(document)
+            );
+            if (!macros) {
+              return [];
+            }
+            const macroRange = new vscode.Range(
+              position.line,
+              macros.startCol,
+              position.line,
+              macros.endCol
+            );
+            return macros.entries.map((entry) => {
               const item = new vscode.CompletionItem(
-                name,
+                entry.name,
                 vscode.CompletionItemKind.Variable
               );
-              item.detail = "[VARIABLES] declaration";
-              item.insertText = `${name}%`;
+              item.detail = entry.detail;
+              item.documentation = new vscode.MarkdownString(
+                describeMacroDefinitions(entry.definitions, macroFileLabel)
+              );
+              item.range = macroRange;
+              item.insertText = entry.insertText;
+              item.filterText = entry.filterText;
               return item;
             });
           }
@@ -265,19 +290,4 @@ function computeIdentifierRange(
   const m = before.match(/[A-Za-z_][A-Za-z0-9_.]*$/);
   const start = m ? position.character - m[0].length : position.character;
   return new vscode.Range(position.line, start, position.line, position.character);
-}
-
-function collectInScopeVariables(documentText: string): string[] {
-  const names = new Set<string>();
-  let match: RegExpExecArray | null;
-  VARIABLE_BLOCK.lastIndex = 0;
-  while ((match = VARIABLE_BLOCK.exec(documentText)) !== null) {
-    const block = match[1];
-    let inner: RegExpExecArray | null;
-    VARIABLE_DECL.lastIndex = 0;
-    while ((inner = VARIABLE_DECL.exec(block)) !== null) {
-      names.add(inner[1]);
-    }
-  }
-  return Array.from(names).sort();
 }

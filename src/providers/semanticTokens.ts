@@ -6,6 +6,7 @@ import {
   isKnownComponent,
 } from "../lib/xmlIndex";
 import { PARAMETER_FIELDS } from "../lib/componentValidator";
+import { parseCsvCellRef } from "../lib/fileRefs";
 
 // Token types (index-aware colouring layered over the TextMate grammar):
 //   class      — component connection names ([429_…], [ED_…], …)
@@ -28,9 +29,6 @@ const TAG_RE = /\[(\/?)([A-Za-z0-9_]+)(\/?)\]/g;
 // Field name may include dots (1553 `Mode.SelectedCourse`).
 const ASSIGNMENT_RE = /^(\s*)([A-Za-z_][A-Za-z0-9_.]*)\s*=\s*(.*)$/;
 const FIRST_IDENT_RE = /[A-Za-z_][A-Za-z0-9_]*/;
-// `<file>.csv line:N col:M` — a CSV cell reference, not an enum literal; must
-// not be coloured as an enum value.
-const CSV_REF_RE = /^[A-Za-z0-9_.\-]+\.csv\s+line\s*:\s*\d+\s+col\s*:\s*\d+/i;
 
 const KNOWN_MODIFIER = 1 << 0;
 
@@ -125,7 +123,7 @@ export function registerEsiSemanticTokensProvider(): vscode.Disposable {
           }
           const rhs = line.slice(eqIndex + 1);
           const rhsTrimmed = rhs.trimStart();
-          if (rhsTrimmed.startsWith("%") || CSV_REF_RE.test(rhsTrimmed)) {
+          if (rhsTrimmed.startsWith("%") || parseCsvCellRef(rhsTrimmed) !== undefined) {
             continue;
           }
           const valueMatch = FIRST_IDENT_RE.exec(rhs);

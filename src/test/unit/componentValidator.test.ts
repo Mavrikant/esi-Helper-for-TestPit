@@ -5,6 +5,7 @@ import {
   validateComponents,
   validateStructure,
 } from "../../lib/componentValidator";
+import type { CsvCellResult } from "../../lib/csv";
 
 const FIXTURE_DIR = path.resolve(
   __dirname,
@@ -427,6 +428,114 @@ describe("componentValidator", () => {
         "[/429_L100SelectedCourseBNR_input1]",
       ].join("\n");
       assert.deepStrictEqual(validateComponents(text, idx), []);
+    });
+
+    describe("on a numeric field", () => {
+      // Course is BNR with MinValue 0 / MaxValue 359.9 in the fixtures.
+      const numLine = (rhs: string) =>
+        [
+          "[429_L100SelectedCourseBNR_input1]",
+          `    Course = ${rhs}`,
+          "[/429_L100SelectedCourseBNR_input1]",
+        ].join("\n");
+
+      it("accepts a cell inside the field's range", () => {
+        assert.deepStrictEqual(validateComponents(numLine("fix.csv line:4 col:1"), idx, () => "100.5"), []);
+      });
+
+      it("flags a cell outside the range, like a literal, on the whole reference", () => {
+        const text = numLine("fix.csv line:4 col:1");
+        const issues = validateComponents(text, idx, () => " 400 ");
+        assert.strictEqual(issues.length, 1);
+        assert.strictEqual(issues[0].kind, "valueOutOfRange");
+        assert.strictEqual(issues[0].severity, "warning");
+        assert.strictEqual(
+          issues[0].message,
+          "Value 400 (from fix.csv line:4 col:1) for 'Course' is outside the allowed range 0..359.9."
+        );
+        const line = text.split("\n")[1];
+        assert.strictEqual(line.slice(issues[0].startCol, issues[0].endCol), "fix.csv line:4 col:1");
+        assert.strictEqual(issues[0].fix?.fromCsv, true);
+        // Same verdict as the literal form.
+        const literal = validateComponents(numLine("400"), idx);
+        assert.strictEqual(literal[0].kind, "valueOutOfRange");
+      });
+
+      it("does not judge a cell that is not a bare number, is empty, or holds a macro", () => {
+        for (const cell of ["abc", "", "10-20", "%VAL%", "0x10"]) {
+          assert.deepStrictEqual(
+            validateComponents(numLine("fix.csv line:4 col:1"), idx, () => cell),
+            [],
+            `cell '${cell}'`
+          );
+        }
+      });
+
+      it("reports a missing cell the same way as for an enum field", () => {
+        const num = validateComponents(numLine("missing.csv line:1 col:1"), idx, () => undefined);
+        const en = validateComponents(enumLine("missing.csv line:1 col:1"), idx, () => undefined);
+        assert.strictEqual(num.length, 1);
+        assert.strictEqual(num[0].kind, "unknownCsvCell");
+        assert.strictEqual(num[0].message, en[0].message);
+        assert.strictEqual(num[0].identifier, "missing.csv line:1 col:1");
+      });
+    });
+
+    it("says what is missing when the lookup returns a detailed result", () => {
+      const msg = (r: CsvCellResult) =>
+        validateComponents(enumLine("fix.csv line:4 col:2"), idx, () => r)[0].message;
+      assert.strictEqual(
+        msg({ status: "fileMissing" }),
+        "CSV cell 'fix.csv' line:4 col:2 not found (file not found or unreadable)."
+      );
+      assert.strictEqual(
+        msg({ status: "rowMissing", rowCount: 3 }),
+        "CSV cell 'fix.csv' line:4 col:2 not found (the file has 3 line(s))."
+      );
+      assert.strictEqual(
+        msg({ status: "colMissing", colCount: 1 }),
+        "CSV cell 'fix.csv' line:4 col:2 not found (line 4 has 1 column(s))."
+      );
+    });
+
+    it("validates the value of a detailed 'ok' result and stays silent on an ambiguous one", () => {
+      const ok = (value: string): CsvCellResult => ({
+        status: "ok",
+        value,
+        fileLine: 3,
+        fileCharacter: 0,
+        row: [value],
+        firstRowValue: "h",
+      });
+      assert.deepStrictEqual(
+        validateComponents(enumLine("fix.csv line:4 col:1"), idx, () => ok("INSTALLATION_NUMBER_ONE")),
+        []
+      );
+      assert.strictEqual(
+        validateComponents(enumLine("fix.csv line:4 col:1"), idx, () => ok("BOGUS"))[0].kind,
+        "unknownEnum"
+      );
+      assert.deepStrictEqual(
+        validateComponents(enumLine("fix.csv line:4 col:1"), idx, () => ({ status: "ambiguous" })),
+        []
+      );
+    });
+
+    it("resolves a CSV reference that names a folder", () => {
+      const seen: string[] = [];
+      const issues = validateComponents(enumLine("..\\data\\fix.csv line:4 col:1"), idx, (f) => {
+        seen.push(f);
+        return "INSTALLATION_NUMBER_ONE";
+      });
+      assert.deepStrictEqual(issues, []);
+      assert.deepStrictEqual(seen, ["..\\data\\fix.csv"]);
+    });
+
+    it("never reports a CSV reference or cell that holds a %macro%", () => {
+      const lookup = (): string => "BOGUS";
+      assert.deepStrictEqual(validateComponents(enumLine("fix.csv line:%ROW% col:1"), idx, lookup), []);
+      assert.deepStrictEqual(validateComponents(enumLine("%DIR%\\fix.csv line:4 col:1"), idx, lookup), []);
+      assert.deepStrictEqual(validateComponents(enumLine("fix.csv line:4 col:1"), idx, () => "%SDI%"), []);
     });
 
     it("does not warn for a CSV reference when csvLookup is not provided (regression vs the old false-positive)", () => {

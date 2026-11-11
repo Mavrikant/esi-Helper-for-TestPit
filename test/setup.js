@@ -5,7 +5,13 @@
 const mock = require('mock-require');
 
 class Range {
+  // Like the real one: (startLine, startCol, endLine, endCol) or (start, end).
   constructor(startLine, startCol, endLine, endCol) {
+    if (typeof startLine === 'object') {
+      this.start = { line: startLine.line, character: startLine.character };
+      this.end = { line: startCol.line, character: startCol.character };
+      return;
+    }
     this.start = { line: startLine, character: startCol };
     this.end = { line: endLine, character: endCol };
   }
@@ -138,8 +144,14 @@ class EventEmitter {
 // What the extension registered, keyed by kind / command id, so a test can
 // call a provider or command the way VS Code would.
 const registered = { providers: {}, commands: {} };
+// Several providers of one kind may be registered (two hovers, two definition
+// providers, ...): `providers[kind]` is the latest one, `all[kind]` every one
+// in registration order (it grows on each activate()).
+registered.all = {};
 const keep = (kind) => (...args) => {
-  registered.providers[kind] = args[args.length > 1 ? 1 : 0];
+  const provider = args[args.length > 1 ? 1 : 0];
+  (registered.all[kind] = registered.all[kind] || []).push(provider);
+  registered.providers[kind] = provider;
   return { dispose() {} };
 };
 
@@ -214,12 +226,19 @@ mock('vscode', {
         dispose() {},
       };
     },
+    setStatusBarMessage() { return { dispose() {} }; },
     activeTextEditor: undefined,
   },
   languages: {
     registerDocumentSemanticTokensProvider() { return { dispose() {} }; },
     registerCompletionItemProvider() { return { dispose() {} }; },
-    registerHoverProvider() { return { dispose() {} }; },
+    registerHoverProvider: keep('hover'),
+    registerDefinitionProvider: keep('definition'),
+    registerReferenceProvider: keep('reference'),
+    registerRenameProvider: keep('rename'),
+    registerDocumentHighlightProvider: keep('documentHighlight'),
+    registerLinkedEditingRangeProvider: keep('linkedEditingRange'),
+    registerDocumentLinkProvider: keep('documentLink'),
     registerCodeActionsProvider: keep('codeActions'),
     registerDocumentSymbolProvider: keep('documentSymbol'),
     registerFoldingRangeProvider: keep('foldingRange'),
@@ -289,8 +308,33 @@ mock('vscode', {
   RelativePattern: class RelativePattern {
     constructor(base, pattern) { this.base = base; this.pattern = pattern; }
   },
-  Uri: { file(p) { return { fsPath: p, toString: () => p }; } },
-  Disposable: { from() { return { dispose() {} }; } },
+  Uri: {
+    file(p) {
+      const u = {
+        scheme: 'file',
+        fsPath: p,
+        fragment: '',
+        toString: () => p,
+        with(change) { return Object.assign({}, u, change); },
+      };
+      return u;
+    },
+  },
+  Disposable: class Disposable {
+    constructor(fn) { this._fn = fn; }
+    dispose() { if (this._fn) this._fn(); }
+    static from(...items) {
+      return new Disposable(() => items.forEach((d) => d && d.dispose && d.dispose()));
+    }
+  },
+  Location: class Location { constructor(uri, range) { this.uri = uri; this.range = range; } },
+  DocumentLink: class DocumentLink { constructor(range, target) { this.range = range; this.target = target; } },
+  DocumentHighlight: class DocumentHighlight { constructor(range, kind) { this.range = range; this.kind = kind; } },
+  DocumentHighlightKind: { Text: 0, Read: 1, Write: 2 },
+  LinkedEditingRanges: class LinkedEditingRanges {
+    constructor(ranges, wordPattern) { this.ranges = ranges; this.wordPattern = wordPattern; }
+  },
+  DiagnosticTag: { Unnecessary: 1, Deprecated: 2 },
   ConfigurationTarget: { Global: 1, Workspace: 2, WorkspaceFolder: 3 },
   EventEmitter,
   CodeAction: class CodeAction {

@@ -9,6 +9,7 @@ import { registerSelectProfile } from "./commands/selectProfile";
 import { registerReloadRegistry } from "./commands/reloadRegistry";
 import { registerPickExecutable } from "./commands/pickExecutable";
 import { registerShowValidationInfo } from "./commands/showValidationInfo";
+import { registerGotoMatchingTag } from "./commands/gotoMatchingTag";
 import { registerLiveDiagnostics } from "./diagnostics";
 import { registerProjectStatusBar } from "./statusBar";
 import { registerEsiFormatter, registerFormatOnSave } from "./formatter";
@@ -19,6 +20,11 @@ import { registerEsiSemanticTokensProvider } from "./providers/semanticTokens";
 import { registerEsiCodeActionsProvider } from "./providers/codeActions";
 import { registerEsiDocumentSymbolProvider } from "./providers/documentSymbols";
 import { registerEsiFoldingRangeProvider } from "./providers/folding";
+import { registerEsiMacroProviders } from "./providers/macroNavigation";
+import { registerEsiDocumentLinkProvider } from "./providers/documentLinks";
+import { registerEsiCsvHoverProvider } from "./providers/csvHover";
+import { registerEsiTagPairProviders } from "./providers/tagPairs";
+import { registerEsiXmlDefinitionProvider } from "./providers/xmlDefinition";
 import { registerComponentDiagnostics } from "./componentDiagnostics";
 import { initPluginStore } from "./lib/pluginStore";
 import { ensureRegistryLoaded, promptForExeIfUnset } from "./lib/profileRegistry";
@@ -42,6 +48,7 @@ export function activate(context: vscode.ExtensionContext): void {
     registerReloadRegistry(),
     registerPickExecutable(),
     registerShowValidationInfo(),
+    registerGotoMatchingTag(),
     registerProjectStatusBar(),
     registerLiveDiagnostics(),
     registerEsiFormatter(),
@@ -53,6 +60,11 @@ export function activate(context: vscode.ExtensionContext): void {
     registerEsiCodeActionsProvider(),
     registerEsiDocumentSymbolProvider(),
     registerEsiFoldingRangeProvider(),
+    registerEsiMacroProviders(),
+    registerEsiDocumentLinkProvider(),
+    registerEsiCsvHoverProvider(),
+    registerEsiTagPairProviders(),
+    registerEsiXmlDefinitionProvider(),
     registerComponentDiagnostics()
   );
 

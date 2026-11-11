@@ -8,14 +8,25 @@ import {
   createFixContext,
   findIssues,
 } from "../lib/quickFixes";
+import {
+  computeMacroQuickFixes,
+  findMacroIssue,
+  isMacroIssueKind,
+  validateMacros,
+} from "../lib/macros";
+import { computeRenumberStepsFix, isStepIssueKind } from "../lib/stepChecks";
+import { createMacroResolver } from "./macroResolver";
 
 const SOURCE = "esi Helper";
 
 /**
  * Quick fixes for the in-process ("esi Helper") diagnostics. All the logic is
- * in lib/quickFixes.ts; this only maps diagnostics to issues and plain edits
- * to CodeActions. Structural fixes need no index, so they work with no active
- * profile too.
+ * in lib/ (quickFixes.ts, macros.ts, stepChecks.ts); this only maps
+ * diagnostics to issues and plain edits to CodeActions. Structural, macro and
+ * step fixes need no index, so they work with no active profile too.
+ *
+ * This is the ONE code-action provider for `esi`: the diagnostic `code`
+ * decides which library answers, so no fix is ever offered twice.
  */
 export function registerEsiCodeActionsProvider(): vscode.Disposable {
   return vscode.languages.registerCodeActionsProvider(
@@ -29,11 +40,7 @@ export function registerEsiCodeActionsProvider(): vscode.Disposable {
         if (diagnostics.length === 0) {
           return actions;
         }
-        // Built once per request, and only when there is something to fix.
-        const ctx: FixContext = createFixContext(
-          document.getText(),
-          getActiveProjectIndex()
-        );
+        const text = document.getText();
 
         const toAction = (
           fix: QuickFix,
@@ -56,8 +63,45 @@ export function registerEsiCodeActionsProvider(): vscode.Disposable {
           return action;
         };
 
+        // Step numbers: one whole-file "Renumber steps" for all of them.
+        const stepDiags = diagnostics.filter((d) => isStepIssueKind(d.code));
+        if (stepDiags.length > 0) {
+          const fix = computeRenumberStepsFix(text);
+          if (fix) {
+            actions.push(toAction(fix, stepDiags));
+          }
+        }
+
+        // %MACRO% checks (lib/macros.ts) — re-validated only when needed.
+        const macroDiags = diagnostics.filter((d) => isMacroIssueKind(d.code));
+        if (macroDiags.length > 0) {
+          const issues = validateMacros(text, createMacroResolver(document));
+          for (const diag of macroDiags) {
+            const issue = findMacroIssue(
+              issues,
+              diag.code as string,
+              diag.range.start.line,
+              diag.range.start.character,
+              diag.range.end.character
+            );
+            if (issue) {
+              for (const fix of computeMacroQuickFixes(text, issue)) {
+                actions.push(toAction(fix, [diag]));
+              }
+            }
+          }
+        }
+
+        const componentDiags = diagnostics.filter(
+          (d) => !isStepIssueKind(d.code) && !isMacroIssueKind(d.code)
+        );
+        if (componentDiags.length === 0) {
+          return actions;
+        }
+        // Built once per request, and only when there is something to fix.
+        const ctx: FixContext = createFixContext(text, getActiveProjectIndex());
         const kinds = new Map<string, vscode.Diagnostic[]>();
-        for (const diag of diagnostics) {
+        for (const diag of componentDiags) {
           const kind = diag.code as string;
           const { start, end } = diag.range;
           const issues = findIssues(

@@ -25,7 +25,8 @@
     "onCommand:extension.selectProfile",
     "onCommand:extension.reloadRegistry",
     "onCommand:extension.pickExecutable",
-    "onCommand:extension.showValidationInfo"
+    "onCommand:extension.showValidationInfo",
+    "onCommand:extension.gotoMatchingTag"
   ],
   "main": "./out/extension.js",
   "contributes": {
@@ -105,12 +106,21 @@
         "command": "extension.showValidationInfo",
         "title": "Show Component Validation Info",
         "category": "ESI Helper"
+      },
+      {
+        "command": "extension.gotoMatchingTag",
+        "title": "Go to Matching Tag",
+        "category": "ESI Helper"
       }
     ],
     "menus": {
       "commandPalette": [
         {
           "command": "extension.gotoStep",
+          "when": "editorLangId == esi"
+        },
+        {
+          "command": "extension.gotoMatchingTag",
           "when": "editorLangId == esi"
         }
       ]
@@ -121,6 +131,12 @@
         "key": "ctrl+g",
         "mac": "cmd+g",
         "when": "editorLangId == esi"
+      },
+      {
+        "command": "extension.gotoMatchingTag",
+        "key": "ctrl+shift+\\",
+        "mac": "cmd+shift+\\",
+        "when": "editorTextFocus && editorLangId == esi"
       }
     ],
     "configuration": {
@@ -151,7 +167,8 @@
     "configurationDefaults": {
       "editor.semanticHighlighting.enabled": true,
       "[esi]": {
-        "editor.semanticHighlighting.enabled": true
+        "editor.semanticHighlighting.enabled": true,
+        "editor.linkedEditing": true
       },
       "editor.semanticTokenColorCustomizations": {
         "enabled": true,

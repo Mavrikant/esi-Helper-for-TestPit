@@ -1,7 +1,6 @@
 import * as vscode from "vscode";
 import { TESTPIT_DIAGNOSTIC_SOURCE } from "../lib/toDiagnostic";
 import * as fs from "fs";
-import * as path from "path";
 import { getOutputChannel } from "../lib/outputChannel";
 import { getActiveProjectIndex } from "../lib/projectIndexCache";
 import {
@@ -10,8 +9,8 @@ import {
   getProfiles,
   getTestpitExe,
 } from "../lib/profileRegistry";
+import { createCsvCellLookup } from "../lib/csv";
 import {
-  CsvLookup,
   validateComponents,
   validateStructure,
 } from "../lib/componentValidator";
@@ -76,7 +75,7 @@ export function registerShowValidationInfo(): vscode.Disposable {
       // in this report match what the user sees as live squiggles. Structural
       // checks run with or without an index; component checks need the index.
       const text = editor.document.getText();
-      const csvLookup = makeCsvLookup(editor.document.uri.fsPath);
+      const csvLookup = createCsvCellLookup(editor.document.uri.fsPath);
       const issues = [
         ...validateStructure(text),
         ...(index ? validateComponents(text, index, csvLookup) : []),
@@ -113,36 +112,4 @@ export function registerShowValidationInfo(): vscode.Disposable {
       }
     }
   );
-}
-
-/** Same per-call CSV cache used by componentDiagnostics — duplicated here
- *  so the diagnostic command's report matches live squiggles for files
- *  that pull values from .csv fixtures. Trivial enough not to extract. */
-function makeCsvLookup(esiFilePath: string): CsvLookup {
-  const baseDir = path.dirname(esiFilePath);
-  const cache = new Map<string, string[][] | undefined>();
-  return (filename, line, col) => {
-    const fullPath = path.resolve(baseDir, filename);
-    if (!cache.has(fullPath)) {
-      try {
-        const content = fs.readFileSync(fullPath, "utf-8");
-        cache.set(
-          fullPath,
-          content.split(/\r?\n/).map((row) =>
-            row.split(",").map((cell) => {
-              let s = cell.trim();
-              if (s.length >= 2 && s.startsWith('"') && s.endsWith('"')) {
-                s = s.slice(1, -1).replace(/""/g, '"');
-              }
-              return s;
-            })
-          )
-        );
-      } catch {
-        cache.set(fullPath, undefined);
-      }
-    }
-    const rows = cache.get(fullPath);
-    return rows ? rows[line - 1]?.[col - 1] : undefined;
-  };
 }
