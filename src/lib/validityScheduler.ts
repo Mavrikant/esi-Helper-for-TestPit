@@ -14,8 +14,13 @@
 export type TimerHandle = unknown;
 
 export interface ValiditySchedulerOptions<K> {
-  /** Quiet period after the last schedule() before the run starts. */
-  delayMs: number;
+  /**
+   * Quiet period after the last schedule() before the run starts. A function
+   * is read on every schedule(), so a changed setting applies to the next
+   * change without re-creating the scheduler (a debounce already counting
+   * down keeps the delay it was started with).
+   */
+  delayMs: number | (() => number);
   /** The debounced run. Rejections are routed to onError, never thrown. */
   run: (key: K) => Promise<void> | void;
   /** Injectable for tests; default to the global timers. */
@@ -59,6 +64,8 @@ export function createValidityScheduler<K>(
     options.clearTimer ??
     ((handle: TimerHandle) => clearTimeout(handle as NodeJS.Timeout));
   const states = new Map<K, KeyState>();
+  const currentDelay = (): number =>
+    typeof options.delayMs === "function" ? options.delayMs() : options.delayMs;
 
   function stateFor(key: K): KeyState {
     let state = states.get(key);
@@ -116,7 +123,7 @@ export function createValidityScheduler<K>(
       } else {
         start(key, state, liveJob(key));
       }
-    }, options.delayMs);
+    }, currentDelay());
   }
 
   function runExclusive<T>(key: K, fn: () => Promise<T> | T): Promise<T> {

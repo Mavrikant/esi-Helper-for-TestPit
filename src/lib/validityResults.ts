@@ -32,6 +32,53 @@ export function createVersionGate<K>(): VersionGate<K> {
   };
 }
 
+/**
+ * Which keys (documents) have a TestPit run in flight. `onChange` fires only
+ * on a real transition (idle -> running, running -> idle), so a listener can
+ * repaint without de-duplicating. Counted, so overlapping begin()s for one key
+ * (not expected: the scheduler serializes runs per document) stay consistent.
+ */
+export interface RunTracker<K> {
+  begin(key: K): void;
+  end(key: K): void;
+  isRunning(key: K): boolean;
+  /** Forget everything without firing (teardown). */
+  clear(): void;
+}
+
+export function createRunTracker<K>(
+  onChange?: (key: K, running: boolean) => void
+): RunTracker<K> {
+  const counts = new Map<K, number>();
+  return {
+    begin(key) {
+      const n = counts.get(key) ?? 0;
+      counts.set(key, n + 1);
+      if (n === 0) {
+        onChange?.(key, true);
+      }
+    },
+    end(key) {
+      const n = counts.get(key);
+      if (n === undefined) {
+        return;
+      }
+      if (n > 1) {
+        counts.set(key, n - 1);
+        return;
+      }
+      counts.delete(key);
+      onChange?.(key, false);
+    },
+    isRunning(key) {
+      return counts.has(key);
+    },
+    clear() {
+      counts.clear();
+    },
+  };
+}
+
 export type ValidityOutcome = "clean" | "warnings" | "errors" | "no-log";
 
 export interface ValiditySummary {

@@ -14,19 +14,7 @@
     "Other"
   ],
   "activationEvents": [
-    "onStartupFinished",
-    "onLanguage:esi",
-    "onCommand:extension.openWithTestPit",
-    "onCommand:extension.updateStepNumbers",
-    "onCommand:extension.refactorDocument",
-    "onCommand:extension.runValidityCheck",
-    "onCommand:extension.showProcessedFile",
-    "onCommand:extension.gotoStep",
-    "onCommand:extension.selectProfile",
-    "onCommand:extension.reloadRegistry",
-    "onCommand:extension.pickExecutable",
-    "onCommand:extension.showValidationInfo",
-    "onCommand:extension.gotoMatchingTag"
+    "workspaceContains:**/*.esi"
   ],
   "main": "./out/extension.js",
   "contributes": {
@@ -60,7 +48,8 @@
       {
         "command": "extension.openWithTestPit",
         "title": "Open with TestPit",
-        "category": "ESI Helper"
+        "category": "ESI Helper",
+        "icon": "$(link-external)"
       },
       {
         "command": "extension.updateStepNumbers",
@@ -75,7 +64,8 @@
       {
         "command": "extension.runValidityCheck",
         "title": "Run Validity Check",
-        "category": "ESI Helper"
+        "category": "ESI Helper",
+        "icon": "$(checklist)"
       },
       {
         "command": "extension.showProcessedFile",
@@ -111,6 +101,38 @@
         "command": "extension.gotoMatchingTag",
         "title": "Go to Matching Tag",
         "category": "ESI Helper"
+      },
+      {
+        "command": "extension.validateWorkspace",
+        "title": "Validate All .esi Files in Workspace",
+        "category": "ESI Helper"
+      },
+      {
+        "command": "extension.clearWorkspaceValidation",
+        "title": "Clear Workspace Validation Results",
+        "category": "ESI Helper"
+      },
+      {
+        "command": "extension.insertComponent",
+        "title": "Insert Component at Cursor",
+        "category": "ESI Helper"
+      },
+      {
+        "command": "extension.componentBrowser.filter",
+        "title": "Filter Components…",
+        "category": "ESI Helper",
+        "icon": "$(filter)"
+      },
+      {
+        "command": "extension.componentBrowser.clearFilter",
+        "title": "Clear Component Filter",
+        "category": "ESI Helper",
+        "icon": "$(clear-all)"
+      },
+      {
+        "command": "extension.componentBrowser.gotoDefinition",
+        "title": "Go to XML Definition",
+        "category": "ESI Helper"
       }
     ],
     "menus": {
@@ -122,9 +144,139 @@
         {
           "command": "extension.gotoMatchingTag",
           "when": "editorLangId == esi"
+        },
+        {
+          "command": "extension.updateStepNumbers",
+          "when": "editorLangId == esi"
+        },
+        {
+          "command": "extension.refactorDocument",
+          "when": "editorLangId == esi"
+        },
+        {
+          "command": "extension.runValidityCheck",
+          "when": "editorLangId == esi"
+        },
+        {
+          "command": "extension.openWithTestPit",
+          "when": "editorLangId == esi"
+        },
+        {
+          "command": "extension.insertComponent",
+          "when": "false"
+        },
+        {
+          "command": "extension.componentBrowser.gotoDefinition",
+          "when": "false"
+        },
+        {
+          "command": "extension.componentBrowser.clearFilter",
+          "when": "esihelper.componentBrowser.filtered"
+        }
+      ],
+      "editor/title": [
+        {
+          "command": "extension.runValidityCheck",
+          "when": "resourceLangId == esi",
+          "group": "navigation@1"
+        },
+        {
+          "command": "extension.openWithTestPit",
+          "when": "resourceLangId == esi",
+          "group": "navigation@2"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "extension.gotoStep",
+          "when": "editorLangId == esi",
+          "group": "esihelper@1"
+        },
+        {
+          "command": "extension.updateStepNumbers",
+          "when": "editorLangId == esi",
+          "group": "esihelper@2"
+        },
+        {
+          "command": "extension.refactorDocument",
+          "when": "editorLangId == esi",
+          "group": "esihelper@3"
+        },
+        {
+          "command": "extension.runValidityCheck",
+          "when": "editorLangId == esi",
+          "group": "esihelper@4"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "extension.openWithTestPit",
+          "when": "resourceExtname == .esi",
+          "group": "navigation@90"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "extension.componentBrowser.filter",
+          "when": "view == esihelper.componentBrowser",
+          "group": "navigation@1"
+        },
+        {
+          "command": "extension.componentBrowser.clearFilter",
+          "when": "view == esihelper.componentBrowser && esihelper.componentBrowser.filtered",
+          "group": "navigation@2"
+        },
+        {
+          "command": "extension.selectProfile",
+          "when": "view == esihelper.componentBrowser",
+          "group": "profile@1"
+        },
+        {
+          "command": "extension.reloadRegistry",
+          "when": "view == esihelper.componentBrowser",
+          "group": "profile@2"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "extension.insertComponent",
+          "when": "view == esihelper.componentBrowser && viewItem =~ /^esi(Connection|Field)/",
+          "group": "navigation@1"
+        },
+        {
+          "command": "extension.componentBrowser.gotoDefinition",
+          "when": "view == esihelper.componentBrowser && viewItem =~ /hasDefinition/",
+          "group": "navigation@2"
         }
       ]
     },
+    "views": {
+      "explorer": [
+        {
+          "id": "esihelper.componentBrowser",
+          "name": "TestPit Components",
+          "contextualTitle": "TestPit Components",
+          "visibility": "collapsed"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "esihelper.componentBrowser",
+        "contents": "No TestPit configuration is loaded for the active profile.\n[Select Profile](command:extension.selectProfile)\n[Reload TestPit Settings](command:extension.reloadRegistry)",
+        "when": "esihelper.componentBrowser.state == noConfig"
+      },
+      {
+        "view": "esihelper.componentBrowser",
+        "contents": "The config files of the active profile define no components.\n[Select Profile](command:extension.selectProfile)",
+        "when": "esihelper.componentBrowser.state == empty"
+      },
+      {
+        "view": "esihelper.componentBrowser",
+        "contents": "No component matches the filter.\n[Clear Filter](command:extension.componentBrowser.clearFilter)",
+        "when": "esihelper.componentBrowser.state == noMatch"
+      }
+    ],
     "keybindings": [
       {
         "command": "extension.gotoStep",
@@ -137,6 +289,93 @@
         "key": "ctrl+shift+\\",
         "mac": "cmd+shift+\\",
         "when": "editorTextFocus && editorLangId == esi"
+      }
+    ],
+    "walkthroughs": [
+      {
+        "id": "esihelper.gettingStarted",
+        "title": "Get started with esi Helper for TestPit",
+        "description": "First-run setup for editing TestPit .esi scripts: the TestPit executable, the registry profile, and where the editor features are. TestPit runs on Windows only.",
+        "steps": [
+          {
+            "id": "esihelper.pickExecutable",
+            "title": "Pick TestPit.exe",
+            "description": "Select the console TestPit.exe once. It is used for the validity check; TestPit runs on Windows only.\n[Pick TestPit Executable](command:extension.pickExecutable)",
+            "media": {
+              "markdown": "walkthrough/pick-executable.md"
+            },
+            "completionEvents": [
+              "onCommand:extension.pickExecutable"
+            ]
+          },
+          {
+            "id": "esihelper.selectProfile",
+            "title": "Select the TestPit profile",
+            "description": "Profiles come from TestPit's settings in the Windows registry. The active one is shown in the status bar, bottom right.\n[Select TestPit Profile](command:extension.selectProfile)",
+            "media": {
+              "markdown": "walkthrough/select-profile.md"
+            },
+            "completionEvents": [
+              "onCommand:extension.selectProfile"
+            ]
+          },
+          {
+            "id": "esihelper.reloadSettings",
+            "title": "Reload TestPit settings",
+            "description": "The registry is read once and cached. Reload after changing profiles or config file paths in TestPit.\n[Reload TestPit Settings](command:extension.reloadRegistry)",
+            "media": {
+              "markdown": "walkthrough/reload-settings.md"
+            },
+            "completionEvents": [
+              "onCommand:extension.reloadRegistry"
+            ]
+          },
+          {
+            "id": "esihelper.diagnostics",
+            "title": "Find problems",
+            "description": "Findings from the extension's own checks and from TestPit.exe are listed in the Problems panel.\n[Open Problems](command:workbench.actions.view.problems)",
+            "media": {
+              "markdown": "walkthrough/diagnostics.md"
+            },
+            "completionEvents": [
+              "onCommand:workbench.actions.view.problems",
+              "onCommand:extension.runValidityCheck"
+            ]
+          },
+          {
+            "id": "esihelper.outline",
+            "title": "Navigate with the Outline",
+            "description": "Sections and steps of the active .esi file are listed in the Outline view.\n[Show Outline](command:outline.focus)",
+            "media": {
+              "markdown": "walkthrough/outline.md"
+            },
+            "completionEvents": [
+              "onCommand:outline.focus"
+            ]
+          },
+          {
+            "id": "esihelper.quickFixes",
+            "title": "Apply quick fixes",
+            "description": "Open a .esi file, put the cursor on a problem reported by esi Helper and press Ctrl+. to see the available fixes.",
+            "media": {
+              "markdown": "walkthrough/quick-fixes.md"
+            },
+            "completionEvents": [
+              "onCommand:editor.action.quickFix"
+            ]
+          },
+          {
+            "id": "esihelper.gotoStep",
+            "title": "Jump to a step",
+            "description": "Open a .esi file and press Ctrl+G to pick a step by number or description.",
+            "media": {
+              "markdown": "walkthrough/goto-step.md"
+            },
+            "completionEvents": [
+              "onCommand:extension.gotoStep"
+            ]
+          }
+        ]
       }
     ],
     "configuration": {
@@ -176,6 +415,23 @@
           "type": "boolean",
           "default": false,
           "description": "Show the MinValue..MaxValue range declared in the active profile's XML config after a numeric field value."
+        },
+        "esihelper.liveValidation": {
+          "type": "boolean",
+          "default": true,
+          "description": "Run the TestPit validity check automatically while you edit an .esi file (needs the TestPit executable to be set). Turn off to check only on demand with “Run Validity Check”; the extension's own in-process checks keep running either way."
+        },
+        "esihelper.liveValidationDelay": {
+          "type": "number",
+          "default": 600,
+          "minimum": 200,
+          "maximum": 10000,
+          "description": "Quiet period in milliseconds after the last edit before the live TestPit validity check starts TestPit.exe. Values outside 200–10000 are clamped."
+        },
+        "esihelper.codeLens.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show CodeLens in .esi files: Validate / Open with TestPit at the top of a root script, and a summary (input/output block counts, problems) above each [STEP]."
         }
       }
     },
@@ -461,6 +717,7 @@
     "watch": "tsc -watch -p ./",
     "pretest": "npm run compile",
     "test": "mocha --require ./test/setup.js",
+    "test:integration": "npm run compile && node ./out/test/integration/runTest.js",
     "coverage": "c8 npm test"
   },
   "devDependencies": {

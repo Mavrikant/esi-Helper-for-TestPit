@@ -1,5 +1,9 @@
 import * as assert from "assert";
-import { createVersionGate, summarizeValidity } from "../../lib/validityResults";
+import {
+  createRunTracker,
+  createVersionGate,
+  summarizeValidity,
+} from "../../lib/validityResults";
 import { parseValidityOutput } from "../../lib/parseValidityOutput";
 
 describe("createVersionGate", () => {
@@ -102,5 +106,49 @@ describe("summarizeValidity", () => {
     const s = summarize("[Info] start\r\n[Error] bad Line: 1\r\n");
     assert.strictEqual(s.errors, 1);
     assert.strictEqual(s.unlocated, 0);
+  });
+});
+
+describe("createRunTracker", () => {
+  it("reports start and end once each, per key", () => {
+    const events: string[] = [];
+    const t = createRunTracker<string>((k, running) => events.push(`${k}:${running}`));
+    assert.strictEqual(t.isRunning("a"), false);
+    t.begin("a");
+    t.begin("b");
+    assert.strictEqual(t.isRunning("a"), true);
+    t.end("a");
+    assert.strictEqual(t.isRunning("a"), false);
+    assert.strictEqual(t.isRunning("b"), true);
+    assert.deepStrictEqual(events, ["a:true", "b:true", "a:false"]);
+  });
+
+  it("stays running until every overlapping run has ended", () => {
+    const events: boolean[] = [];
+    const t = createRunTracker<string>((_k, running) => events.push(running));
+    t.begin("a");
+    t.begin("a");
+    t.end("a");
+    assert.strictEqual(t.isRunning("a"), true);
+    t.end("a");
+    assert.deepStrictEqual(events, [true, false]);
+  });
+
+  it("ignores an end() without a begin(), and after clear()", () => {
+    const events: boolean[] = [];
+    const t = createRunTracker<string>((_k, running) => events.push(running));
+    t.end("a");
+    t.begin("a");
+    t.clear();
+    assert.strictEqual(t.isRunning("a"), false);
+    t.end("a");
+    assert.deepStrictEqual(events, [true]);
+  });
+
+  it("works without a listener", () => {
+    const t = createRunTracker<number>();
+    t.begin(1);
+    t.end(1);
+    assert.strictEqual(t.isRunning(1), false);
   });
 });

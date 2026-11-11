@@ -176,6 +176,7 @@ mock('vscode', {
         tooltip: "",
         backgroundColor: undefined,
         show() {},
+        hide() {},
         dispose() {},
       };
     },
@@ -227,6 +228,13 @@ mock('vscode', {
       };
     },
     setStatusBarMessage() { return { dispose() {} }; },
+    onDidChangeActiveTextEditor() { return { dispose() {} }; },
+    createTreeView(id, options) {
+      return { id, options, description: undefined, message: undefined, title: undefined, dispose() {} };
+    },
+    showInputBox() { return Promise.resolve(undefined); },
+    showTextDocument() { return Promise.resolve(undefined); },
+    showQuickPick() { return Promise.resolve(undefined); },
     activeTextEditor: undefined,
   },
   languages: {
@@ -243,6 +251,8 @@ mock('vscode', {
     registerDocumentSymbolProvider: keep('documentSymbol'),
     registerFoldingRangeProvider: keep('foldingRange'),
     getDiagnostics() { return []; },
+    onDidChangeDiagnostics() { return { dispose() {} }; },
+    registerCodeLensProvider: keep('codeLens'),
     createDiagnosticCollection() { return { clear() {}, set() {}, delete() {}, dispose() {} }; },
     registerDocumentFormattingEditProvider: keep('documentFormatting'),
     registerDocumentRangeFormattingEditProvider: keep('documentRangeFormatting'),
@@ -254,10 +264,50 @@ mock('vscode', {
       return { dispose() {} };
     },
     registerTextEditorCommand() { return { dispose() {} }; },
+    executeCommand() { return Promise.resolve(undefined); },
   },
   Range,
   Position,
   Selection,
+  CodeLens: class CodeLens {
+    constructor(range, command) { this.range = range; this.command = command; }
+  },
+  TreeItem: class TreeItem {
+    constructor(label, collapsibleState) { this.label = label; this.collapsibleState = collapsibleState; }
+  },
+  TreeItemCollapsibleState: { None: 0, Collapsed: 1, Expanded: 2 },
+  ThemeIcon: class ThemeIcon { constructor(id) { this.id = id; } },
+  TestRunProfileKind: { Run: 1, Debug: 2, Coverage: 3 },
+  TestMessage: class TestMessage { constructor(message) { this.message = message; } },
+  tests: {
+    createTestController(id, label) {
+      const collection = () => {
+        const map = new Map();
+        return {
+          get size() { return map.size; },
+          add(item) { map.set(item.id, item); },
+          delete(itemId) { map.delete(itemId); },
+          get(itemId) { return map.get(itemId); },
+          forEach(fn) { [...map.values()].forEach(fn); },
+          replace(items) { map.clear(); items.forEach((i) => map.set(i.id, i)); },
+        };
+      };
+      return {
+        id, label,
+        items: collection(),
+        createTestItem(itemId, itemLabel, uri) {
+          return { id: itemId, label: itemLabel, uri, children: collection(), canResolveChildren: false };
+        },
+        createRunProfile(profileLabel, kind, runHandler, isDefault) {
+          return { label: profileLabel, kind, runHandler, isDefault, dispose() {} };
+        },
+        createTestRun() {
+          return { started() {}, passed() {}, failed() {}, errored() {}, skipped() {}, appendOutput() {}, end() {} };
+        },
+        dispose() {},
+      };
+    },
+  },
   DocumentSymbol,
   FoldingRange,
   SnippetString,
@@ -290,6 +340,9 @@ mock('vscode', {
   workspace: {
     textDocuments: [],
     workspaceFolders: undefined,
+    asRelativePath(uri) { return typeof uri === 'string' ? uri : uri.fsPath; },
+    findFiles() { return Promise.resolve([]); },
+    openTextDocument() { return Promise.reject(new Error('openTextDocument: not mocked')); },
     onDidChangeConfiguration() { return { dispose() {} }; },
     onDidChangeTextDocument() { return { dispose() {} }; },
     onDidOpenTextDocument() { return { dispose() {} }; },

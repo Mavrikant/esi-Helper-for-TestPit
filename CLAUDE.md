@@ -27,7 +27,7 @@ src/
 ├── profiles.ts               # buildValidityArgs/buildValidityCommand (role→flag), buildOpenCommand, deriveGuiExecutable (TestPit.exe → TestPitw.exe)
 ├── diagnostics.ts            # live validity check: onDidChangeTextDocument → validityScheduler (600 ms debounce) → TestPit.exe (heavy). ONE "esi-testpit" collection; exports runValidityCheckForDocument (shared with the command). Skips silently if no exe.
 ├── componentDiagnostics.ts   # "esi-components" DiagnosticCollection; in-process XML-index validation + CSV-cell lookup
-├── statusBar.ts              # bottom-right profile item (shows active profile; click → picker)
+├── statusBar.ts              # bottom-right profile item (shows active profile; click → picker) + registerValidationStatusBar: spinner / error+warning counts for the active .esi (lib/validationStatus.ts; fed by diagnostics.ts onDidChangeValidityRun)
 ├── formatter.ts              # registerEsiFormatter (Shift+Alt+F) + registerEsiRangeFormatter (Format Selection) + registerFormatOnSave (tabs→spaces always; full format when refactorDocumentOnSave); all emit per-line edits via lib/lineEdits.ts
 ├── commands/                 # one file per command, each exports register*(): Disposable
 │   ├── selectProfile.ts         # QuickPick of registry profiles (+ "Change TestPit executable…")
@@ -36,11 +36,16 @@ src/
 │   ├── runValidityCheck.ts / openWithTestPit.ts / showValidationInfo.ts / showProcessedFile.ts
 │   ├── gotoStep.ts              # QuickPick of listSteps(); preview on highlight, restore on Escape, exact number wins on accept
 │   ├── gotoMatchingTag.ts       # [NAME] <-> [/NAME]; from inside a block → its opener (lib/tagPairs.ts)
+│   ├── validateWorkspace.ts     # "Validate All .esi Files in Workspace" + Clear: own "esi-workspace" collection, in-process checks only (lib/workspaceValidation.ts), never TestPit.exe
+│   ├── insertComponent.ts       # click-to-insert from the component browser (lib/componentInsert.ts; block text from tagCompletion.ts)
 │   └── updateStepNumbers.ts / refactorDocument.ts
+├── views/componentBrowser.ts  # "TestPit Components" Explorer tree (lib/componentTree.ts): bus → connection → fields, filter, Go to XML Definition; sets context keys esihelper.componentBrowser.state / .filtered
+├── testing/esiTestController.ts # Test Explorer: files → [STEP]s, ONE "Validate (TestPit validity check)" profile via runValidityCheckForDocument; never prompts (lib/testDiscovery.ts)
 ├── providers/                # IntelliSense, wired in extension.ts
 │   ├── completion.ts / hover.ts
 │   ├── semanticTokens.ts        # thin glue over lib/semanticTokens.ts; re-requests on onIndexChanged
 │   ├── keywordHover.ts          # hover for parameter keys + structural section tags (lib/keywordDocs.ts); silent wherever hover.ts answers
+│   ├── codeLens.ts              # Validate / Open with TestPit on a root script, per-[STEP] summary + problem counts (lib/codeLens.ts); setting esihelper.codeLens.enabled; two internal extension.esiLens.* commands
 │   ├── inlayHints.ts            # enum name / unit / range after numeric values (lib/inlayHints.ts); settings esihelper.inlayHints.*
 │   ├── codeActions.ts           # the ONE code-action provider: "esi Helper" diagnostics → lib/quickFixes | macros | stepChecks (routed by diagnostic code) → CodeActions
 │   ├── macroNavigation.ts       # %MACRO% definition / references / rename / highlight (logic in lib/macros.ts)
@@ -84,6 +89,9 @@ src/
     ├── preprocessedPath.ts     # <home>\Documents\Testpit\Preprocessed.esi path + open-failure message
     ├── renderComponent.ts      # MarkdownString rendering for hover + completion
     ├── parseValidityOutput.ts  # TestPit stdout/stderr → ValidityIssue[]
+    ├── workspaceValidation.ts  # collectEsiIssues(text, deps): THE in-process check pipeline (live diagnostics + workspace command); run summary / report wording
+    ├── liveValidationSettings.ts / validationStatus.ts  # esihelper.liveValidation(+Delay) parsing/clamping; status-bar text + tooltip model
+    ├── codeLens.ts / componentTree.ts / componentInsert.ts / testDiscovery.ts  # pure models behind the CodeLens, the component browser, click-to-insert, and Test Explorer (step discovery, issue → step mapping, wording)
     ├── testpitRunner.ts        # spawnSync / exec wrappers — capture stdout+stderr, ignore exit code
     ├── formatEsi.ts            # depth indenter + `=` alignment (section/tier scope) + column-anchored <pre>
     ├── refactorWhitespace.ts   # trailing trim + tabs → 4 spaces
@@ -93,6 +101,8 @@ src/
 
 test/setup.js                  # mock-require fake `vscode`; loaded via mocha --require. Records registered providers/commands in `vscode.__registered` (see glue.test.ts, glueNavigation.test.ts)
 src/test/fixtures/config/      # XML fixtures for xmlIndex tests (RNE-style at root; neocas/ for Ref/ED/ports)
+src/test/integration/          # extension-host suite (runTest.ts launcher, suite/index.ts runner, suite/providers.cases.ts, fixtures/workspace/*.esi); `npm run test:integration`, NOT part of `npm test`; never yet run green (VS Code download blocked where it was written)
+walkthrough/                   # markdown for contributes.walkthroughs (ships in the .vsix)
 ```
 
 ## Build, lint, test, run
@@ -100,7 +110,7 @@ src/test/fixtures/config/      # XML fixtures for xmlIndex tests (RNE-style at r
 | Command | What it does |
 |---|---|
 | `npm run compile` | `tsc -p ./` → `out/` |
-| `npm test` | `compile` then `mocha` (`out/test/unit/**/*.test.js`) — 780 passing |
+| `npm test` | `compile` then `mocha` (`out/test/unit/**/*.test.js`) — 932 passing |
 | `npm run coverage` | `c8 npm test` (config in [.c8rc.json](.c8rc.json); vscode-touching glue excluded) |
 | `npm run lint` | ESLint (flat config) — needs Node ≥ 20.19 / 22 |
 | F5 | Extension Development Host (uses [.vscode/launch.json](.vscode/launch.json); run `npm run watch` alongside) |
@@ -123,7 +133,8 @@ TypeScript runs side by side: `tsc` is TS 7 (`@typescript/native` → `npm:types
 ### Add a new command
 1. `src/commands/myCommand.ts` exporting `registerMyCommand(): vscode.Disposable`.
 2. Push it into `context.subscriptions` in [extension.ts](src/extension.ts).
-3. Declare it in `contributes.commands` + add `onCommand:extension.myCommand` to `activationEvents` in [package.json](package.json).
+3. Declare it in `contributes.commands` (category `ESI Helper`) in [package.json](package.json). No `activationEvents` entry — VS Code generates `onCommand` from the contribution. If it only makes sense in a `.esi` editor, add a `menus.commandPalette` entry with `"when": "editorLangId == esi"`; if it goes in a title bar, give it an `icon`.
+4. A command placed in `editor/title`, `editor/context` or `explorer/context` is called with the clicked resource's `Uri` — accept it and prefer it over `activeTextEditor` (see `runValidityCheck.ts`, `openWithTestPit.ts`).
 
 ### Change syntax colours
 Two places, both in `package.json` `contributes.configurationDefaults`: `editor.semanticTokenColorCustomizations.rules` (`class`/`property`/`enumMember`/`keyword` for `esi`) and `editor.tokenColorCustomizations.textMateRules` (scopes from [syntaxes/esi.json](syntaxes/esi.json): `comment.line.number-sign.esi`, `entity.name.tag.esi`, `keyword.other.field.esi`, `variable.other.macro.esi`, `string.other.path.esi`, `string.quoted.double.esi`, `constant.language.esi`, `constant.numeric.esi`, `source.esi`, plus `entity.name.tag.step.esi`, `entity.name.tag.section.esi`, `punctuation.definition.tag.close.esi`, `keyword.other.unit.esi`, `keyword.operator.comparison.esi`, `meta.tag.markup.esi`, `keyword.other.csv-ref.esi`; `keyword.operator.assignment.esi` has no colour rule on purpose). Some elements appear in both layers (semantic wins) — change both to recolour consistently.
@@ -154,7 +165,13 @@ Every colour exists **twice in each setting**: the top-level (dark/default) rule
 - **The index stores only `sourceFile`** (on `ConnectionDef` / `MessageDef`); line/column are found lazily by [xmlLocate.ts](src/lib/xmlLocate.ts). Don't add positions to the index.
 - **Tag pairing** ([tagPairs.ts](src/lib/tagPairs.ts)) duplicates the stack walk of `componentValidator` (a closer pairs with the nearest same-named opener, case-sensitive; one-liners never stacked). Change the two together. Linked editing needs `"[esi]": {"editor.linkedEditing": true}` in `configurationDefaults` and is offered only with the cursor inside the name.
 - **Step renumbering edits digits only** (never a whole-document replace — that reset the cursor and folding) and never touches step numbers in prose / `Step Dependencies`.
-- **Two diagnostic collections** — `diagnostics.ts` (single `esi-testpit`, source `TestPit`, runs TestPit.exe, heavy) and `componentDiagnostics.ts` (single `esi-components`, source `esi Helper`, in-process, cheap). Keep them separate, and keep the sources distinct: the code-action provider and Show Component Validation Info select diagnostics by source.
+- **Activation is `workspaceContains:**/*.esi` plus the events VS Code generates** from contributions (`onLanguage:esi`, `onCommand`, `onView`, the walkthrough). Don't re-add `onStartupFinished` — it loaded the extension (registry export, status-bar item, exe warning) in every window.
+- **`collectEsiIssues` ([workspaceValidation.ts](src/lib/workspaceValidation.ts)) is the ONE in-process check pipeline.** `componentDiagnostics.ts` and `commands/validateWorkspace.ts` both call it and both publish through `componentDiagnostics.toDiagnostic`. Add a new in-process check there, not in either caller, or the workspace command silently misses it.
+- **`esi-workspace` (third collection) never holds a file that is open as an `esi` document** — the live `esi-components` collection owns those, so no Problems row appears twice. It is cleared on every index change (results were computed against the old config). Its summary never says "valid" and always says TestPit.exe was not run.
+- **Test Explorer results are VALIDITY results only.** Never word a pass as the test passing; the wording constants live in [testDiscovery.ts](src/lib/testDiscovery.ts). "No validation log" is errored, no exe is skipped — never passed. The run never prompts for the exe.
+- **`diagnostics.ts` exports `onDidChangeValidityRun` / `isValidityRunning` / `isLiveValidationEnabled`**; the status bar and nothing else should derive "running" state from them. The live check re-runs for every open `.esi` on `onActiveProfileChanged`, reads `esihelper.liveValidationDelay` on every schedule (clamped 200–10000), and `esihelper.liveValidation = false` stops only the LIVE path — the explicit command, CodeLens and Test Explorer still run.
+- **The validation status bar and the CodeLens show counts, never a "passed" mark** — a zero count with no exe / live check off is not a clean TestPit result.
+- **Two live diagnostic collections** — `diagnostics.ts` (single `esi-testpit`, source `TestPit`, runs TestPit.exe, heavy) and `componentDiagnostics.ts` (single `esi-components`, source `esi Helper`, in-process, cheap). Keep them separate, and keep the sources distinct: the code-action provider and Show Component Validation Info select diagnostics by source.
 - **The live validity check is debounced and never overlaps itself.** Every TestPit run for a document — live or the Run Validity Check command — goes through the one `validityScheduler` in `diagnostics.ts` (`runExclusive` for the command), because both write the same `<file>.temp`. Don't call `testpitRunner` for a validity check from anywhere else, don't go back to running per keystroke, and don't go back to `runValidityCheckSync` in the command (it freezes the UI). Results are published through the version gate in `validityResults.ts` so a slow run for old text can't overwrite a newer result; the previous diagnostics deliberately stay up until the next run finishes (no clear-on-keystroke flicker).
 - **Structural section names live in [sectionNames.ts](src/lib/sectionNames.ts)** — `SEC_*` and `isStepSectionName`. The validator, outline, tag completion and step list all import from it; don't re-declare `"STEP INPUTS"` & co. locally (a reserved name missing from one copy shows up as a bogus step, e.g. `[STEP DUMP/]` in the picker).
 - **Registering a FoldingRangeProvider replaces VS Code's indentation folding for `.esi`.** Folds come only from `foldingRanges()` (sections, `<pre>` bodies, `#` runs) — anything else that should fold must be added there.
@@ -175,7 +192,7 @@ Every colour exists **twice in each setting**: the top-level (dark/default) rule
 
 Pure functions (no `vscode` import) are unit-tested with Node's `assert`. vscode-touching code uses the [test/setup.js](test/setup.js) mock — extend it when you need more (it currently covers window/languages/commands/workspace incl. `createFileSystemWatcher`, `RelativePattern`, `showOpenDialog`, `withProgress`, `createQuickPick` (with `_fireValue`/`_fireActive`/`_fireAccept` test hooks), `DocumentSymbol`, `FoldingRange`, `EventEmitter`, etc.). The mock keeps the symbol / folding / code-action providers and every command handler in `vscode.__registered`, so `glue.test.ts` can call them the way VS Code would. The smoke test runs the full `activate()`; on Windows that does a real `reg export` (failure-guarded, so it can't break the test).
 
-Glue (extension, statusBar, providers, commands, registry/cache/store layers) is excluded from coverage — it needs integration tests, not unit tests. After any change run `npm test`.
+Glue (extension, statusBar, providers, commands, views, testing, registry/cache/store layers) is excluded from coverage — it needs integration tests, not unit tests. After any change run `npm test`.
 
 ## Don't
 

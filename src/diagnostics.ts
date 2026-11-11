@@ -3,9 +3,20 @@ import { parseValidityOutput, type ValidityIssue } from "./lib/parseValidityOutp
 import { runValidityCheckAsync } from "./lib/testpitRunner";
 import { toDiagnostic } from "./lib/toDiagnostic";
 import { withTempScript } from "./lib/withTempScript";
-import { createVersionGate } from "./lib/validityResults";
+import { createRunTracker, createVersionGate } from "./lib/validityResults";
 import { createValidityScheduler } from "./lib/validityScheduler";
-import { getActiveConfigs, getTestpitExe } from "./lib/profileRegistry";
+import {
+  LIVE_VALIDATION_DELAY_KEY,
+  LIVE_VALIDATION_KEY,
+  normalizeLiveValidation,
+  normalizeLiveValidationDelay,
+} from "./lib/liveValidationSettings";
+import {
+  getActiveConfigs,
+  getTestpitExe,
+  onActiveProfileChanged,
+} from "./lib/profileRegistry";
+import { CONFIG_SECTION } from "./constants";
 import { buildValidityCommand } from "./profiles";
 
 // TestPit.exe diagnostics (heavy: one process per run). ONE collection for all
@@ -13,18 +24,62 @@ import { buildValidityCommand } from "./profiles";
 // is separate from the in-process "esi-components" collection.
 const COLLECTION_NAME = "esi-testpit";
 
-/** Quiet period after the last keystroke before TestPit.exe is started. */
-const LIVE_DEBOUNCE_MS = 600;
-
 let collection: vscode.DiagnosticCollection | undefined;
 /** Set on teardown: a run still in flight then must not publish anything. */
 let disposed = false;
 const versionGate = createVersionGate<string>();
 const scheduler = createValidityScheduler<string>({
-  delayMs: LIVE_DEBOUNCE_MS,
+  // Quiet period after the last keystroke before TestPit.exe is started.
+  delayMs: getLiveValidationDelay,
   run: runLiveCheck,
   onError: (error) => console.error("Error in live TestPit validity check:", error),
 });
+
+/** A TestPit.exe run for a document started (`running`) or ended. */
+export interface ValidityRunEvent {
+  uri: vscode.Uri;
+  running: boolean;
+}
+
+const runEmitter = new vscode.EventEmitter<ValidityRunEvent>();
+const runUris = new Map<string, vscode.Uri>();
+const runTracker = createRunTracker<string>((key, running) => {
+  const uri = runUris.get(key);
+  if (!running) {
+    runUris.delete(key);
+  }
+  if (uri) {
+    runEmitter.fire({ uri, running });
+  }
+});
+
+/**
+ * Fires when TestPit.exe starts or stops running for a document — live check
+ * and the "Run Validity Check" command alike. The end event comes after the
+ * diagnostics of that run were published (or discarded).
+ */
+export const onDidChangeValidityRun: vscode.Event<ValidityRunEvent> =
+  runEmitter.event;
+
+/** True while TestPit.exe is running for this document. */
+export function isValidityRunning(uri: vscode.Uri): boolean {
+  return runTracker.isRunning(uri.toString());
+}
+
+/** `esihelper.liveValidation`: false turns the live TestPit.exe check off. */
+export function isLiveValidationEnabled(): boolean {
+  return normalizeLiveValidation(
+    vscode.workspace.getConfiguration(CONFIG_SECTION).get(LIVE_VALIDATION_KEY)
+  );
+}
+
+function getLiveValidationDelay(): number {
+  return normalizeLiveValidationDelay(
+    vscode.workspace
+      .getConfiguration(CONFIG_SECTION)
+      .get(LIVE_VALIDATION_DELAY_KEY)
+  );
+}
 
 export interface ValidityRunHooks {
   /** Called with the exact command line just before TestPit.exe starts. */
@@ -45,10 +100,16 @@ export function registerLiveDiagnostics(): vscode.Disposable {
   return vscode.Disposable.from(
     vscode.workspace.onDidChangeTextDocument(handleDocumentChange),
     vscode.workspace.onDidCloseTextDocument(handleDocumentClose),
+    // Other config files / flags now apply: results shown were produced with
+    // the previous profile. Fired by a profile switch and a registry reload.
+    onActiveProfileChanged(() => scheduleOpenDocuments()),
+    vscode.workspace.onDidChangeConfiguration(handleConfigurationChange),
     {
       dispose: () => {
         disposed = true;
         scheduler.cancelAll();
+        runTracker.clear();
+        runUris.clear();
         collection?.dispose();
         collection = undefined;
       },
@@ -85,10 +146,39 @@ function handleDocumentChange(event: vscode.TextDocumentChangeEvent): void {
   // Live path: never prompt for the exe — silently skip if it isn't
   // configured yet. The explicit "Run Validity Check" command prompts via
   // ensureTestpitExe instead.
-  if (!getTestpitExe()) {
+  if (!isLiveValidationEnabled() || !getTestpitExe()) {
     return;
   }
   scheduler.schedule(document.uri.toString());
+}
+
+/**
+ * Queue a live check for every open .esi document, through the same debounce
+ * as typing (so a burst of profile events yields one run per document, and a
+ * run in flight is followed by exactly one more). Never prompts.
+ */
+function scheduleOpenDocuments(): void {
+  if (disposed || !isLiveValidationEnabled() || !getTestpitExe()) {
+    return;
+  }
+  for (const document of vscode.workspace.textDocuments) {
+    if (document.languageId === "esi" && !document.isClosed) {
+      scheduler.schedule(document.uri.toString());
+    }
+  }
+}
+
+function handleConfigurationChange(event: vscode.ConfigurationChangeEvent): void {
+  if (!event?.affectsConfiguration?.(`${CONFIG_SECTION}.${LIVE_VALIDATION_KEY}`)) {
+    return;
+  }
+  if (isLiveValidationEnabled()) {
+    scheduleOpenDocuments();
+  } else {
+    // Drop debounced live runs. A run in flight finishes; explicit
+    // "Run Validity Check" runs are unaffected by the setting.
+    scheduler.cancelAll();
+  }
 }
 
 function handleDocumentClose(document: vscode.TextDocument): void {
@@ -105,8 +195,9 @@ async function runLiveCheck(key: string): Promise<void> {
   if (!document || document.languageId !== "esi") {
     return;
   }
+  // Re-checked here: the setting may have been turned off during the debounce.
   const exe = getTestpitExe();
-  if (!exe) {
+  if (!exe || !isLiveValidationEnabled()) {
     return;
   }
   await validateDocument(document, exe);
@@ -120,14 +211,21 @@ async function validateDocument(
   // Text and version are captured together, before the (slow) run.
   const version = document.version;
   const text = document.getText();
-  return withTempScript(document.uri.fsPath, text, async (tempPath) => {
-    const command = buildValidityCommand(exe, tempPath, getActiveConfigs());
-    hooks?.onCommand?.(command);
-    const output = await runValidityCheckAsync(command);
-    const issues = parseValidityOutput(output, text.split(/\r?\n/));
-    const published = publish(document, version, issues);
-    return { command, output, issues, published };
-  });
+  const key = document.uri.toString();
+  runUris.set(key, document.uri);
+  runTracker.begin(key);
+  try {
+    return await withTempScript(document.uri.fsPath, text, async (tempPath) => {
+      const command = buildValidityCommand(exe, tempPath, getActiveConfigs());
+      hooks?.onCommand?.(command);
+      const output = await runValidityCheckAsync(command);
+      const issues = parseValidityOutput(output, text.split(/\r?\n/));
+      const published = publish(document, version, issues);
+      return { command, output, issues, published };
+    });
+  } finally {
+    runTracker.end(key);
+  }
 }
 
 function publish(

@@ -1,13 +1,7 @@
 import * as vscode from "vscode";
 import * as path from "path";
-import {
-  ComponentIssue,
-  validateComponents,
-  validateStructure,
-} from "./lib/componentValidator";
 import { createCsvCellLookup } from "./lib/csv";
-import { MacroIssue, validateMacros } from "./lib/macros";
-import { StepIssue, checkSteps } from "./lib/stepChecks";
+import { EsiIssue, collectEsiIssues, issueSeverity } from "./lib/workspaceValidation";
 import { createMacroResolver } from "./providers/macroResolver";
 import { getActiveProjectIndex, onIndexChanged } from "./lib/projectIndexCache";
 import { onActiveProfileChanged } from "./lib/profileRegistry";
@@ -27,19 +21,18 @@ export function registerComponentDiagnostics(): vscode.Disposable {
       return;
     }
     const text = document.getText();
-    // Structural checks need no config, so they run even with no active
-    // profile — the extension still catches tag/nesting mistakes.
-    const issues: AnyIssue[] = validateStructure(text);
-    // Step-number hygiene and %MACRO% checks are config-free as well.
-    issues.push(...checkSteps(text));
-    issues.push(...validateMacros(text, createMacroResolver(document)));
+    // ONE pipeline, shared with the workspace-wide command
+    // (lib/workspaceValidation.ts collectEsiIssues): structure, step and
+    // %MACRO% checks need no config, so they run even with no active profile;
+    // component validation only with an index.
     const index = getActiveProjectIndex();
-    if (index) {
+    const issues = collectEsiIssues(text, {
+      index,
       // One lookup per pass: each referenced CSV is read (csv.ts, a real
       // RFC-4180 reader) at most once, relative to the .esi file's folder.
-      const csvLookup = createCsvCellLookup(document.uri.fsPath);
-      issues.push(...validateComponents(text, index, csvLookup));
-    }
+      csvLookup: index ? createCsvCellLookup(document.uri.fsPath) : undefined,
+      macroResolver: createMacroResolver(document),
+    });
     collection.set(document.uri, issues.map(toDiagnostic));
     const key = document.uri.toString();
     if (lastLoggedCount.get(key) !== issues.length) {
@@ -88,9 +81,7 @@ export function registerComponentDiagnostics(): vscode.Disposable {
   );
 }
 
-type AnyIssue = ComponentIssue | StepIssue | MacroIssue;
-
-const SEVERITY: Record<NonNullable<AnyIssue["severity"]>, vscode.DiagnosticSeverity> = {
+const SEVERITY: Record<ReturnType<typeof issueSeverity>, vscode.DiagnosticSeverity> = {
   error: vscode.DiagnosticSeverity.Error,
   warning: vscode.DiagnosticSeverity.Warning,
   information: vscode.DiagnosticSeverity.Information,
@@ -99,7 +90,8 @@ const SEVERITY: Record<NonNullable<AnyIssue["severity"]>, vscode.DiagnosticSever
 
 // The range and `code` are what providers/codeActions.ts uses to re-find the
 // issue behind a diagnostic — keep both exactly as the issue reports them.
-function toDiagnostic(issue: AnyIssue): vscode.Diagnostic {
+// Also used by commands/validateWorkspace.ts, so both collections agree.
+export function toDiagnostic(issue: EsiIssue): vscode.Diagnostic {
   const range = new vscode.Range(
     issue.line,
     issue.startCol,
@@ -110,7 +102,7 @@ function toDiagnostic(issue: AnyIssue): vscode.Diagnostic {
     range,
     issue.message,
     // A component issue without a severity is a warning.
-    SEVERITY[issue.severity ?? "warning"]
+    SEVERITY[issueSeverity(issue)]
   );
   diag.source = "esi Helper";
   diag.code = issue.kind;

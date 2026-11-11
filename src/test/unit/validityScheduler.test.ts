@@ -298,4 +298,45 @@ describe("validityScheduler", () => {
     });
     s.schedule("a");
   });
+
+  it("reads a delay function on every schedule()", () => {
+    const clock = fakeClock();
+    const runs = deferredRuns();
+    let delay = 100;
+    const s = createValidityScheduler<string>({
+      delayMs: () => delay,
+      run: runs.run,
+      ...clock,
+    });
+    s.schedule("a");
+    // A countdown already started keeps the delay it was started with.
+    delay = 1000;
+    clock.advance(100);
+    assert.deepStrictEqual(runs.started, ["a"]);
+    s.schedule("b");
+    clock.advance(999);
+    assert.deepStrictEqual(runs.started, ["a"]);
+    clock.advance(1);
+    assert.deepStrictEqual(runs.started, ["a", "b"]);
+  });
+
+  it("re-scheduling during a run (profile switch) yields exactly one more run", async () => {
+    const clock = fakeClock();
+    const runs = deferredRuns();
+    const s = createValidityScheduler<string>({ delayMs: 100, run: runs.run, ...clock });
+    s.schedule("a");
+    clock.advance(100);
+    // Two profile events while TestPit is still running.
+    s.schedule("a");
+    s.schedule("a");
+    clock.advance(100);
+    assert.deepStrictEqual(runs.started, ["a"]);
+    runs.finishOldest();
+    await settle();
+    assert.deepStrictEqual(runs.started, ["a", "a"]);
+    runs.finishOldest();
+    await settle();
+    assert.deepStrictEqual(runs.started, ["a", "a"]);
+    assert.strictEqual(s.isBusy("a"), false);
+  });
 });

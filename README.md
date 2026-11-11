@@ -29,7 +29,7 @@
 
 ## Highlights
 
-- **Live validity check** against the configured `TestPit.exe` — errors surface in the Problems panel (source `TestPit`) shortly after you stop typing. The check waits for a short pause (about 0.6 s) and runs one TestPit process per file at a time, so typing stays smooth and the panel always ends up reflecting the final text.
+- **Live validity check** against the configured `TestPit.exe` — errors surface in the Problems panel (source `TestPit`) shortly after you stop typing, and again for every open `.esi` file after a profile switch or Reload TestPit Settings. The check waits for a short pause (0.6 s by default, `esihelper.liveValidationDelay`; `esihelper.liveValidation` turns it off) and runs one TestPit process per file at a time, so typing stays smooth and the panel always ends up reflecting the final text.
 - **Outline, breadcrumbs and Go to Symbol** (`Ctrl+Shift+O`) built from the section tags: TEST STEPS → STEP → STEP INPUTS / OUTPUTS → message blocks, each with its own icon. A step shows its `Step Description` beside its name. Keeps working on half-written scripts with unclosed or mismatched tags.
 - **Tag-based folding** — every multi-line section folds on its `[NAME]`…`[/NAME]` tags rather than on indentation, `<pre>…</pre>` bodies fold, and runs of `#` comment lines fold as comments.
 - **Component IntelliSense** for `429_…`, `1553_…`, `DIS_…`, `Mem_…`, `VORILS<N>_…`, `PART_<partition>_<port>`, and `ED_…` (External Data) tags. Connections, fields, enum values, and `%VARIABLE%` references are completed and hover-documented from the active profile's TestPit XML configs. Re-indexes automatically when the XMLs change.
@@ -53,6 +53,12 @@
 - **Keyword hover** — hover a TestPit parameter key inside a message block (`match`, `occurrence`, `synchronize`, `time`, …) or a structural section tag (`[STEP INPUTS]`, `[VARIABLES]`, `[STEP DUMP/]`, `[STEP <id>]`, …) for a short card: the accepted values of `match` / `occurrence`, which parameters are output-only, where a section belongs and what is not valid inside it. Needs no profile. Parameters whose behaviour the extension has no source for show only their class (common / bus-specific / output-only) — it does not guess at their meaning.
 - **Step renumbering** (sequential 10, 20, 30, …; structure-aware — each closing tag takes its own opening tag's number, and only the digits are edited) and a **Go to Step picker** (`Ctrl+G`) that lists every step with its description — type a number or a word to filter, move through the list to preview, Enter to jump, Escape to go back.
 - **Open with TestPit** — launches the active script in the configured `TestPit.exe`.
+- **CodeLens** — at the top of a root script (one with `[TEST STEPS]` or `[TEST DEFINITION]`): **Validate** and **Open with TestPit**. Above every `[STEP n]`: a summary such as `2 inputs · 1 output` (the blocks directly inside its `[STEP INPUTS]` / `[STEP OUTPUTS]`; click to fold or unfold the step), and, when the step has problems, `2 errors, 1 warning` (click to jump to the problem, or pick from a list). Turn off with `esihelper.codeLens.enabled`.
+- **Validation status in the status bar** — next to the profile item, for the active `.esi` editor: a spinner while `TestPit.exe` checks the file, otherwise the error and warning counts reported for it (all sources). Click opens the Problems panel. The counts are always numbers, never a "passed" mark; the tooltip says when the TestPit part is missing (no executable set) or may be out of date (live check off).
+- **TestPit Components view** (Explorer side bar) — everything the active profile's config files define, as bus → connection → fields, each field with its type, range, step, unit and number of enum values. Click a connection to insert its `[NAME]` … `[/NAME]` block at the cursor of the active `.esi` editor (the same block `[`-completion writes), click a field to insert `field = `. A line that already has text is never changed — the insertion goes on a new line below. Filter by words (connection, message, field and enum-value names), and right-click → **Go to XML Definition**. Follows profile switches, Reload TestPit Settings and config-file edits.
+- **Validate All .esi Files in Workspace** — runs the extension's in-process checks (structure, step numbering, macros, components / fields / enums / CSV cells against the active profile) over every `.esi` file, without opening editors, and lists the findings in the Problems panel with a summary and a per-file report in the output channel. It does **not** run `TestPit.exe` and is not a substitute for TestPit's validity check. Files that could not be read are reported as "NOT CHECKED", never as clean.
+- **Test Explorer** — every `.esi` script in the workspace appears in the Testing view with its `[STEP …]` blocks as children. The one run profile, **Validate (TestPit validity check)**, runs the same `TestPit.exe --validateScriptOnly` check as Run Validity Check. **The test is not executed:** green means TestPit reported no error for that script or step in the validity check, and says nothing about the result on hardware. A step is red when TestPit reports an error on a line inside it; warnings are listed in the output but do not turn an item red; a script TestPit produced no validation log for is shown as errored, never passed.
+- **Menus and a walkthrough** — Run Validity Check and Open with TestPit as editor title-bar buttons; Go to Step, Update Step Numbers, Refactor Document and Run Validity Check in the editor right-click menu; Open with TestPit on a `.esi` file in the Explorer. "Get started with esi Helper for TestPit" (Help → Welcome → Walkthroughs) covers first-run setup.
 
 ## Getting started
 
@@ -82,6 +88,9 @@ The two formatting settings are **user-scoped (machine-wide)** — they live in 
 | `esihelper.inlayHints.enumNames` | Default `true`. Show the enum name after a numeric value on a field that has an enum table. |
 | `esihelper.inlayHints.units` | Default `true`. Show the unit the XML config declares after a numeric field value. |
 | `esihelper.inlayHints.ranges` | Default `false`. Show the declared `[MinValue..MaxValue]` after a numeric field value. |
+| `esihelper.liveValidation` | Default `true`. Run the TestPit validity check automatically while you edit. When `false`, TestPit is only run on demand (Run Validity Check, CodeLens, Test Explorer); the extension's in-process checks keep running. |
+| `esihelper.liveValidationDelay` | Default `600`. Quiet period in milliseconds after the last edit before the live check starts `TestPit.exe`. Clamped to 200–10000. |
+| `esihelper.codeLens.enabled` | Default `true`. Show the CodeLens lines in `.esi` files. VS Code's own `editor.codeLens` also applies. |
 
 VS Code's own `editor.inlayHints.enabled` is the master switch for the hints.
 
@@ -91,8 +100,8 @@ The extension also turns on the built-in `editor.linkedEditing` for `.esi` files
 
 | Command | What it does | Keybinding |
 |---|---|---|
-| ESI Helper: Run Validity Check | Validate the current `.esi` against the active profile (`TestPit.exe --validateScriptOnly`) without blocking the editor. The full TestPit output goes to the output channel, the issues to the Problems panel, and a short summary ("n errors, n warnings" / "clean") is shown at the end. | — |
-| ESI Helper: Open with TestPit | Open the current script in the TestPit **GUI** (`TestPitw.exe`, derived from the configured executable's folder). | — |
+| ESI Helper: Run Validity Check | Validate the current `.esi` (or, from an editor title button / context menu, the file it was invoked on) against the active profile (`TestPit.exe --validateScriptOnly`) without blocking the editor. The full TestPit output goes to the output channel, the issues to the Problems panel, and a short summary ("n errors, n warnings" / "clean") is shown at the end. | — |
+| ESI Helper: Open with TestPit | Open the current script (or the `.esi` file right-clicked in the Explorer) in the TestPit **GUI** (`TestPitw.exe`, derived from the configured executable's folder). | — |
 | ESI Helper: Update Step Numbers | Renumber `[STEP N]` blocks sequentially (10, 20, 30, …) and report what changed. Non-numeric steps (`[STEP GET_DUMP]`, `[STEP %N%]`) are left alone; step numbers written in prose or in `Step Dependencies` are not updated. | — |
 | ESI Helper: Refactor Document | Trim trailing whitespace and convert tabs to 4 spaces. | — |
 | ESI Helper: Show Processed File | Open TestPit's last preprocessed script (`Documents\Testpit\Preprocessed.esi`) side‑by‑side. | — |
@@ -102,6 +111,11 @@ The extension also turns on the built-in `editor.linkedEditing` for `.esi` files
 | ESI Helper: Show Component Validation Info | Diagnostic dump: active profile, resolved config files, index size, and the current component‑validation issues. | — |
 | ESI Helper: Go to Step | Step picker: lists every `[STEP N]` with its Step Description (and Requirements). Type a number or text to filter; highlighting previews, Enter jumps, Escape returns. | `Ctrl+G` (when editing `.esi`) |
 | ESI Helper: Go to Matching Tag | Jump from `[NAME]` to its `[/NAME]` and back; from a line inside a block, to the opening tag of the innermost enclosing section. | `Ctrl+Shift+\` (when editing `.esi`; replaces the built-in Go to Bracket there) |
+| ESI Helper: Validate All .esi Files in Workspace | Run the in-process checks on every `.esi` file in the workspace (respecting `files.exclude`); results go to the Problems panel, a per-file report to the output channel. Cancellable; partial results are kept. Does not run `TestPit.exe`. | — |
+| ESI Helper: Clear Workspace Validation Results | Remove the results of the workspace run from the Problems panel. They are also cleared when the profile, the registry settings or a config XML changes. | — |
+| ESI Helper: Filter Components… | Narrow the TestPit Components view; several words must all match. | — |
+| ESI Helper: Clear Component Filter | Show all components again (available while a filter is active). | — |
+| Insert Component at Cursor / Go to XML Definition | Context-menu actions of the TestPit Components view (not in the Command Palette). | — |
 | Go to Definition / Peek (built-in) | On a `%MACRO%`: its definition. On a component tag, field or enum value: its element in the TestPit config XML. | `F12` / `Ctrl+click` |
 | Find All References / Rename (built-in) | For `%MACRO%` variables. Rename is limited to the current file and is refused when an included file uses the name. | `Shift+F12` / `F2` |
 | Go to Symbol in Editor (built-in) | Jump to any section of the script; the same tree feeds the Outline view and breadcrumbs. | `Ctrl+Shift+O` |
@@ -117,7 +131,12 @@ npm run compile     # tsc → out/
 npm run lint        # ESLint (flat config)
 npm test            # mocha unit tests
 npm run coverage    # c8 coverage report
+npm run test:integration   # extension-host suite (downloads VS Code; not part of npm test)
 ```
+
+`npm run test:integration` opens fixture `.esi` files in a real VS Code instance (downloaded by `@vscode/test-electron` into `.vscode-test/`) and checks document symbols, folding, completion, diagnostics, code actions and formatting through the public API. It needs no `TestPit.exe` and no registry; on headless Linux run `xvfb-run -a npm run test:integration`. `VSCODE_TEST_VERSION` selects the VS Code version (default: stable).
+
+The extension activates when the workspace contains a `.esi` file, a `.esi` file is opened, one of its commands is run, or its walkthrough or view is opened — not at every VS Code start.
 
 Press `F5` in VS Code to launch the Extension Development Host. CI runs lint + compile + test on Ubuntu / macOS / Windows × Node 22 for every push to `main` and every PR.
 

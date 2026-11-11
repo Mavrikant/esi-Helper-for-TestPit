@@ -10,8 +10,10 @@ import { registerReloadRegistry } from "./commands/reloadRegistry";
 import { registerPickExecutable } from "./commands/pickExecutable";
 import { registerShowValidationInfo } from "./commands/showValidationInfo";
 import { registerGotoMatchingTag } from "./commands/gotoMatchingTag";
+import { registerInsertComponent } from "./commands/insertComponent";
+import { registerValidateWorkspace } from "./commands/validateWorkspace";
 import { registerLiveDiagnostics } from "./diagnostics";
-import { registerProjectStatusBar } from "./statusBar";
+import { registerProjectStatusBar, registerValidationStatusBar } from "./statusBar";
 import {
   registerEsiFormatter,
   registerEsiRangeFormatter,
@@ -31,6 +33,9 @@ import { registerEsiDocumentLinkProvider } from "./providers/documentLinks";
 import { registerEsiCsvHoverProvider } from "./providers/csvHover";
 import { registerEsiTagPairProviders } from "./providers/tagPairs";
 import { registerEsiXmlDefinitionProvider } from "./providers/xmlDefinition";
+import { registerEsiCodeLensProvider } from "./providers/codeLens";
+import { registerComponentBrowser } from "./views/componentBrowser";
+import { registerEsiTestController } from "./testing/esiTestController";
 import { registerComponentDiagnostics } from "./componentDiagnostics";
 import { initPluginStore } from "./lib/pluginStore";
 import { ensureRegistryLoaded, promptForExeIfUnset } from "./lib/profileRegistry";
@@ -56,11 +61,14 @@ export function activate(context: vscode.ExtensionContext): void {
     registerShowValidationInfo(),
     registerGotoMatchingTag(),
     registerProjectStatusBar(),
+    registerValidationStatusBar(),
     registerLiveDiagnostics(),
     registerEsiFormatter(),
     registerEsiRangeFormatter(),
     registerFormatOnSave(),
     registerIndexLifecycle(),
+    registerInsertComponent(),
+    registerComponentBrowser(),
     registerEsiCompletionProvider(),
     registerEsiHoverProvider(),
     registerEsiKeywordHoverProvider(),
@@ -74,7 +82,10 @@ export function activate(context: vscode.ExtensionContext): void {
     registerEsiCsvHoverProvider(),
     registerEsiTagPairProviders(),
     registerEsiXmlDefinitionProvider(),
-    registerComponentDiagnostics()
+    registerEsiCodeLensProvider(),
+    registerComponentDiagnostics(),
+    registerValidateWorkspace(),
+    registerEsiTestController()
   );
 
   // Nudge the user to pick TestPit.exe if it isn't set yet — otherwise the
