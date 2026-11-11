@@ -1,5 +1,9 @@
 import * as vscode from "vscode";
 import * as os from "os";
+import {
+  preprocessedEsiPath,
+  preprocessedOpenFailureMessage,
+} from "../lib/preprocessedPath";
 
 export function registerShowProcessedFile(): vscode.Disposable {
   return vscode.commands.registerCommand(
@@ -9,15 +13,16 @@ export function registerShowProcessedFile(): vscode.Disposable {
       if (!editor) {
         return;
       }
-      const username = os.userInfo().username;
-      const filePath = `C:\\Users\\${username}\\Documents\\Testpit\\Preprocessed.esi`;
+      const filePath = preprocessedEsiPath(os.homedir());
       const fileUri = vscode.Uri.file(filePath);
       try {
         await vscode.window.showTextDocument(fileUri, {
           viewColumn: vscode.ViewColumn.Beside,
         });
       } catch {
-        vscode.window.showErrorMessage("Could not open file.");
+        vscode.window.showErrorMessage(
+          preprocessedOpenFailureMessage(filePath)
+        );
       }
     }
   );

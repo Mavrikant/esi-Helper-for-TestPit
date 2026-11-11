@@ -1,14 +1,13 @@
+import { parseSectionTagLine } from "./parseSectionTag";
 import { COMPONENT_TAG_PATTERN } from "./xmlIndex";
 
 export type EsiContext =
   | { kind: "tagName"; partial: string }
+  | { kind: "closeTagName"; partial: string }
   | { kind: "fieldName"; messageName: string }
   | { kind: "fieldValue"; messageName: string; fieldName: string }
   | { kind: "variableRef"; partial: string }
   | { kind: "other" };
-
-const TAG_OPEN_RE = /\[([A-Za-z0-9_]+)\]/g;
-const TAG_CLOSE_RE = /\[\/([A-Za-z0-9_]+)\]/g;
 
 /**
  * Determine the lexical context the cursor is in for completion / hover /
@@ -38,10 +37,12 @@ export function resolveContext(
   if (lastOpenBracket > lastCloseBracket) {
     // Cursor is between [ and an unclosed ]
     const partial = before.slice(lastOpenBracket + 1);
-    // Skip closing tags ([/...) — these aren't completion targets
-    if (!partial.startsWith("/")) {
-      return { kind: "tagName", partial };
+    // `[/…` is a closing tag: its own context, so it is offered the open
+    // sections rather than new tag names.
+    if (partial.startsWith("/")) {
+      return { kind: "closeTagName", partial: partial.slice(1) };
     }
+    return { kind: "tagName", partial };
   }
 
   // 2. After a `%` — variable reference
@@ -81,50 +82,55 @@ export function resolveContext(
   return { kind: "other" };
 }
 
+/** The component block a line sits in: its tag name and opening line. */
+export interface EnclosingBlock {
+  name: string;
+  /** 0-indexed line of the opening tag. */
+  line: number;
+}
+
 /**
- * Walk backwards from `lineIndex` to find the nearest `[NAME]` opening tag
- * that hasn't been closed yet by a `[/NAME]` between it and the cursor.
- * Returns the bare NAME, or undefined if not inside any open block.
+ * Walk backwards from `lineIndex` (that line included) to the nearest
+ * COMPONENT opening tag not yet closed between it and the cursor. Tag lines
+ * are classified by parseSectionTag.ts: a one-liner `[NAME/]` opens and
+ * closes on its own line, so it never encloses anything, and a name TestPit
+ * would reject is skipped.
+ *
+ * Structural containers (STEP, STEP INPUTS, VARIABLES, …) are walked past:
+ * only a bus-prefixed tag (429_*, 1553_*, DIS_*, Mem_*, …) holds field
+ * assignments.
  */
-function findEnclosingMessage(lines: string[], lineIndex: number): string | undefined {
-  const closedSinceCursor = new Set<string>();
-  for (let i = lineIndex; i >= 0; i--) {
-    const line = lines[i];
-    // Walk closing tags first (they "consume" later openers we'd see going up).
-    TAG_CLOSE_RE.lastIndex = 0;
-    let closeMatch: RegExpExecArray | null;
-    while ((closeMatch = TAG_CLOSE_RE.exec(line)) !== null) {
-      // Only count closers BEFORE the cursor on the cursor line.
-      if (i === lineIndex) {
-        // For the cursor line, we already returned earlier if cursor was
-        // inside an open tag — here we just consider the line as content.
-      }
-      closedSinceCursor.add(closeMatch[1]);
+export function findEnclosingBlock(
+  lines: readonly string[],
+  lineIndex: number
+): EnclosingBlock | undefined {
+  // Closing tags met on the way up, by name: each one pairs with the next
+  // opener of that name above it.
+  const pendingCloses = new Map<string, number>();
+  for (let i = Math.min(lineIndex, lines.length - 1); i >= 0; i--) {
+    const tag = parseSectionTagLine(lines[i]);
+    if (!tag || tag.invalid || tag.kind === "oneLiner") {
+      continue;
     }
-    TAG_OPEN_RE.lastIndex = 0;
-    let openMatch: RegExpExecArray | null;
-    let lastOpenOnLine: string | undefined;
-    while ((openMatch = TAG_OPEN_RE.exec(line)) !== null) {
-      lastOpenOnLine = openMatch[1];
+    const pending = pendingCloses.get(tag.name) ?? 0;
+    if (tag.kind === "close") {
+      pendingCloses.set(tag.name, pending + 1);
+      continue;
     }
-    if (lastOpenOnLine && !closedSinceCursor.has(lastOpenOnLine)) {
-      // Skip standalone container tags like STEP, STEP DEFINITION,
-      // STEP INPUTS, STEP OUTPUTS, VARIABLES — these don't have field
-      // assignments of bus components inside them; we want bus-prefixed
-      // tags (429_*, 1553_*, DIS_*, Mem_*).
-      if (isComponentTag(lastOpenOnLine)) {
-        return lastOpenOnLine;
-      }
+    if (pending > 0) {
+      pendingCloses.set(tag.name, pending - 1);
+      continue;
     }
-    if (lastOpenOnLine) {
-      // Mark it consumed so a higher-level open with the same name doesn't
-      // also match.
-      closedSinceCursor.add(lastOpenOnLine);
+    if (COMPONENT_TAG_PATTERN.test(tag.name)) {
+      return { name: tag.name, line: i };
     }
   }
   return undefined;
 }
 
-function isComponentTag(name: string): boolean {
-  return COMPONENT_TAG_PATTERN.test(name);
+function findEnclosingMessage(
+  lines: readonly string[],
+  lineIndex: number
+): string | undefined {
+  return findEnclosingBlock(lines, lineIndex)?.name;
 }

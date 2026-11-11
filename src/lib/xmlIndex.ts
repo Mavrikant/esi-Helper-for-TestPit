@@ -64,6 +64,17 @@ export interface ConnectionDef {
   card?: string;
   channel?: string;
   speed?: string;
+  /** The `<Partition Name>` a `PART_<partition>_<port>` (or short `Mem_<port>`)
+   *  connection was declared in. Only set for connections that come from the
+   *  partition (memory / SW ports) file. */
+  partition?: string;
+  /** Absolute path of the config file this connection was read from — the cable
+   *  file for a `<Connection>`, the partition file for a port, and the message
+   *  file itself where the connection is synthesized from a message (DIS_,
+   *  VORILS<N>_, ED_). Used by Go to Definition (lib/xmlLocate.ts); the position
+   *  inside the file is found lazily, never stored. Undefined when the index was
+   *  built from an already-parsed object rather than a file. */
+  sourceFile?: string;
 }
 
 export interface EnumDef {
@@ -100,6 +111,9 @@ export interface MessageDef {
   minPeriod?: number;
   maxPeriod?: number;
   fields: FieldDef[];
+  /** Absolute path of the config file this message (and so every one of its
+   *  fields) was read from. See `ConnectionDef.sourceFile`. */
+  sourceFile?: string;
 }
 
 export interface XmlIndex {
@@ -276,7 +290,7 @@ const CONNECTION_NAME_PATTERN = /^L(\d+)([A-Z][A-Za-z0-9]*?)(?:_\w+)?$/;
 // Maps the `<Device Type="...">` XML attribute on MessageConfig devices to
 // our internal `Bus` value. Note that the XML attribute is "Discrete" but
 // scripts use the "DIS" prefix — internally we use "DIS" everywhere.
-const BUS_PREFIX: Record<string, Bus> = {
+export const BUS_PREFIX: Record<string, Bus> = {
   A429: "429",
   "1553": "1553",
   Discrete: "DIS",
@@ -326,8 +340,25 @@ export function createEmptyIndex(): XmlIndex {
   };
 }
 
+/** Register a connection, stamped with the file it came from when known. The
+ *  property is only written when there is a source, so an index built without
+ *  one is shaped exactly as before. */
+function registerConnection(
+  index: XmlIndex,
+  def: ConnectionDef,
+  source?: string
+): void {
+  if (source) {
+    def.sourceFile = source;
+  }
+  index.connections.set(def.fullName, def);
+}
+
 /** Register a message in both the flat and bus-aware maps. */
-function registerMessage(index: XmlIndex, def: MessageDef): void {
+function registerMessage(index: XmlIndex, def: MessageDef, source?: string): void {
+  if (source) {
+    def.sourceFile = source;
+  }
   index.messages.set(def.name, def);
   index.messagesByBus.set(messageKey(def.bus, def.name), def);
 }
@@ -346,7 +377,7 @@ function registerMessage(index: XmlIndex, def: MessageDef): void {
 export function parseConfigFiles(configs: ProfileConfigs): XmlIndex {
   const index = createEmptyIndex();
   const byRole: ReadonlyArray<
-    readonly [keyof ProfileConfigs, (root: Record<string, unknown>, index: XmlIndex) => void]
+    readonly [keyof ProfileConfigs, (root: Record<string, unknown>, index: XmlIndex, source?: string) => void]
   > = [
     ["cable", ingestMessageConfig],
     ["a429", ingestA429MessageFields],
@@ -366,7 +397,7 @@ export function parseConfigFiles(configs: ProfileConfigs): XmlIndex {
     // just that file.
     try {
       const parsed = parser.parse(fs.readFileSync(file, "utf-8"));
-      ingest(parsed as Record<string, unknown>, index);
+      ingest(parsed as Record<string, unknown>, index, file);
     } catch (err) {
       console.warn(`esihelper: failed to load ${role} config ${file}:`, err);
     }
@@ -409,33 +440,42 @@ export function parseConfigFolder(configFolderpath: string): XmlIndex {
       console.warn(`esihelper: failed to parse ${fullPath}:`, err);
       continue;
     }
-    routeFile(entry, parsed, index);
+    routeFile(entry, parsed, index, fullPath);
   }
 
   return index;
 }
 
-function routeFile(filename: string, parsed: unknown, index: XmlIndex): void {
+function routeFile(
+  filename: string,
+  parsed: unknown,
+  index: XmlIndex,
+  source?: string
+): void {
   const lower = filename.toLowerCase();
   const root = parsed as Record<string, unknown>;
   if (lower.startsWith("messageconfig") || lower.includes("_cable")) {
-    ingestMessageConfig(root, index);
+    ingestMessageConfig(root, index, source);
   } else if (lower.includes("vorilsmessagefields")) {
-    ingestVORILSMessageFields(root, index);
+    ingestVORILSMessageFields(root, index, source);
   } else if (lower.includes("a429messagefields")) {
-    ingestA429MessageFields(root, index);
+    ingestA429MessageFields(root, index, source);
   } else if (lower.includes("1553messagefields") || lower.includes("milstd1553")) {
-    ingestMilStd1553Fields(root, index);
+    ingestMilStd1553Fields(root, index, source);
   } else if (lower.includes("discretesignals")) {
-    ingestDiscreteSignals(root, index);
+    ingestDiscreteSignals(root, index, source);
   } else if (lower.includes("memoryports") || lower.includes("ports")) {
-    ingestMemoryPorts(root, index);
+    ingestMemoryPorts(root, index, source);
   } else if (lower.includes("edmessagefields") || lower.includes("edmessage")) {
-    ingestEDMessageFields(root, index);
+    ingestEDMessageFields(root, index, source);
   }
 }
 
-function ingestMessageConfig(root: Record<string, unknown>, index: XmlIndex): void {
+function ingestMessageConfig(
+  root: Record<string, unknown>,
+  index: XmlIndex,
+  source?: string
+): void {
   const r = (root.Root ?? root) as Record<string, unknown>;
   // NEOCAS factors the physical card/channel/speed into a <References> block
   // and points each <Connection Ref="…"> at a named <Channel>. RNE/VORILS keep
@@ -465,16 +505,11 @@ function ingestMessageConfig(root: Record<string, unknown>, index: XmlIndex): vo
       const speed = referenced?.speed ?? (param ? str(param["@_Speed"]) : undefined);
       for (const prefix of PREFIXES_BY_BUS[bus]) {
         const fullName = `${prefix}${rawName}`;
-        index.connections.set(fullName, {
-          fullName,
-          bus,
-          rawName,
-          messageName,
-          label,
-          card,
-          channel,
-          speed,
-        });
+        registerConnection(
+          index,
+          { fullName, bus, rawName, messageName, label, card, channel, speed },
+          source
+        );
       }
     }
   }
@@ -512,7 +547,11 @@ function collectChannels(r: Record<string, unknown>): Map<string, ChannelParam> 
   return map;
 }
 
-function ingestVORILSMessageFields(root: Record<string, unknown>, index: XmlIndex): void {
+function ingestVORILSMessageFields(
+  root: Record<string, unknown>,
+  index: XmlIndex,
+  source?: string
+): void {
   // VORILSMessageFields.xml has a different shape than A429/1553:
   //   <Messages>
   //     <InputMessages>
@@ -554,19 +593,18 @@ function ingestVORILSMessageFields(root: Record<string, unknown>, index: XmlInde
           parseVORILSField(f as Record<string, unknown>, name, commonEnums)
         );
       }
-      registerMessage(index, def);
+      registerMessage(index, def, source);
       // Synthesize a canonical VORILS1_<MessageName> connection so completion
       // suggests it. Other unit numbers (VORILS2, VORILS3, …) are accepted
       // via the resolveConnectionMessage / isKnownComponent fallback that
       // strips the unit-number prefix.
       for (const prefix of PREFIXES_BY_BUS["VORILS"]) {
         const fullName = `${prefix}${name}`;
-        index.connections.set(fullName, {
-          fullName,
-          bus: "VORILS",
-          rawName: name,
-          messageName: name,
-        });
+        registerConnection(
+          index,
+          { fullName, bus: "VORILS", rawName: name, messageName: name },
+          source
+        );
       }
     }
   }
@@ -590,7 +628,11 @@ function parseVORILSField(
   return field;
 }
 
-function ingestA429MessageFields(root: Record<string, unknown>, index: XmlIndex): void {
+function ingestA429MessageFields(
+  root: Record<string, unknown>,
+  index: XmlIndex,
+  source?: string
+): void {
   const container =
     (root.A429Messages as Record<string, unknown> | undefined) ??
     (root.VORILSMessages as Record<string, unknown> | undefined) ??
@@ -625,11 +667,15 @@ function ingestA429MessageFields(root: Record<string, unknown>, index: XmlIndex)
     for (const f of fields) {
       def.fields.push(parseField(f as Record<string, unknown>, name, commonEnums));
     }
-    registerMessage(index, def);
+    registerMessage(index, def, source);
   }
 }
 
-function ingestMilStd1553Fields(root: Record<string, unknown>, index: XmlIndex): void {
+function ingestMilStd1553Fields(
+  root: Record<string, unknown>,
+  index: XmlIndex,
+  source?: string
+): void {
   const container =
     (root.MilStd1553Messages as Record<string, unknown> | undefined) ?? root;
   const commonEnums = collectCommonEnums(container);
@@ -671,11 +717,15 @@ function ingestMilStd1553Fields(root: Record<string, unknown>, index: XmlIndex):
         def.fields.push(field);
       }
     }
-    registerMessage(index, def);
+    registerMessage(index, def, source);
   }
 }
 
-function ingestDiscreteSignals(root: Record<string, unknown>, index: XmlIndex): void {
+function ingestDiscreteSignals(
+  root: Record<string, unknown>,
+  index: XmlIndex,
+  source?: string
+): void {
   const container =
     (root.DiscreteMessages as Record<string, unknown> | undefined) ?? root;
   const commonEnums = collectCommonEnums(container);
@@ -723,17 +773,16 @@ function ingestDiscreteSignals(root: Record<string, unknown>, index: XmlIndex): 
         parentMessage: name,
       });
     }
-    registerMessage(index, def);
+    registerMessage(index, def, source);
     // Discrete signals are referenced as connections under DIS_<name>
     // (TestPit's PartitionAlias for the Discrete partition).
     for (const prefix of PREFIXES_BY_BUS["DIS"]) {
       const fullName = `${prefix}${name}`;
-      index.connections.set(fullName, {
-        fullName,
-        bus: "DIS",
-        rawName: name,
-        messageName: name,
-      });
+      registerConnection(
+        index,
+        { fullName, bus: "DIS", rawName: name, messageName: name },
+        source
+      );
     }
   }
 }
@@ -741,7 +790,7 @@ function ingestDiscreteSignals(root: Record<string, unknown>, index: XmlIndex): 
 // Maps a `<Port Type="…">` XML attribute to our internal Bus value.
 // MemoryPorts.xml lumps every partition's ports into one file; the port's
 // Type attribute is what tells us which bus it belongs to.
-const PORT_TYPE_TO_BUS: Record<string, Bus> = {
+export const PORT_TYPE_TO_BUS: Record<string, Bus> = {
   Memory: "Mem",
   IndexMemory: "Mem",
   A429Sim: "429",
@@ -751,13 +800,17 @@ const PORT_TYPE_TO_BUS: Record<string, Bus> = {
   // gets bucketed as Mem since they're partition-scoped, not bus-scoped.
 };
 
-function ingestMemoryPorts(root: Record<string, unknown>, index: XmlIndex): void {
+function ingestMemoryPorts(
+  root: Record<string, unknown>,
+  index: XmlIndex,
+  source?: string
+): void {
   const container = (root.Partitions as Record<string, unknown> | undefined) ?? root;
   // NEOCAS defines each port once under <Common><CommonPorts> (with field enums
   // pulled from <Common><CommonEnums> via Ref) and then has every <Partition>
   // reference them by name. RNE inlines a <Message> in each partition port.
   const commonEnums = collectCommonEnums(container);
-  const commonPorts = collectCommonPorts(container, commonEnums, index);
+  const commonPorts = collectCommonPorts(container, commonEnums, index, source);
 
   for (const part of asArray(container.Partition)) {
     const p = part as Record<string, unknown>;
@@ -789,7 +842,7 @@ function ingestMemoryPorts(root: Record<string, unknown>, index: XmlIndex): void
         for (const f of asArray(inlineMessage.Field)) {
           def.fields.push(parseField(f as Record<string, unknown>, messageName, commonEnums));
         }
-        registerMessage(index, def);
+        registerMessage(index, def, source);
         isInlineMem = bus === "Mem";
       } else if (ref && commonPorts.has(ref)) {
         // NEOCAS-style: <Port Name="LocalName" Ref="CommonPortName"/>.
@@ -802,6 +855,9 @@ function ingestMemoryPorts(root: Record<string, unknown>, index: XmlIndex): void
         // clobbers a richer same-name/same-bus message ingested elsewhere.
         messageName = localName;
         const stub: MessageDef = { name: messageName, bus, fields: [] };
+        if (source) {
+          stub.sourceFile = source;
+        }
         if (!index.messages.has(messageName)) {
           index.messages.set(messageName, stub);
         }
@@ -816,12 +872,17 @@ function ingestMemoryPorts(root: Record<string, unknown>, index: XmlIndex): void
       // common port name (e.g. IOHealthState_Alert → IOHealthState).
       if (partitionName) {
         const partFullName = `PART_${partitionName}_${localName}`;
-        index.connections.set(partFullName, {
-          fullName: partFullName,
-          bus,
-          rawName: localName,
-          messageName,
-        });
+        registerConnection(
+          index,
+          {
+            fullName: partFullName,
+            bus,
+            rawName: localName,
+            messageName,
+            partition: partitionName,
+          },
+          source
+        );
       }
 
       // RNE Memory-typed inline ports are also referenced via the short Mem_
@@ -830,12 +891,16 @@ function ingestMemoryPorts(root: Record<string, unknown>, index: XmlIndex): void
       if (isInlineMem) {
         for (const prefix of PREFIXES_BY_BUS["Mem"]) {
           const fullName = `${prefix}${localName}`;
-          index.connections.set(fullName, {
+          const conn: ConnectionDef = {
             fullName,
             bus: "Mem",
             rawName: localName,
             messageName,
-          });
+          };
+          if (partitionName) {
+            conn.partition = partitionName;
+          }
+          registerConnection(index, conn, source);
         }
       }
     }
@@ -877,7 +942,8 @@ function collectCommonEnums(container: Record<string, unknown>): Map<string, Enu
 function collectCommonPorts(
   container: Record<string, unknown>,
   commonEnums: Map<string, EnumDef[]>,
-  index: XmlIndex
+  index: XmlIndex,
+  source?: string
 ): Map<string, { messageName: string; bus: Bus }> {
   const map = new Map<string, { messageName: string; bus: Bus }>();
   const common = container.Common as Record<string, unknown> | undefined;
@@ -899,7 +965,7 @@ function collectCommonPorts(
     for (const f of asArray(message?.Field)) {
       def.fields.push(parseField(f as Record<string, unknown>, messageName, commonEnums));
     }
-    registerMessage(index, def);
+    registerMessage(index, def, source);
     map.set(portName, { messageName, bus });
   }
   return map;
@@ -917,7 +983,11 @@ function collectCommonPorts(
  * <EDRoot>. No reader has ever tested a root tag — they all go straight for its
  * children — so both spellings are taken here.
  */
-function ingestEDMessageFields(root: Record<string, unknown>, index: XmlIndex): void {
+function ingestEDMessageFields(
+  root: Record<string, unknown>,
+  index: XmlIndex,
+  source?: string
+): void {
   const container =
     (root.EDRoot as Record<string, unknown> | undefined) ??
     (root.Root as Record<string, unknown> | undefined) ??
@@ -937,15 +1007,14 @@ function ingestEDMessageFields(root: Record<string, unknown>, index: XmlIndex): 
     for (const f of asArray(m.Field)) {
       def.fields.push(parseField(f as Record<string, unknown>, name, commonEnums));
     }
-    registerMessage(index, def);
+    registerMessage(index, def, source);
     for (const prefix of PREFIXES_BY_BUS["ED"]) {
       const fullName = `${prefix}${name}`;
-      index.connections.set(fullName, {
-        fullName,
-        bus: "ED",
-        rawName: name,
-        messageName: name,
-      });
+      registerConnection(
+        index,
+        { fullName, bus: "ED", rawName: name, messageName: name },
+        source
+      );
     }
   }
 }

@@ -6,8 +6,12 @@ import { buildOpenCommand } from "../profiles";
 export function registerOpenWithTestPit(): vscode.Disposable {
   return vscode.commands.registerCommand(
     "extension.openWithTestPit",
-    async () => {
-      const filePath = vscode.window.activeTextEditor?.document.uri.fsPath;
+    // Menus (editor/title, explorer/context) pass the clicked resource; the
+    // palette and the CodeLens pass nothing — then it is the active editor.
+    async (uri?: vscode.Uri) => {
+      const filePath =
+        (isUri(uri) ? uri.fsPath : undefined) ??
+        vscode.window.activeTextEditor?.document.uri.fsPath;
       if (!filePath) {
         return;
       }
@@ -19,5 +23,13 @@ export function registerOpenWithTestPit(): vscode.Disposable {
       // the GUI TestPitw.exe (same folder) and launches it with --ow.
       runCommandDetached(buildOpenCommand(exe, filePath));
     }
+  );
+}
+
+function isUri(value: unknown): value is vscode.Uri {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    typeof (value as vscode.Uri).fsPath === "string"
   );
 }

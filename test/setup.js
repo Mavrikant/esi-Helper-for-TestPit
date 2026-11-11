@@ -5,7 +5,13 @@
 const mock = require('mock-require');
 
 class Range {
+  // Like the real one: (startLine, startCol, endLine, endCol) or (start, end).
   constructor(startLine, startCol, endLine, endCol) {
+    if (typeof startLine === 'object') {
+      this.start = { line: startLine.line, character: startLine.character };
+      this.end = { line: startCol.line, character: startCol.character };
+      return;
+    }
     this.start = { line: startLine, character: startCol };
     this.end = { line: endLine, character: endCol };
   }
@@ -65,6 +71,54 @@ class SemanticTokensBuilder {
   }
 }
 
+class Position {
+  constructor(line, character) {
+    this.line = line;
+    this.character = character;
+  }
+}
+
+class Selection {
+  constructor(anchor, active) {
+    this.anchor = anchor;
+    this.active = active;
+    this.start = anchor;
+    this.end = active;
+  }
+}
+
+class DocumentSymbol {
+  constructor(name, detail, kind, range, selectionRange) {
+    this.name = name;
+    this.detail = detail;
+    this.kind = kind;
+    this.range = range;
+    this.selectionRange = selectionRange;
+    this.children = [];
+  }
+}
+
+class FoldingRange {
+  constructor(start, end, kind) {
+    this.start = start;
+    this.end = end;
+    this.kind = kind;
+  }
+}
+
+class SnippetString {
+  constructor(value) {
+    this.value = value || '';
+  }
+}
+
+class CompletionItem {
+  constructor(label, kind) {
+    this.label = label;
+    this.kind = kind;
+  }
+}
+
 class EventEmitter {
   constructor() {
     this._listeners = [];
@@ -87,7 +141,22 @@ class EventEmitter {
 }
 
 
+// What the extension registered, keyed by kind / command id, so a test can
+// call a provider or command the way VS Code would.
+const registered = { providers: {}, commands: {} };
+// Several providers of one kind may be registered (two hovers, two definition
+// providers, ...): `providers[kind]` is the latest one, `all[kind]` every one
+// in registration order (it grows on each activate()).
+registered.all = {};
+const keep = (kind) => (...args) => {
+  const provider = args[args.length > 1 ? 1 : 0];
+  (registered.all[kind] = registered.all[kind] || []).push(provider);
+  registered.providers[kind] = provider;
+  return { dispose() {} };
+};
+
 mock('vscode', {
+  __registered: registered,
   window: {
     createOutputChannel(name) {
       return {
@@ -107,6 +176,7 @@ mock('vscode', {
         tooltip: "",
         backgroundColor: undefined,
         show() {},
+        hide() {},
         dispose() {},
       };
     },
@@ -114,21 +184,152 @@ mock('vscode', {
     showInformationMessage() { return Promise.resolve(undefined); },
     showWarningMessage() { return Promise.resolve(undefined); },
     showErrorMessage() { return Promise.resolve(undefined); },
+    withProgress(_options, task) {
+      return Promise.resolve(
+        task(
+          { report() {} },
+          {
+            isCancellationRequested: false,
+            onCancellationRequested() { return { dispose() {} }; },
+          }
+        )
+      );
+    },
+    createTextEditorDecorationType() { return { dispose() {} }; },
+    createQuickPick() {
+      const emitter = () => {
+        const e = new EventEmitter();
+        return e;
+      };
+      const active = emitter();
+      const value = emitter();
+      const accept = emitter();
+      const hide = emitter();
+      return {
+        items: [],
+        activeItems: [],
+        selectedItems: [],
+        value: "",
+        title: undefined,
+        placeholder: undefined,
+        matchOnDescription: false,
+        matchOnDetail: false,
+        onDidChangeActive: active.event,
+        onDidChangeValue: value.event,
+        onDidAccept: accept.event,
+        onDidHide: hide.event,
+        // Test hooks: drive the picker the way a user would.
+        _fireActive(items) { this.activeItems = items; active.fire(items); },
+        _fireValue(v) { this.value = v; value.fire(v); },
+        _fireAccept() { accept.fire(); },
+        show() {},
+        hide() { hide.fire(); },
+        dispose() {},
+      };
+    },
+    setStatusBarMessage() { return { dispose() {} }; },
+    onDidChangeActiveTextEditor() { return { dispose() {} }; },
+    createTreeView(id, options) {
+      return { id, options, description: undefined, message: undefined, title: undefined, dispose() {} };
+    },
+    showInputBox() { return Promise.resolve(undefined); },
+    showTextDocument() { return Promise.resolve(undefined); },
+    showQuickPick() { return Promise.resolve(undefined); },
     activeTextEditor: undefined,
   },
   languages: {
-    registerDocumentSemanticTokensProvider() { return { dispose() {} }; },
+    registerDocumentSemanticTokensProvider: keep('semanticTokens'),
     registerCompletionItemProvider() { return { dispose() {} }; },
-    registerHoverProvider() { return { dispose() {} }; },
-    registerCodeActionsProvider() { return { dispose() {} }; },
+    registerHoverProvider: keep('hover'),
+    registerDefinitionProvider: keep('definition'),
+    registerReferenceProvider: keep('reference'),
+    registerRenameProvider: keep('rename'),
+    registerDocumentHighlightProvider: keep('documentHighlight'),
+    registerLinkedEditingRangeProvider: keep('linkedEditingRange'),
+    registerDocumentLinkProvider: keep('documentLink'),
+    registerCodeActionsProvider: keep('codeActions'),
+    registerDocumentSymbolProvider: keep('documentSymbol'),
+    registerFoldingRangeProvider: keep('foldingRange'),
+    getDiagnostics() { return []; },
+    onDidChangeDiagnostics() { return { dispose() {} }; },
+    registerCodeLensProvider: keep('codeLens'),
     createDiagnosticCollection() { return { clear() {}, set() {}, delete() {}, dispose() {} }; },
-    registerDocumentFormattingEditProvider() { return { dispose() {} }; },
+    registerDocumentFormattingEditProvider: keep('documentFormatting'),
+    registerDocumentRangeFormattingEditProvider: keep('documentRangeFormatting'),
+    registerInlayHintsProvider: keep('inlayHints'),
   },
   commands: {
-    registerCommand() { return { dispose() {} }; },
+    registerCommand(id, handler) {
+      registered.commands[id] = handler;
+      return { dispose() {} };
+    },
     registerTextEditorCommand() { return { dispose() {} }; },
+    executeCommand() { return Promise.resolve(undefined); },
   },
   Range,
+  Position,
+  Selection,
+  CodeLens: class CodeLens {
+    constructor(range, command) { this.range = range; this.command = command; }
+  },
+  TreeItem: class TreeItem {
+    constructor(label, collapsibleState) { this.label = label; this.collapsibleState = collapsibleState; }
+  },
+  TreeItemCollapsibleState: { None: 0, Collapsed: 1, Expanded: 2 },
+  ThemeIcon: class ThemeIcon { constructor(id) { this.id = id; } },
+  TestRunProfileKind: { Run: 1, Debug: 2, Coverage: 3 },
+  TestMessage: class TestMessage { constructor(message) { this.message = message; } },
+  tests: {
+    createTestController(id, label) {
+      const collection = () => {
+        const map = new Map();
+        return {
+          get size() { return map.size; },
+          add(item) { map.set(item.id, item); },
+          delete(itemId) { map.delete(itemId); },
+          get(itemId) { return map.get(itemId); },
+          forEach(fn) { [...map.values()].forEach(fn); },
+          replace(items) { map.clear(); items.forEach((i) => map.set(i.id, i)); },
+        };
+      };
+      return {
+        id, label,
+        items: collection(),
+        createTestItem(itemId, itemLabel, uri) {
+          return { id: itemId, label: itemLabel, uri, children: collection(), canResolveChildren: false };
+        },
+        createRunProfile(profileLabel, kind, runHandler, isDefault) {
+          return { label: profileLabel, kind, runHandler, isDefault, dispose() {} };
+        },
+        createTestRun() {
+          return { started() {}, passed() {}, failed() {}, errored() {}, skipped() {}, appendOutput() {}, end() {} };
+        },
+        dispose() {},
+      };
+    },
+  },
+  DocumentSymbol,
+  FoldingRange,
+  SnippetString,
+  CompletionItem,
+  // Values match the real vscode enums.
+  SymbolKind: {
+    File: 0, Module: 1, Namespace: 2, Interface: 10, Function: 11,
+    Variable: 12, String: 14, Struct: 22,
+  },
+  FoldingRangeKind: { Comment: 1, Imports: 2, Region: 3 },
+  ProgressLocation: { SourceControl: 1, Window: 10, Notification: 15 },
+  TextEditorRevealType: { Default: 0, InCenter: 1, InCenterIfOutsideViewport: 2, AtTop: 3 },
+  CompletionItemKind: {
+    Field: 4, Variable: 5, Class: 6, Module: 8, Value: 11, Keyword: 13, Snippet: 14,
+    File: 16, EnumMember: 19,
+  },
+  InlayHint: class InlayHint {
+    constructor(position, label, kind) { this.position = position; this.label = label; this.kind = kind; }
+  },
+  InlayHintKind: { Type: 1, Parameter: 2 },
+  Hover: class Hover { constructor(contents, range) { this.contents = contents; this.range = range; } },
+  TextEdit: { replace(range, newText) { return { range, newText }; } },
   Diagnostic,
   DiagnosticSeverity,
   MarkdownString,
@@ -139,6 +340,9 @@ mock('vscode', {
   workspace: {
     textDocuments: [],
     workspaceFolders: undefined,
+    asRelativePath(uri) { return typeof uri === 'string' ? uri : uri.fsPath; },
+    findFiles() { return Promise.resolve([]); },
+    openTextDocument() { return Promise.reject(new Error('openTextDocument: not mocked')); },
     onDidChangeConfiguration() { return { dispose() {} }; },
     onDidChangeTextDocument() { return { dispose() {} }; },
     onDidOpenTextDocument() { return { dispose() {} }; },
@@ -164,8 +368,33 @@ mock('vscode', {
   RelativePattern: class RelativePattern {
     constructor(base, pattern) { this.base = base; this.pattern = pattern; }
   },
-  Uri: { file(p) { return { fsPath: p, toString: () => p }; } },
-  Disposable: { from() { return { dispose() {} }; } },
+  Uri: {
+    file(p) {
+      const u = {
+        scheme: 'file',
+        fsPath: p,
+        fragment: '',
+        toString: () => p,
+        with(change) { return Object.assign({}, u, change); },
+      };
+      return u;
+    },
+  },
+  Disposable: class Disposable {
+    constructor(fn) { this._fn = fn; }
+    dispose() { if (this._fn) this._fn(); }
+    static from(...items) {
+      return new Disposable(() => items.forEach((d) => d && d.dispose && d.dispose()));
+    }
+  },
+  Location: class Location { constructor(uri, range) { this.uri = uri; this.range = range; } },
+  DocumentLink: class DocumentLink { constructor(range, target) { this.range = range; this.target = target; } },
+  DocumentHighlight: class DocumentHighlight { constructor(range, kind) { this.range = range; this.kind = kind; } },
+  DocumentHighlightKind: { Text: 0, Read: 1, Write: 2 },
+  LinkedEditingRanges: class LinkedEditingRanges {
+    constructor(ranges, wordPattern) { this.ranges = ranges; this.wordPattern = wordPattern; }
+  },
+  DiagnosticTag: { Unnecessary: 1, Deprecated: 2 },
   ConfigurationTarget: { Global: 1, Workspace: 2, WorkspaceFolder: 3 },
   EventEmitter,
   CodeAction: class CodeAction {

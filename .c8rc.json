@@ -12,6 +12,8 @@
     "out/formatter.js",
     "out/commands/**",
     "out/providers/**",
+    "out/views/**",
+    "out/testing/**",
     "out/lib/projectIndexCache.js",
     "out/lib/profileRegistry.js",
     "out/lib/pluginStore.js",

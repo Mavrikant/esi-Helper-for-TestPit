@@ -1,13 +1,9 @@
 import * as vscode from "vscode";
-import * as fs from "fs";
 import * as path from "path";
-import {
-  ComponentIssue,
-  CsvLookup,
-  validateComponents,
-  validateStructure,
-} from "./lib/componentValidator";
-import { getActiveProjectIndex } from "./lib/projectIndexCache";
+import { createCsvCellLookup } from "./lib/csv";
+import { EsiIssue, collectEsiIssues, issueSeverity } from "./lib/workspaceValidation";
+import { createMacroResolver } from "./providers/macroResolver";
+import { getActiveProjectIndex, onIndexChanged } from "./lib/projectIndexCache";
 import { onActiveProfileChanged } from "./lib/profileRegistry";
 import { getOutputChannel } from "./lib/outputChannel";
 
@@ -25,14 +21,18 @@ export function registerComponentDiagnostics(): vscode.Disposable {
       return;
     }
     const text = document.getText();
-    // Structural checks need no config, so they run even with no active
-    // profile — the extension still catches tag/nesting mistakes.
-    const issues = validateStructure(text);
+    // ONE pipeline, shared with the workspace-wide command
+    // (lib/workspaceValidation.ts collectEsiIssues): structure, step and
+    // %MACRO% checks need no config, so they run even with no active profile;
+    // component validation only with an index.
     const index = getActiveProjectIndex();
-    if (index) {
-      const csvLookup = makeCsvLookup(document.uri.fsPath);
-      issues.push(...validateComponents(text, index, csvLookup));
-    }
+    const issues = collectEsiIssues(text, {
+      index,
+      // One lookup per pass: each referenced CSV is read (csv.ts, a real
+      // RFC-4180 reader) at most once, relative to the .esi file's folder.
+      csvLookup: index ? createCsvCellLookup(document.uri.fsPath) : undefined,
+      macroResolver: createMacroResolver(document),
+    });
     collection.set(document.uri, issues.map(toDiagnostic));
     const key = document.uri.toString();
     if (lastLoggedCount.get(key) !== issues.length) {
@@ -68,59 +68,30 @@ export function registerComponentDiagnostics(): vscode.Disposable {
   };
 
   const onProfileChange = onActiveProfileChanged(() => revalidateAll());
+  // A config XML edited on disk rebuilds the index without a profile change.
+  const onConfigFileChange = onIndexChanged(() => revalidateAll());
 
   return vscode.Disposable.from(
     collection,
     onChange,
     onOpen,
     onClose,
-    onProfileChange
+    onProfileChange,
+    onConfigFileChange
   );
 }
 
-/**
- * Build a per-validation-pass CSV cell lookup. CSV files are read at
- * most once per pass (cached by absolute path). Resolution: filename
- * is treated as relative to the .esi file's directory.
- *
- * Cell parsing is intentionally simple: lines split on \r?\n, cells
- * split on `,`, both 1-indexed, surrounding whitespace + double-quote
- * pair stripped. No support for embedded commas inside quoted cells —
- * if your fixtures need that we can swap in a real CSV parser later.
- */
-function makeCsvLookup(esiFilePath: string): CsvLookup {
-  const baseDir = path.dirname(esiFilePath);
-  const rowsCache = new Map<string, string[][] | undefined>();
-  return (filename, line, col) => {
-    const fullPath = path.resolve(baseDir, filename);
-    let rows = rowsCache.get(fullPath);
-    if (rows === undefined && !rowsCache.has(fullPath)) {
-      try {
-        const content = fs.readFileSync(fullPath, "utf-8");
-        rows = content.split(/\r?\n/).map((row) =>
-          row.split(",").map(cleanCsvCell)
-        );
-      } catch {
-        rows = undefined;
-      }
-      rowsCache.set(fullPath, rows);
-    }
-    if (!rows) {
-      return undefined;
-    }
-    return rows[line - 1]?.[col - 1];
-  };
-}
+const SEVERITY: Record<ReturnType<typeof issueSeverity>, vscode.DiagnosticSeverity> = {
+  error: vscode.DiagnosticSeverity.Error,
+  warning: vscode.DiagnosticSeverity.Warning,
+  information: vscode.DiagnosticSeverity.Information,
+  hint: vscode.DiagnosticSeverity.Hint,
+};
 
-function cleanCsvCell(raw: string): string {
-  let s = raw.trim();
-  if (s.length >= 2 && s.startsWith('"') && s.endsWith('"')) {
-    s = s.slice(1, -1).replace(/""/g, '"');
-  }
-  return s;
-}
-
-function toDiagnostic(issue: ComponentIssue): vscode.Diagnostic {
+// The range and `code` are what providers/codeActions.ts uses to re-find the
+// issue behind a diagnostic — keep both exactly as the issue reports them.
+// Also used by commands/validateWorkspace.ts, so both collections agree.
+export function toDiagnostic(issue: EsiIssue): vscode.Diagnostic {
   const range = new vscode.Range(
     issue.line,
     issue.startCol,
@@ -130,11 +101,13 @@ function toDiagnostic(issue: ComponentIssue): vscode.Diagnostic {
   const diag = new vscode.Diagnostic(
     range,
     issue.message,
-    issue.severity === "error"
-      ? vscode.DiagnosticSeverity.Error
-      : vscode.DiagnosticSeverity.Warning
+    // A component issue without a severity is a warning.
+    SEVERITY[issueSeverity(issue)]
   );
   diag.source = "esi Helper";
   diag.code = issue.kind;
+  if ("unnecessary" in issue && issue.unnecessary) {
+    diag.tags = [vscode.DiagnosticTag.Unnecessary];
+  }
   return diag;
 }

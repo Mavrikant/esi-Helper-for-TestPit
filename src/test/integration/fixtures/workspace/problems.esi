@@ -1,0 +1,11 @@
+# Integration-test fixture: two steps share the number 1.
+[TEST STEPS]
+    [STEP 1]
+        [STEP INPUTS]
+        [/STEP INPUTS]
+    [/STEP 1]
+    [STEP 1]
+        [STEP INPUTS]
+        [/STEP INPUTS]
+    [/STEP 1]
+[/TEST STEPS]
