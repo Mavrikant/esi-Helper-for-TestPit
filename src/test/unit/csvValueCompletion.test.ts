@@ -15,7 +15,7 @@ import { parseCsvCellRef } from "../../lib/fileRefs";
 function ctx(marked: string): ReturnType<typeof csvValueContext> {
   const character = marked.indexOf("|");
   assert.notStrictEqual(character, -1, "test needs a | marker");
-  return csvValueContext(marked.replace("|", ""), character);
+  return csvValueContext(marked.slice(0, character) + marked.slice(character + 1), character);
 }
 
 describe("csvValueCompletion", () => {

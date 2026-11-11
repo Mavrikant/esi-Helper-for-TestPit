@@ -31,7 +31,7 @@ const MESSAGE: MessageDef = {
 function at(lines: string[], message: MessageDef | "none" = MESSAGE): string[] {
   const lineIndex = lines.findIndex((l) => l.trim() === "|");
   assert.notStrictEqual(lineIndex, -1, "test needs a | line");
-  const clean = lines.map((l, i) => (i === lineIndex ? l.replace("|", "") : l));
+  const clean = lines.map((l, i) => (i === lineIndex ? l.slice(0, l.indexOf("|")) + l.slice(l.indexOf("|") + 1) : l));
   return computeFieldNameCompletions(clean, lineIndex, message === "none" ? undefined : message)
     .slice()
     .sort((a, b) => (a.sortText < b.sortText ? -1 : a.sortText > b.sortText ? 1 : 0))

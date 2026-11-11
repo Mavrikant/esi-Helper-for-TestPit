@@ -203,12 +203,12 @@ describe("syntaxes/esi.json", () => {
           assert.ok(!re.test(source), `${where}: ${what} in ${source}`);
         }
         // Oniguruma look-behind must be of bounded, simple width.
-        for (const m of source.matchAll(/\(\?<[=!]((?:\[[^\]]*\]|\\.|[^()])*)\)/g)) {
+        for (const m of source.matchAll(/\(\?<[=!]((?:\[[^\]]*\]|\\.|[^()[\\])*)\)/g)) {
           assert.ok(!/[*+?{|]/.test(m[1].replace(/\[[^\]]*\]/g, "c")), `${where}: variable-width look-behind ${m[0]}`);
         }
         assert.strictEqual(
           (source.match(/\(\?<[=!]/g) ?? []).length,
-          [...source.matchAll(/\(\?<[=!]((?:\[[^\]]*\]|\\.|[^()])*)\)/g)].length,
+          [...source.matchAll(/\(\?<[=!]((?:\[[^\]]*\]|\\.|[^()[\\])*)\)/g)].length,
           `${where}: look-behind with a nested group`
         );
       }
