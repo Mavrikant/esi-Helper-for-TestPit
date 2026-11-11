@@ -28,6 +28,34 @@ describe("esiContext.resolveContext", () => {
     assert.notStrictEqual(ctx.kind, "tagName");
   });
 
+  it("returns 'closeTagName' with the text after [/ as the partial", () => {
+    const ctx = resolveContext("    [/STEP IN", 0, 13);
+    assert.deepStrictEqual(ctx, { kind: "closeTagName", partial: "STEP IN" });
+    assert.deepStrictEqual(resolveContext("[/]", 0, 2), {
+      kind: "closeTagName",
+      partial: "",
+    });
+  });
+
+  it("is not 'closeTagName' once the cursor is past the closing ]", () => {
+    const text = ["[429_A]", "    time = 1", "[/429_A]"].join("\n");
+    assert.notStrictEqual(resolveContext(text, 2, 8).kind, "closeTagName");
+  });
+
+  it("still resolves the enclosing message across earlier closed blocks", () => {
+    // Regression guard for the closer walk in findEnclosingMessage.
+    const text = [
+      "[429_A]",
+      "    time = 1",
+      "[/429_A]",
+      "[429_B]",
+      "    ",
+      "[/429_B]",
+    ].join("\r\n");
+    const ctx = resolveContext(text, 4, 4);
+    assert.deepStrictEqual(ctx, { kind: "fieldName", messageName: "429_B" });
+  });
+
   it("returns 'fieldName' on a blank line inside an open component block", () => {
     const text = ["[429_L100SelectedCourseBNR_input1]", "    ", "[/429_L100SelectedCourseBNR_input1]"].join("\n");
     const ctx = resolveContext(text, 1, 4);

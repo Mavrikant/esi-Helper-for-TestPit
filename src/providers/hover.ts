@@ -11,11 +11,9 @@ import {
   ConnectionDef,
 } from "../lib/xmlIndex";
 
+import { findConnectionByBareName } from "../lib/bareConnectionLookup";
+
 const WORD_PATTERN = /[A-Za-z0-9_.]+/;
-// Literal canonical prefixes for the bare-word lookup. VORILS uses the
-// canonical "1" unit number; users hovering on an explicit `VORILS2_…`
-// token hit path 1 (direct + fallback via resolveConnectionMessage).
-const BUS_PREFIXES = ["429", "1553", "DIS", "Mem", "VORILS1"];
 
 export function registerEsiHoverProvider(): vscode.Disposable {
   return vscode.languages.registerHoverProvider("esi", {
@@ -50,13 +48,12 @@ export function registerEsiHoverProvider(): vscode.Disposable {
         return new vscode.Hover(renderConnection(conn, index), range);
       }
 
-      // 2. Connection name without prefix — try each bus prefix.
-      for (const prefix of BUS_PREFIXES) {
-        const prefixed = `${prefix}_${word}`;
-        const c = index.connections.get(prefixed);
-        if (c) {
-          return new vscode.Hover(renderConnection(c, index), range);
-        }
+      // 2. Connection name without its prefix — any prefix the index
+      //    registers (429_, 1553_, DIS_, Mem_, VORILS<N>_, ED_,
+      //    PART_<partition>_), derived from COMPONENT_TAG_PREFIXES.
+      const bare = findConnectionByBareName(index.connections, word);
+      if (bare) {
+        return new vscode.Hover(renderConnection(bare, index), range);
       }
 
       // 3. Field or enum: use the enclosing context to figure out the message.

@@ -6,7 +6,8 @@ import {
   renderEnum,
   renderField,
 } from "../lib/renderComponent";
-import { ConnectionDef, FieldDef } from "../lib/xmlIndex";
+import { computeTagCompletions } from "../lib/tagCompletion";
+import { FieldDef } from "../lib/xmlIndex";
 
 // Common cross-bus parameter fields offered in every message block. The
 // validator (componentValidator.PARAMETER_FIELDS) accepts a wider set incl.
@@ -36,35 +37,91 @@ export function registerEsiCompletionProvider(): vscode.Disposable {
   return vscode.languages.registerCompletionItemProvider(
     "esi",
     {
-      provideCompletionItems(document, position) {
+      provideCompletionItems(document, position, _token, context) {
         const index = getActiveProjectIndex();
         const ctx = resolveContext(
           document.getText(),
           position.line,
           position.character
         );
+        // `/` is a trigger only so that `[/` offers the closing tags; a slash
+        // typed anywhere else (a path, `<br/>`) must not pop a list open.
+        if (context.triggerCharacter === "/" && ctx.kind !== "closeTagName") {
+          return [];
+        }
 
         switch (ctx.kind) {
-          case "tagName": {
-            if (!index) {
+          case "tagName":
+          case "closeTagName": {
+            // What to offer, the replace range and the inserted text are all
+            // decided in lib/tagCompletion.ts; this only builds the items.
+            // Structural section names and closing tags need no index.
+            const tags = computeTagCompletions(
+              document.getText(),
+              position.line,
+              position.character,
+              ctx.partial,
+              ctx.kind === "closeTagName",
+              index ? index.connections.keys() : []
+            );
+            if (!tags) {
               return [];
             }
-            // Explicitly tell VS Code that the partial typed text after
-            // the `[` is what should be replaced. Without this, VS Code's
-            // word-at-cursor heuristic mis-detects the boundary for
-            // digit-leading identifiers (1553_..., 429_...) and the
-            // filter list goes empty.
+            // The range is set explicitly: it starts at the typed partial
+            // (VS Code's word-at-cursor heuristic mis-detects digit-leading
+            // identifiers such as 1553_…/429_… and the list goes empty) and,
+            // on a tag line, runs through the auto-closed `]`.
             const replaceRange = new vscode.Range(
               position.line,
-              position.character - ctx.partial.length,
+              tags.startCol,
               position.line,
-              position.character
+              tags.endCol
             );
-            const items: vscode.CompletionItem[] = [];
-            for (const conn of index.connections.values()) {
-              items.push(connectionToItem(conn, index, replaceRange));
-            }
-            return items;
+            return tags.entries.map((entry) => {
+              const item = new vscode.CompletionItem(
+                entry.label,
+                entry.source === "connection"
+                  ? vscode.CompletionItemKind.Class
+                  : entry.source === "section"
+                    ? vscode.CompletionItemKind.Module
+                    : vscode.CompletionItemKind.Keyword
+              );
+              item.detail = entry.detail;
+              const conn =
+                entry.source === "connection"
+                  ? index?.connections.get(entry.label)
+                  : undefined;
+              if (conn && index) {
+                item.detail = conn.messageName ? `→ ${conn.messageName}` : conn.bus;
+                item.documentation = renderConnection(conn, index);
+              }
+              item.range = replaceRange;
+              item.filterText = entry.filterText;
+              item.sortText = entry.sortText;
+              item.preselect = entry.preselect;
+              if (entry.isSnippet) {
+                item.insertText = new vscode.SnippetString(entry.insertText);
+                // Indentation is spelled out in the snippet; don't re-indent.
+                item.keepWhitespace = true;
+              } else {
+                item.insertText = entry.insertText;
+              }
+              if (entry.lineIndent !== undefined) {
+                // Closing tag: move it under its opening tag.
+                item.additionalTextEdits = [
+                  vscode.TextEdit.replace(
+                    new vscode.Range(
+                      position.line,
+                      0,
+                      position.line,
+                      tags.bracketCol
+                    ),
+                    entry.lineIndent
+                  ),
+                ];
+              }
+              return item;
+            });
           }
           case "fieldName": {
             const fieldRange = computeIdentifierRange(document, position);
@@ -164,28 +221,11 @@ export function registerEsiCompletionProvider(): vscode.Disposable {
       },
     },
     "[",
+    "/",
     "%",
     "=",
     "."
   );
-}
-
-function connectionToItem(
-  conn: ConnectionDef,
-  index: ReturnType<typeof getActiveProjectIndex> & object,
-  range: vscode.Range
-): vscode.CompletionItem {
-  const item = new vscode.CompletionItem(
-    conn.fullName,
-    vscode.CompletionItemKind.Class
-  );
-  item.detail = conn.messageName ? `→ ${conn.messageName}` : conn.bus;
-  item.documentation = renderConnection(conn, index);
-  item.range = range;
-  // filterText spelled out so digit-leading prefixes (1553_…, 429_…) match
-  // even when VS Code's default word-pattern heuristic disagrees.
-  item.filterText = conn.fullName;
-  return item;
 }
 
 function fieldToItem(

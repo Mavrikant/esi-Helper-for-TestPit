@@ -4,6 +4,43 @@ All notable changes to the **esi Helper for TestPit** extension will be document
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+Editor features: an outline, tag-based folding, a step picker, more quick fixes, smarter tag completion, and a validity check that no longer runs on every keystroke.
+
+### Added
+- **Outline, breadcrumbs and Go to Symbol in Editor (`Ctrl+Shift+O`).** The section tree is built from the tags: TEST STEPS → STEP → STEP INPUTS / OUTPUTS → message blocks. Steps, input/output sections, `[VARIABLES]`, definitions, `[INCLUDE]`s and bus message blocks each get their own icon. A step shows its `Step Description` next to its name, `[TEST DEFINITION]` shows the `Test Description`, and `[INCLUDE]` shows the included file. One-liner sections such as `[STEP DUMP/]` appear as leaves, and the tree keeps working on half-written scripts with unclosed or mismatched tags.
+- **Tag-based folding.** Every multi-line section folds on its tags; `<pre>…</pre>` bodies fold; runs of consecutive `#` comment lines fold as comments, so "Fold All Block Comments" works.
+- **Go to Step (`Ctrl+G`) is now a step picker**, and is in the Command Palette as **ESI Helper: Go to Step**. It lists every `[STEP n]` with its Step Description, and its Step Requirements when set. Type a step number, or any word from the description or requirements, to filter; moving through the list previews each step; Enter jumps to it; Escape returns to where you were. The picker opens on the step containing the cursor, and typing an exact step number and pressing Enter works as before.
+- **Quick fixes (`Ctrl+.`) for the extension's own diagnostics:**
+  - Unknown component or field: "Change to '…'" with up to three closest names from the active profile's configs. Renaming a component also renames its closing tag.
+  - Value out of range: set to the minimum or maximum.
+  - Invalid `match` value: change to `next` or `any`. `occurrence = all` can be corrected to `ALL`.
+  - Duplicate key, or an output-only field (`occurrence` / `synchronize` / `match`) in a `[STEP INPUTS]` message: remove the line.
+  - Unbalanced section tags: add the missing `[/NAME]` at the right indentation, or correct a mismatched closing tag's name. One-liner `[NAME/]` sections are left alone. These work with no active TestPit profile.
+  - "Fix all … problems in this file" for duplicate keys, output-only fields and out-of-range values.
+- **Tag completion after `[` offers the structural sections** (`VARIABLES`, `TEST DEFINITION`, `TEST STEPS`, `STEP`, `STEP DEFINITION`, `STEP INPUTS`, `STEP OUTPUTS`, `INCLUDE`, `STEP GET_DUMP`, `TIMELIMIT`, `MANUAL_VERIFY`, `EXTERNAL_VERIFY`, `STEP DUMP`, `CMD_EXECUTE`, `CMD_INSTRUCTION`, `CMD_SWMemoryWrite`) alongside the profile's connections. The ones that belong where the cursor is are listed first, and they work with no TestPit profile loaded.
+- **The closing tag is written for you.** Accepting a tag on an empty line inserts the matching `[/NAME]` below with the cursor in between, correctly indented. It is not added when the tag is already closed further down or when you are editing an existing tag line. `[STEP …]` gets an id placeholder that is mirrored into its closing tag.
+- **Tag completion after `[/`** lists the sections still open, innermost first and preselected, and lines the closing tag up under its opening tag.
+- **Hover on a bare connection name** (bus prefix left off) now also works for `ED_`, `PART_<partition>_` and any `VORILS<N>_` connection.
+
+### Changed
+- **The live validity check waits for a short pause in typing** (about 0.6 s) before running `TestPit.exe`, instead of running on every keystroke. Only one TestPit process runs per file at a time, and if you keep typing during a run, one more run follows — so the Problems panel always ends up reflecting the final text. The previous result stays visible until the new one arrives, instead of flickering away on each keystroke.
+- **Run Validity Check no longer freezes the editor.** It shows a progress notification, still writes the full command and TestPit output to the "esi Helper" output channel, and now also puts the issues in the Problems panel and as squiggles. It finishes with a short message: "n errors, n warnings", "clean", or a warning that TestPit produced no validation log (for example when the executable path is wrong). Messages TestPit reports without a line number cannot be shown in the Problems panel; the summary counts them and points to the output channel.
+- **TestPit findings are labelled `TestPit` in the Problems panel**; the extension's own checks remain `esi Helper`. Closing a file removes its TestPit findings.
+- **Folding follows the tags, not the indentation.** Indented text that is not a section, a `<pre>` body or a comment run (a hanging continuation line, say) no longer folds on its own.
+- **The enum quick fix lists the closest value first** and marks it as the preferred fix.
+- **Snippets expand already formatted.** `[STEP DEFINITION]`, `[TEST DEFINITION]`, `[STEP 00]` and `[CMD_EXECUTE]` now come out with aligned `=` and `<pre>` anchored to that column, so Format Document or format-on-save no longer reshuffles a freshly inserted snippet.
+- Clearer messages when a step is not found or the file has no steps.
+
+### Fixed
+- **Show Processed File no longer assumes `C:\Users\<login>\Documents\…`.** It resolves the file under the real user home directory, so profile folders that differ from the login name, or sit on another drive, now work. When the file cannot be opened, the error names the exact path that was tried and says a validity check must run first.
+- **The enum quick fix on a CSV-sourced value** (`field = file.csv line:N col:M`) used to overwrite the whole CSV reference with a literal; no replace fix is offered there now. Values containing a `%macro%` never get a fix.
+- **Step lookup no longer treats typed text as a regular expression**, so input such as `(` or `.*` cannot error or match the wrong step.
+- **Completion no longer leaves `]]`** behind the auto-inserted closing bracket.
+- **The live check follows the file that changed**, not whichever editor has focus, so writes to the output channel no longer trigger a run.
+- Snippet descriptions "Step definiton" / "Test definiton" corrected to "definition".
+
 ## [0.4.6]
 
 Dependency refresh — no change in what the extension does.

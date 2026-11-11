@@ -65,6 +65,54 @@ class SemanticTokensBuilder {
   }
 }
 
+class Position {
+  constructor(line, character) {
+    this.line = line;
+    this.character = character;
+  }
+}
+
+class Selection {
+  constructor(anchor, active) {
+    this.anchor = anchor;
+    this.active = active;
+    this.start = anchor;
+    this.end = active;
+  }
+}
+
+class DocumentSymbol {
+  constructor(name, detail, kind, range, selectionRange) {
+    this.name = name;
+    this.detail = detail;
+    this.kind = kind;
+    this.range = range;
+    this.selectionRange = selectionRange;
+    this.children = [];
+  }
+}
+
+class FoldingRange {
+  constructor(start, end, kind) {
+    this.start = start;
+    this.end = end;
+    this.kind = kind;
+  }
+}
+
+class SnippetString {
+  constructor(value) {
+    this.value = value || '';
+  }
+}
+
+class CompletionItem {
+  constructor(label, kind) {
+    this.label = label;
+    this.kind = kind;
+  }
+}
+
 class EventEmitter {
   constructor() {
     this._listeners = [];
@@ -87,7 +135,16 @@ class EventEmitter {
 }
 
 
+// What the extension registered, keyed by kind / command id, so a test can
+// call a provider or command the way VS Code would.
+const registered = { providers: {}, commands: {} };
+const keep = (kind) => (...args) => {
+  registered.providers[kind] = args[args.length > 1 ? 1 : 0];
+  return { dispose() {} };
+};
+
 mock('vscode', {
+  __registered: registered,
   window: {
     createOutputChannel(name) {
       return {
@@ -114,21 +171,89 @@ mock('vscode', {
     showInformationMessage() { return Promise.resolve(undefined); },
     showWarningMessage() { return Promise.resolve(undefined); },
     showErrorMessage() { return Promise.resolve(undefined); },
+    withProgress(_options, task) {
+      return Promise.resolve(
+        task(
+          { report() {} },
+          {
+            isCancellationRequested: false,
+            onCancellationRequested() { return { dispose() {} }; },
+          }
+        )
+      );
+    },
+    createTextEditorDecorationType() { return { dispose() {} }; },
+    createQuickPick() {
+      const emitter = () => {
+        const e = new EventEmitter();
+        return e;
+      };
+      const active = emitter();
+      const value = emitter();
+      const accept = emitter();
+      const hide = emitter();
+      return {
+        items: [],
+        activeItems: [],
+        selectedItems: [],
+        value: "",
+        title: undefined,
+        placeholder: undefined,
+        matchOnDescription: false,
+        matchOnDetail: false,
+        onDidChangeActive: active.event,
+        onDidChangeValue: value.event,
+        onDidAccept: accept.event,
+        onDidHide: hide.event,
+        // Test hooks: drive the picker the way a user would.
+        _fireActive(items) { this.activeItems = items; active.fire(items); },
+        _fireValue(v) { this.value = v; value.fire(v); },
+        _fireAccept() { accept.fire(); },
+        show() {},
+        hide() { hide.fire(); },
+        dispose() {},
+      };
+    },
     activeTextEditor: undefined,
   },
   languages: {
     registerDocumentSemanticTokensProvider() { return { dispose() {} }; },
     registerCompletionItemProvider() { return { dispose() {} }; },
     registerHoverProvider() { return { dispose() {} }; },
-    registerCodeActionsProvider() { return { dispose() {} }; },
+    registerCodeActionsProvider: keep('codeActions'),
+    registerDocumentSymbolProvider: keep('documentSymbol'),
+    registerFoldingRangeProvider: keep('foldingRange'),
+    getDiagnostics() { return []; },
     createDiagnosticCollection() { return { clear() {}, set() {}, delete() {}, dispose() {} }; },
     registerDocumentFormattingEditProvider() { return { dispose() {} }; },
   },
   commands: {
-    registerCommand() { return { dispose() {} }; },
+    registerCommand(id, handler) {
+      registered.commands[id] = handler;
+      return { dispose() {} };
+    },
     registerTextEditorCommand() { return { dispose() {} }; },
   },
   Range,
+  Position,
+  Selection,
+  DocumentSymbol,
+  FoldingRange,
+  SnippetString,
+  CompletionItem,
+  // Values match the real vscode enums.
+  SymbolKind: {
+    File: 0, Module: 1, Namespace: 2, Interface: 10, Function: 11,
+    Variable: 12, String: 14, Struct: 22,
+  },
+  FoldingRangeKind: { Comment: 1, Imports: 2, Region: 3 },
+  ProgressLocation: { SourceControl: 1, Window: 10, Notification: 15 },
+  TextEditorRevealType: { Default: 0, InCenter: 1, InCenterIfOutsideViewport: 2, AtTop: 3 },
+  CompletionItemKind: {
+    Field: 4, Variable: 5, Class: 6, Module: 8, Value: 11, Keyword: 13, EnumMember: 19,
+  },
+  Hover: class Hover { constructor(contents, range) { this.contents = contents; this.range = range; } },
+  TextEdit: { replace(range, newText) { return { range, newText }; } },
   Diagnostic,
   DiagnosticSeverity,
   MarkdownString,

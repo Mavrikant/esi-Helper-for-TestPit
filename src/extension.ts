@@ -17,6 +17,8 @@ import { registerEsiCompletionProvider } from "./providers/completion";
 import { registerEsiHoverProvider } from "./providers/hover";
 import { registerEsiSemanticTokensProvider } from "./providers/semanticTokens";
 import { registerEsiCodeActionsProvider } from "./providers/codeActions";
+import { registerEsiDocumentSymbolProvider } from "./providers/documentSymbols";
+import { registerEsiFoldingRangeProvider } from "./providers/folding";
 import { registerComponentDiagnostics } from "./componentDiagnostics";
 import { initPluginStore } from "./lib/pluginStore";
 import { ensureRegistryLoaded, promptForExeIfUnset } from "./lib/profileRegistry";
@@ -49,6 +51,8 @@ export function activate(context: vscode.ExtensionContext): void {
     registerEsiHoverProvider(),
     registerEsiSemanticTokensProvider(),
     registerEsiCodeActionsProvider(),
+    registerEsiDocumentSymbolProvider(),
+    registerEsiFoldingRangeProvider(),
     registerComponentDiagnostics()
   );
 

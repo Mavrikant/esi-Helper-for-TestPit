@@ -1,5 +1,12 @@
 import { parseSectionTagLine } from "./parseSectionTag";
 import {
+  SEC_EXTERNAL_VERIFY,
+  SEC_MANUAL_VERIFY,
+  SEC_STEP_INPUTS,
+  SEC_TEST_DEFINITION,
+  SEC_TEST_STEPS,
+} from "./sectionNames";
+import {
   COMPONENT_TAG_PATTERN,
   EnumDef,
   FieldDef,
@@ -28,6 +35,33 @@ export interface ComponentIssue {
   kind: IssueKind;
   /** Diagnostic severity; callers treat an absent value as "warning". */
   severity?: "error" | "warning";
+  /** Extra context a quick fix needs (see quickFixes.ts). Never shown. */
+  fix?: IssueFixData;
+}
+
+/**
+ * Data attached to an issue purely so a quick fix can be computed without
+ * re-deriving what the validator already knew. Reporting is unaffected.
+ */
+export interface IssueFixData {
+  /** unknownField: the message the enclosing block resolved to. */
+  messageFields?: FieldDef[];
+  /** unknownEnum / valueOutOfRange: the field being assigned. */
+  field?: FieldDef;
+  /** unknownEnum: the value came from a CSV cell, not from the script text. */
+  fromCsv?: boolean;
+  /** valueOutOfRange: the numeric bounds that were checked. */
+  min?: number;
+  max?: number;
+  /**
+   * unbalancedTag: "orphanClose" is a closer with no opener; "unclosed" is an
+   * opener that was never closed.
+   */
+  unbalanced?: "orphanClose" | "unclosed";
+  /** unbalancedTag/unclosed: line of the closer that exposed it (absent = EOF). */
+  closerLine?: number;
+  /** unbalancedTag/orphanClose: sections open at that point, innermost first. */
+  openSections?: string[];
 }
 
 /**
@@ -50,7 +84,7 @@ export type CsvLookup = (
 // the connection name is still checked but nothing is pushed on the stack.
 const TAG_RE = /\[(\/?)([A-Za-z0-9_]+)(\/?)\]/g;
 // Field name may include dots (1553 `Mode.SelectedCourse`).
-const ASSIGNMENT_RE = /^(\s*)([A-Za-z_][A-Za-z0-9_.]*)\s*=\s*(.*)$/;
+export const ASSIGNMENT_RE = /^(\s*)([A-Za-z_][A-Za-z0-9_.]*)\s*=\s*(.*)$/;
 const RHS_IDENT_RE = /^[A-Za-z_][A-Za-z0-9_]*/;
 // `<filename>.csv line:<N> col:<M>` — the input-from-CSV pattern that
 // scripts use to pull a value out of a fixture spreadsheet at runtime.
@@ -153,11 +187,6 @@ function checkParameterValue(
 // This keeps the structural checks free of prose false-positives. The line is
 // classified by parseSectionTag.ts, which ports the reader's own grammar —
 // including the one-liner `[NAME/]` and the sloppy forms it repairs.
-const SEC_TEST_STEPS = "TEST STEPS";
-const SEC_TEST_DEFINITION = "TEST DEFINITION";
-const SEC_STEP_INPUTS = "STEP INPUTS";
-const SEC_MANUAL_VERIFY = "MANUAL_VERIFY";
-const SEC_EXTERNAL_VERIFY = "EXTERNAL_VERIFY";
 const A708_TAG_PREFIX = "708_";
 // occurrence/synchronize/match are output-only for EVERY bus
 // (ScriptMessageValidator.cpp outputFields), so inside a STEP INPUTS message they
@@ -260,6 +289,7 @@ export function validateComponents(
         message: `Unknown field '${fieldName}' for message '${message.name}'.`,
         identifier: fieldName,
         kind: "unknownField",
+        fix: { messageFields: message.fields },
       });
       continue;
     }
@@ -321,6 +351,7 @@ export function validateComponents(
           .join(", ")}.`,
         identifier: cellValue,
         kind: "unknownEnum",
+        fix: { field, fromCsv: true },
       });
       continue;
     }
@@ -346,6 +377,7 @@ export function validateComponents(
         .join(", ")}.`,
       identifier: value,
       kind: "unknownEnum",
+      fix: { field },
     });
   }
 
@@ -431,6 +463,7 @@ function checkEnumNumericValue(
     identifier: trimmed,
     kind: "unknownEnum",
     severity: "warning",
+    fix: { field },
   });
 }
 
@@ -484,6 +517,7 @@ function checkNumericRange(
     identifier: trimmed,
     kind: "valueOutOfRange",
     severity: "warning",
+    fix: { field, min, max },
   });
 }
 
@@ -561,6 +595,10 @@ export function validateStructure(documentText: string): ComponentIssue[] {
             identifier: name,
             kind: "unbalancedTag",
             severity: "error",
+            fix: {
+              unbalanced: "orphanClose",
+              openSections: stack.map((s) => s.name).reverse(),
+            },
           });
         } else {
           // Any tags opened after the match were never closed.
@@ -574,6 +612,7 @@ export function validateStructure(documentText: string): ComponentIssue[] {
               identifier: o.name,
               kind: "unbalancedTag",
               severity: "error",
+              fix: { unbalanced: "unclosed", closerLine: lineNum },
             });
           }
           stack.splice(matchIdx, stack.length - matchIdx);
@@ -678,6 +717,7 @@ export function validateStructure(documentText: string): ComponentIssue[] {
       identifier: o.name,
       kind: "unbalancedTag",
       severity: "error",
+      fix: { unbalanced: "unclosed" },
     });
   }
 

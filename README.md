@@ -29,17 +29,20 @@
 
 ## Highlights
 
-- **Live validity check** against the configured `TestPit.exe` — errors surface in the Problems panel while you type.
+- **Live validity check** against the configured `TestPit.exe` — errors surface in the Problems panel (source `TestPit`) shortly after you stop typing. The check waits for a short pause (about 0.6 s) and runs one TestPit process per file at a time, so typing stays smooth and the panel always ends up reflecting the final text.
+- **Outline, breadcrumbs and Go to Symbol** (`Ctrl+Shift+O`) built from the section tags: TEST STEPS → STEP → STEP INPUTS / OUTPUTS → message blocks, each with its own icon. A step shows its `Step Description` beside its name. Keeps working on half-written scripts with unclosed or mismatched tags.
+- **Tag-based folding** — every multi-line section folds on its `[NAME]`…`[/NAME]` tags rather than on indentation, `<pre>…</pre>` bodies fold, and runs of `#` comment lines fold as comments.
 - **Component IntelliSense** for `429_…`, `1553_…`, `DIS_…`, `Mem_…`, `VORILS<N>_…`, `PART_<partition>_<port>`, and `ED_…` (External Data) tags. Connections, fields, enum values, and `%VARIABLE%` references are completed and hover-documented from the active profile's TestPit XML configs. Re-indexes automatically when the XMLs change.
 - **CSV-cell validation:** `field = file.csv line:N col:M` reads the referenced cell and validates its value against the field's enum table.
 - **Enum value validation** by name **or number** — `SDI = INSTALLATION_NUMBER_ONE` and `SDI = 1` are both accepted, while an out-of-table value is flagged (matching TestPit's resolver). Macros/CSV/file references are skipped.
 - **Structural & conformance checks** (need no profile — they run even before you pick one): unbalanced/mismatched section tags; duplicate keys within a message block; A708 messages, `MANUAL_VERIFY`/`EXTERNAL_VERIFY`, or output-only fields (`occurrence`/`synchronize`/`match`) placed under `[STEP INPUTS]`; out-of-grammar `occurrence`/`match` values; and numeric values outside a field's `MinValue`/`MaxValue`. These mirror TestPit's own validator and are deliberately skipped for `%macro%`/CSV/include-sourced values, so they never false-positive. The tag reader matches TestPit's own, including the one-liner `[NAME/]` form and the sloppy shapes it repairs (`[[NAME]]`, `[//NAME]`, `[NAME] junk`, `[NAME`).
 - **Rich syntax highlighting** — distinct, theme-overridable colours for section tags, message fields, keys, enum values, `%MACRO%` references, file/folder paths, quoted strings, numbers, constants and comments. Resolved component identifiers carry a `defaultLibrary` semantic modifier so unknown/stale ones stand out.
 - **Auto-formatting** with ESI-aware indentation **and `=` alignment**: `[TAG]…[/TAG]` contents indent in 4-space steps; field assignments in a section align their `=` to one column (`esihelper.alignmentScope` = `section` or `tier`), including `<pre>` openers whose bodies stay under the aligned `<pre>`. Runs via **Format Document** (`Shift+Alt+F`) or on save (`esihelper.refactorDocumentOnSave`); tabs → 4 spaces on every save.
-- **Quick-fix code actions** for unknown enum values — pick the right one from a lightbulb menu.
+- **Tag completion** — after `[` the structural sections (`VARIABLES`, `TEST STEPS`, `STEP`, `STEP INPUTS`, …) are offered alongside the profile's connections, the ones that belong at the cursor first; accepting one on an empty line also writes the matching `[/NAME]` below, correctly indented. After `[/` the sections still open are listed, innermost first. Structural names need no profile.
+- **Quick fixes** (`Ctrl+.`) for the extension's own diagnostics: change an unknown component or field to the closest known name (a component's closing tag is renamed with it), pick an enum value (closest first), set an out-of-range value to the minimum or maximum, correct a `match` / `occurrence` value, remove a duplicate key or an output-only field under `[STEP INPUTS]`, add a missing `[/NAME]` or correct a mismatched one — plus "Fix all … in this file" for duplicate keys, output-only fields and out-of-range values.
 - **Multi-profile support driven by TestPit's own settings:** profiles and their config files are read from the Windows registry (`HKCU\Software\ESEN\TestPit`). The status-bar item (bottom-right) shows the active profile; click to switch via QuickPick.
 - **Snippets** for `[STEP]`, `[STEP DEFINITION]`, `[STEP INPUTS]`, `[STEP OUTPUTS]`, `[VARIABLES]`, `[FUNC_*]`, `[PART_*]`, `[CMD_EXECUTE]`, `[MANUAL_VERIFY]`, `[EXTERNAL_VERIFY]`, `[STEP GET_DUMP]`.
-- **Step renumbering** (sequential 10, 20, 30, …) and **Goto step** (`Ctrl+G`).
+- **Step renumbering** (sequential 10, 20, 30, …) and a **Go to Step picker** (`Ctrl+G`) that lists every step with its description — type a number or a word to filter, move through the list to preview, Enter to jump, Escape to go back.
 - **Open with TestPit** — launches the active script in the configured `TestPit.exe`.
 
 ## Getting started
@@ -72,7 +75,7 @@ All `esihelper.*` settings are **user-scoped (machine-wide)** — they live in y
 
 | Command | What it does | Keybinding |
 |---|---|---|
-| ESI Helper: Run Validity Check | Validate the current `.esi` against the active profile (`TestPit.exe --validateScriptOnly`); results go to the output channel / Problems panel. | — |
+| ESI Helper: Run Validity Check | Validate the current `.esi` against the active profile (`TestPit.exe --validateScriptOnly`) without blocking the editor. The full TestPit output goes to the output channel, the issues to the Problems panel, and a short summary ("n errors, n warnings" / "clean") is shown at the end. | — |
 | ESI Helper: Open with TestPit | Open the current script in the TestPit **GUI** (`TestPitw.exe`, derived from the configured executable's folder). | — |
 | ESI Helper: Update Step Numbers | Renumber `[STEP N]` blocks sequentially (10, 20, 30, …). | — |
 | ESI Helper: Refactor Document | Trim trailing whitespace and convert tabs to 4 spaces. | — |
@@ -81,7 +84,9 @@ All `esihelper.*` settings are **user-scoped (machine-wide)** — they live in y
 | ESI Helper: Reload TestPit Settings | Re-read profiles & config-file paths from the registry — run this after adding a profile or changing config paths in the TestPit GUI. | — |
 | ESI Helper: Pick TestPit Executable | Choose / re-point the console `TestPit.exe` used for validation. | — |
 | ESI Helper: Show Component Validation Info | Diagnostic dump: active profile, resolved config files, index size, and the current component‑validation issues. | — |
-| Goto step number | Jump to a `[STEP N]` by number. | `Ctrl+G` (when editing `.esi`) |
+| ESI Helper: Go to Step | Step picker: lists every `[STEP N]` with its Step Description (and Requirements). Type a number or text to filter; highlighting previews, Enter jumps, Escape returns. | `Ctrl+G` (when editing `.esi`) |
+| Go to Symbol in Editor (built-in) | Jump to any section of the script; the same tree feeds the Outline view and breadcrumbs. | `Ctrl+Shift+O` |
+| Quick Fix (built-in) | Fixes for the extension's own diagnostics (see Highlights). | `Ctrl+.` |
 | Format Document (built-in) | ESI‑aware indentation **+ `=` alignment**. | `Shift+Alt+F` (when editing `.esi`) |
 
 ## Development

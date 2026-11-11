@@ -34,3 +34,20 @@ describe("toDiagnostic", () => {
     assert.strictEqual(d.severity, 1);
   });
 });
+
+describe("toDiagnostic source", () => {
+  it("tags diagnostics as coming from TestPit, not 'esi Helper'", () => {
+    const { TESTPIT_DIAGNOSTIC_SOURCE } = require("../../lib/toDiagnostic");
+    const d = toDiagnostic({
+      lineNumber: 0,
+      startCol: 0,
+      endCol: 1,
+      severity: "error",
+      message: "m",
+    }) as any;
+    assert.strictEqual(d.source, "TestPit");
+    assert.strictEqual(d.source, TESTPIT_DIAGNOSTIC_SOURCE);
+    // codeActions.ts / showValidationInfo.ts filter on this exact string.
+    assert.notStrictEqual(d.source, "esi Helper");
+  });
+});

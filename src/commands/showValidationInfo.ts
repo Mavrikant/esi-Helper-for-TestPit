@@ -1,4 +1,5 @@
 import * as vscode from "vscode";
+import { TESTPIT_DIAGNOSTIC_SOURCE } from "../lib/toDiagnostic";
 import * as fs from "fs";
 import * as path from "path";
 import { getOutputChannel } from "../lib/outputChannel";
@@ -98,6 +99,12 @@ export function registerShowValidationInfo(): vscode.Disposable {
       const ours = liveDiags.filter((d) => d.source === "esi Helper");
       ch.appendLine(
         `Live diagnostics from "esi Helper" on this file: ${ours.length}.`
+      );
+      const testpit = liveDiags.filter(
+        (d) => d.source === TESTPIT_DIAGNOSTIC_SOURCE
+      );
+      ch.appendLine(
+        `Live diagnostics from "${TESTPIT_DIAGNOSTIC_SOURCE}" (validity check) on this file: ${testpit.length}.`
       );
       if (ours.length !== issues.length) {
         ch.appendLine(

@@ -2,21 +2,21 @@
 	"STEP DEFINITION": {
 		"prefix": "[STEP DEFINITION]",
 		"body": [
-			"[STEP DEFINITION]\n    Step Description  = $1\n    Step Requirements = $2\n    Step Dependencies = N/A$3\n    Step Conditions = <pre>\n                          <br/> $4\n                          <br/> $5\n                      </pre>\n    Step Expected Results = <pre>\n                                <br/> $6\n                            </pre>\n[/STEP DEFINITION]"
+			"[STEP DEFINITION]\n    Step Description      = $1\n    Step Requirements     = $2\n    Step Dependencies     = N/A$3\n    Step Conditions       = <pre>\n                                <br/> $4\n                                <br/> $5\n                            </pre>\n    Step Expected Results = <pre>\n                                <br/> $6\n                            </pre>\n[/STEP DEFINITION]"
 		],
-		"description": "Step definiton"
+		"description": "Step definition"
 	},
-    "TEST DEFINITION": {
+	"TEST DEFINITION": {
 		"prefix": "[TEST DEFINITION]",
 		"body": [
-			"[TEST DEFINITION]\n    Test Description =  $1\n    Test Configuration = $2\n    Test Dependencies = $3\n[/TEST DEFINITION]"
+			"[TEST DEFINITION]\n    Test Description   = $1\n    Test Configuration = $2\n    Test Dependencies  = $3\n[/TEST DEFINITION]"
 		],
-		"description": "Test definiton"
+		"description": "Test definition"
 	},
 	"STEP": {
 		"prefix": "[STEP 00]",
 		"body": [
-			"[STEP 00$1]\n    [STEP DEFINITION]\n        Step Description = $2\n        Step Requirements = $3\n        Step Dependencies = N/A$4\n        Step Conditions =   <pre> \n                                <br/> $5\n                                <br/> $6\n                            </pre>  \n        Step Expected Results = <pre> \n                                    <br/> $7\n                                </pre>  \n    [/STEP DEFINITION]\n    [STEP INPUTS]\n        $8\n    [/STEP INPUTS]\n    [STEP OUTPUTS]\n        $9\n    [/STEP OUTPUTS]\n[/STEP 00$1]"
+			"[STEP 00$1]\n    [STEP DEFINITION]\n        Step Description      = $2\n        Step Requirements     = $3\n        Step Dependencies     = N/A$4\n        Step Conditions       = <pre>\n                                    <br/> $5\n                                    <br/> $6\n                                </pre>\n        Step Expected Results = <pre>\n                                    <br/> $7\n                                </pre>\n    [/STEP DEFINITION]\n    [STEP INPUTS]\n        $8\n    [/STEP INPUTS]\n    [STEP OUTPUTS]\n        $9\n    [/STEP OUTPUTS]\n[/STEP 00$1]"
 		],
 		"description": "Step"
 	},
@@ -86,7 +86,7 @@
 	"CMD_EXECUTE": {
 		"prefix": "[CMD_EXECUTE]",
 		"body": [
-			"[CMD_EXECUTE]\n    system call = $1\n    wait timeout = %TIMEOUT%\n[/CMD_EXECUTE]"
+			"[CMD_EXECUTE]\n    system call  = $1\n    wait timeout = %TIMEOUT%\n[/CMD_EXECUTE]"
 		],
 		"description": "CMD_EXECUTE"
 	}

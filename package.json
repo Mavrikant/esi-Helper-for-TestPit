@@ -82,6 +82,11 @@
         "category": "ESI Helper"
       },
       {
+        "command": "extension.gotoStep",
+        "title": "Go to Step",
+        "category": "ESI Helper"
+      },
+      {
         "command": "extension.selectProfile",
         "title": "Select TestPit Profile",
         "category": "ESI Helper"
@@ -102,6 +107,14 @@
         "category": "ESI Helper"
       }
     ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "extension.gotoStep",
+          "when": "editorLangId == esi"
+        }
+      ]
+    },
     "keybindings": [
       {
         "command": "extension.gotoStep",

@@ -2,6 +2,7 @@ import { COMPONENT_TAG_PATTERN } from "./xmlIndex";
 
 export type EsiContext =
   | { kind: "tagName"; partial: string }
+  | { kind: "closeTagName"; partial: string }
   | { kind: "fieldName"; messageName: string }
   | { kind: "fieldValue"; messageName: string; fieldName: string }
   | { kind: "variableRef"; partial: string }
@@ -38,10 +39,12 @@ export function resolveContext(
   if (lastOpenBracket > lastCloseBracket) {
     // Cursor is between [ and an unclosed ]
     const partial = before.slice(lastOpenBracket + 1);
-    // Skip closing tags ([/...) — these aren't completion targets
-    if (!partial.startsWith("/")) {
-      return { kind: "tagName", partial };
+    // `[/…` is a closing tag: its own context, so it is offered the open
+    // sections rather than new tag names.
+    if (partial.startsWith("/")) {
+      return { kind: "closeTagName", partial: partial.slice(1) };
     }
+    return { kind: "tagName", partial };
   }
 
   // 2. After a `%` — variable reference
@@ -94,11 +97,6 @@ function findEnclosingMessage(lines: string[], lineIndex: number): string | unde
     TAG_CLOSE_RE.lastIndex = 0;
     let closeMatch: RegExpExecArray | null;
     while ((closeMatch = TAG_CLOSE_RE.exec(line)) !== null) {
-      // Only count closers BEFORE the cursor on the cursor line.
-      if (i === lineIndex) {
-        // For the cursor line, we already returned earlier if cursor was
-        // inside an open tag — here we just consider the line as content.
-      }
       closedSinceCursor.add(closeMatch[1]);
     }
     TAG_OPEN_RE.lastIndex = 0;
