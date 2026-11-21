@@ -106,21 +106,11 @@ export function registerEsiHoverProvider(): vscode.Disposable {
         );
       }
 
-      // 2. Connection name without its prefix — any prefix the index
-      //    registers (429_, 1553_, DIS_, Mem_, VORILS<N>_, ED_,
-      //    PART_<partition>_), derived from COMPONENT_TAG_PREFIXES.
-      const bare = findConnectionByBareName(index.connections, word);
-      if (bare) {
-        return new vscode.Hover(
-          withDefinitionLink(renderConnection(bare, index), {
-            kind: "connection",
-            conn: bare,
-          }),
-          range
-        );
-      }
-
-      // 3. Field or enum: use the enclosing context to figure out the message.
+      // 2. Field or enum: use the enclosing context to figure out the message.
+      //    Before the bare-name lookup below, as in Go to Definition
+      //    (xmlLocate.findDefinitionTargets): a field of the enclosing block
+      //    must not be shadowed by a port / message elsewhere that happens to
+      //    share its name.
       const ctx = resolveContext(
         document.getText(),
         position.line,
@@ -160,6 +150,20 @@ export function registerEsiHoverProvider(): vscode.Disposable {
             }
           }
         }
+      }
+
+      // 3. Connection name without its prefix — any prefix the index
+      //    registers (429_, 1553_, DIS_, Mem_, VORILS<N>_, ED_,
+      //    PART_<partition>_), derived from COMPONENT_TAG_PREFIXES.
+      const bare = findConnectionByBareName(index.connections, word);
+      if (bare) {
+        return new vscode.Hover(
+          withDefinitionLink(renderConnection(bare, index), {
+            kind: "connection",
+            conn: bare,
+          }),
+          range
+        );
       }
       return undefined;
     },

@@ -10,10 +10,8 @@ import {
   getTestpitExe,
 } from "../lib/profileRegistry";
 import { createCsvCellLookup } from "../lib/csv";
-import {
-  validateComponents,
-  validateStructure,
-} from "../lib/componentValidator";
+import { collectEsiIssues } from "../lib/workspaceValidation";
+import { createMacroResolver } from "../providers/macroResolver";
 
 export function registerShowValidationInfo(): vscode.Disposable {
   return vscode.commands.registerCommand(
@@ -71,15 +69,18 @@ export function registerShowValidationInfo(): vscode.Disposable {
         return;
       }
 
-      // Use the same csvLookup that componentDiagnostics uses, so the numbers
-      // in this report match what the user sees as live squiggles. Structural
-      // checks run with or without an index; component checks need the index.
+      // The SAME pipeline and inputs as the live pass (componentDiagnostics.ts
+      // validateAndPublish), so the numbers in this report match what the
+      // user sees as live squiggles: structure, step and %MACRO% checks run
+      // with or without an index; component checks need the index.
       const text = editor.document.getText();
-      const csvLookup = createCsvCellLookup(editor.document.uri.fsPath);
-      const issues = [
-        ...validateStructure(text),
-        ...(index ? validateComponents(text, index, csvLookup) : []),
-      ];
+      const issues = collectEsiIssues(text, {
+        index,
+        csvLookup: index
+          ? createCsvCellLookup(editor.document.uri.fsPath)
+          : undefined,
+        macroResolver: createMacroResolver(editor.document),
+      });
       ch.appendLine(`Validation result on this file: ${issues.length} issue(s).`);
       for (const issue of issues.slice(0, 20)) {
         ch.appendLine(

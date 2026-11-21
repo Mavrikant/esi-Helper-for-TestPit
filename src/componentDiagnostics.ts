@@ -4,7 +4,6 @@ import { createCsvCellLookup } from "./lib/csv";
 import { EsiIssue, collectEsiIssues, issueSeverity } from "./lib/workspaceValidation";
 import { createMacroResolver } from "./providers/macroResolver";
 import { getActiveProjectIndex, onIndexChanged } from "./lib/projectIndexCache";
-import { onActiveProfileChanged } from "./lib/profileRegistry";
 import { getOutputChannel } from "./lib/outputChannel";
 
 const COLLECTION_NAME = "esi-components";
@@ -67,17 +66,18 @@ export function registerComponentDiagnostics(): vscode.Disposable {
     }
   };
 
-  const onProfileChange = onActiveProfileChanged(() => revalidateAll());
-  // A config XML edited on disk rebuilds the index without a profile change.
-  const onConfigFileChange = onIndexChanged(() => revalidateAll());
+  // onIndexChanged alone: projectIndexCache fires it after the index was
+  // rebuilt for a profile switch / registry reload, and when a config XML is
+  // edited on disk. Subscribing to onActiveProfileChanged as well would
+  // re-validate every open document twice per switch.
+  const onIndexChange = onIndexChanged(() => revalidateAll());
 
   return vscode.Disposable.from(
     collection,
     onChange,
     onOpen,
     onClose,
-    onProfileChange,
-    onConfigFileChange
+    onIndexChange
   );
 }
 

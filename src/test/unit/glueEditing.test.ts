@@ -79,6 +79,51 @@ describe("editing glue (keyword hover, inlay hints, semantic tokens)", () => {
     assert.strictEqual(component.provideHover(doc, pos(7, 17)), undefined);
   });
 
+  it("component hover: a field of the enclosing block beats a same-named bare connection", () => {
+    // The index holds a port whose bare name (`SDI`) equals a field of the
+    // block the cursor is in. The field card must win, as in Go to Definition.
+    const { createEmptyIndex, messageKey } = require("../../lib/xmlIndex");
+    const index = createEmptyIndex();
+    const message = {
+      name: "L100",
+      bus: "429",
+      fields: [{ name: "SDI", dataType: "UINT" }],
+    };
+    index.messages.set("L100", message);
+    index.messagesByBus.set(messageKey("429", "L100"), message);
+    index.connections.set("429_L100_TX", {
+      fullName: "429_L100_TX",
+      bus: "429",
+      rawName: "L100_TX",
+      messageName: "L100",
+    });
+    index.connections.set("PART_TEST_SDI", {
+      fullName: "PART_TEST_SDI",
+      bus: "Mem",
+      rawName: "SDI",
+    });
+    const cache = require("../../lib/projectIndexCache");
+    const original = cache.getActiveProjectIndex;
+    cache.getActiveProjectIndex = () => index;
+    try {
+      registerEsiHoverProvider();
+      const component = registered.providers.hover;
+      const onField = { ...doc, getWordRangeAtPosition: () => new vscode.Range(8, 16, 8, 19) };
+      const hover = component.provideHover(onField, pos(8, 17));
+      assert.ok(hover, "a hover card");
+      const text = hover.contents.value as string;
+      assert.ok(text.includes("SDI"), text);
+      assert.ok(!text.includes("PART_TEST_SDI"), `field card expected, got: ${text}`);
+      // Outside any block, the bare name still finds the connection.
+      const bare = fakeDocument("SDI");
+      const onBare = { ...bare, getWordRangeAtPosition: () => new vscode.Range(0, 0, 0, 3) };
+      const card = component.provideHover(onBare, pos(0, 1));
+      assert.ok((card.contents.value as string).includes("PART_TEST_SDI"));
+    } finally {
+      cache.getActiveProjectIndex = original;
+    }
+  });
+
   it("inlay hints: registered, and silent with no profile loaded", () => {
     const disposable = registerEsiInlayHintsProvider();
     const provider = registered.providers.inlayHints;

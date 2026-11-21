@@ -229,6 +229,8 @@ mock('vscode', {
     },
     setStatusBarMessage() { return { dispose() {} }; },
     onDidChangeActiveTextEditor() { return { dispose() {} }; },
+    onDidChangeVisibleTextEditors() { return { dispose() {} }; },
+    visibleTextEditors: [],
     createTreeView(id, options) {
       return { id, options, description: undefined, message: undefined, title: undefined, dispose() {} };
     },

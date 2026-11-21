@@ -102,7 +102,12 @@ export function registerLiveDiagnostics(): vscode.Disposable {
     vscode.workspace.onDidCloseTextDocument(handleDocumentClose),
     // Other config files / flags now apply: results shown were produced with
     // the previous profile. Fired by a profile switch and a registry reload.
-    onActiveProfileChanged(() => scheduleOpenDocuments()),
+    onActiveProfileChanged(() => scheduleOpenDocuments(true)),
+    // A document that was in the background then is checked when it is
+    // shown again.
+    vscode.window.onDidChangeVisibleTextEditors((editors) =>
+      scheduleUncheckedVisible(editors)
+    ),
     vscode.workspace.onDidChangeConfiguration(handleConfigurationChange),
     {
       dispose: () => {
@@ -110,6 +115,7 @@ export function registerLiveDiagnostics(): vscode.Disposable {
         scheduler.cancelAll();
         runTracker.clear();
         runUris.clear();
+        notRechecked.clear();
         collection?.dispose();
         collection = undefined;
       },
@@ -167,17 +173,54 @@ function handleDocumentChange(event: vscode.TextDocumentChangeEvent): void {
 }
 
 /**
- * Queue a live check for every open .esi document, through the same debounce
- * as typing (so a burst of profile events yields one run per document, and a
- * run in flight is followed by exactly one more). Never prompts.
+ * Queue a live check for every .esi document shown in an editor, through the
+ * same debounce as typing (so a burst of profile events yields one run per
+ * document, and a run in flight is followed by exactly one more). Never
+ * prompts.
+ *
+ * Only VISIBLE documents are re-run: `workspace.textDocuments` also holds
+ * background documents (e.g. every script a Test Explorer run opened), and
+ * the scheduler serializes runs per document only — re-running all of them
+ * would start one TestPit.exe (and write one `.temp` file) per document at
+ * the same moment. The other documents are checked when they are shown again
+ * (or on their next edit); after a profile change their TestPit results were
+ * produced with the previous profile, so those are dropped meanwhile.
  */
-function scheduleOpenDocuments(): void {
+function scheduleOpenDocuments(profileChanged: boolean): void {
   if (disposed || !isLiveValidationEnabled() || !getTestpitExe()) {
     return;
   }
+  const visible = new Set(
+    vscode.window.visibleTextEditors.map((e) => e.document.uri.toString())
+  );
   for (const document of vscode.workspace.textDocuments) {
-    if (isLiveTarget(document)) {
-      scheduler.schedule(document.uri.toString());
+    if (!isLiveTarget(document)) {
+      continue;
+    }
+    const key = document.uri.toString();
+    if (visible.has(key)) {
+      scheduler.schedule(key);
+    } else {
+      if (profileChanged) {
+        collection?.delete(document.uri);
+      }
+      notRechecked.add(key);
+    }
+  }
+}
+
+/** Background documents whose stale results scheduleOpenDocuments dropped. */
+const notRechecked = new Set<string>();
+
+function scheduleUncheckedVisible(editors: readonly vscode.TextEditor[]): void {
+  if (disposed || !isLiveValidationEnabled() || !getTestpitExe()) {
+    return;
+  }
+  for (const editor of editors) {
+    const document = editor.document;
+    const key = document.uri.toString();
+    if (notRechecked.delete(key) && isLiveTarget(document)) {
+      scheduler.schedule(key);
     }
   }
 }
@@ -187,7 +230,7 @@ function handleConfigurationChange(event: vscode.ConfigurationChangeEvent): void
     return;
   }
   if (isLiveValidationEnabled()) {
-    scheduleOpenDocuments();
+    scheduleOpenDocuments(false);
   } else {
     // Drop debounced live runs. A run in flight finishes; explicit
     // "Run Validity Check" runs are unaffected by the setting.
@@ -199,6 +242,7 @@ function handleDocumentClose(document: vscode.TextDocument): void {
   const key = document.uri.toString();
   scheduler.cancel(key);
   versionGate.forget(key);
+  notRechecked.delete(key);
   collection?.delete(document.uri);
 }
 
@@ -257,5 +301,6 @@ function publish(
   }
   collection ??= vscode.languages.createDiagnosticCollection(COLLECTION_NAME);
   collection.set(document.uri, issues.map(toDiagnostic));
+  notRechecked.delete(document.uri.toString());
   return true;
 }
