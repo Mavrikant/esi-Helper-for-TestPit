@@ -1,0 +1,14 @@
+# Integration-test fixture: two unfinished tag lines to complete on.
+# 0-based line 5 is an opening bracket, 0-based line 11 a closing one.
+[TEST STEPS]
+    [STEP 1]
+        [STEP INPUTS]
+            [
+        [/STEP INPUTS]
+    [/STEP 1]
+    [STEP 2]
+        [STEP INPUTS]
+        [/STEP INPUTS]
+        [/
+    [/STEP 2]
+[/TEST STEPS]

@@ -1,4 +1,14 @@
+import type { CsvCellResult } from "./csv";
+import { describeCsvMiss } from "./csv";
+import { parseCsvCellRef } from "./fileRefs";
 import { parseSectionTagLine } from "./parseSectionTag";
+import {
+  SEC_EXTERNAL_VERIFY,
+  SEC_MANUAL_VERIFY,
+  SEC_STEP_INPUTS,
+  SEC_TEST_DEFINITION,
+  SEC_TEST_STEPS,
+} from "./sectionNames";
 import {
   COMPONENT_TAG_PATTERN,
   EnumDef,
@@ -28,6 +38,33 @@ export interface ComponentIssue {
   kind: IssueKind;
   /** Diagnostic severity; callers treat an absent value as "warning". */
   severity?: "error" | "warning";
+  /** Extra context a quick fix needs (see quickFixes.ts). Never shown. */
+  fix?: IssueFixData;
+}
+
+/**
+ * Data attached to an issue purely so a quick fix can be computed without
+ * re-deriving what the validator already knew. Reporting is unaffected.
+ */
+export interface IssueFixData {
+  /** unknownField: the message the enclosing block resolved to. */
+  messageFields?: FieldDef[];
+  /** unknownEnum / valueOutOfRange: the field being assigned. */
+  field?: FieldDef;
+  /** unknownEnum / valueOutOfRange: the value came from a CSV cell, not from the script text. */
+  fromCsv?: boolean;
+  /** valueOutOfRange: the numeric bounds that were checked. */
+  min?: number;
+  max?: number;
+  /**
+   * unbalancedTag: "orphanClose" is a closer with no opener; "unclosed" is an
+   * opener that was never closed.
+   */
+  unbalanced?: "orphanClose" | "unclosed";
+  /** unbalancedTag/unclosed: line of the closer that exposed it (absent = EOF). */
+  closerLine?: number;
+  /** unbalancedTag/orphanClose: sections open at that point, innermost first. */
+  openSections?: string[];
 }
 
 /**
@@ -37,25 +74,30 @@ export interface ComponentIssue {
  * for path resolution; the validator stays pure.
  *
  * Returns the cell value (already trimmed and unquoted), or undefined
- * if the file can't be read or the requested cell doesn't exist.
+ * if the file can't be read or the requested cell doesn't exist. The shared
+ * reader (csv.ts createCsvCellLookup) returns a CsvCellResult instead, which
+ * also says WHAT is missing — or that the address can't be resolved safely,
+ * in which case nothing is reported.
  */
 export type CsvLookup = (
   filename: string,
   line: number,
   col: number
-) => string | undefined;
+) => string | undefined | CsvCellResult;
 
 // Inline-capable tag scan for the component pass. The trailing `(\/?)` is the
 // one-liner form `[NAME/]` (see parseSectionTag.ts) — it opens AND closes, so
 // the connection name is still checked but nothing is pushed on the stack.
 const TAG_RE = /\[(\/?)([A-Za-z0-9_]+)(\/?)\]/g;
 // Field name may include dots (1553 `Mode.SelectedCourse`).
-const ASSIGNMENT_RE = /^(\s*)([A-Za-z_][A-Za-z0-9_.]*)\s*=\s*(.*)$/;
+export const ASSIGNMENT_RE = /^(\s*)([A-Za-z_][A-Za-z0-9_.]*)\s*=\s*(.*)$/;
 const RHS_IDENT_RE = /^[A-Za-z_][A-Za-z0-9_]*/;
 // `<filename>.csv line:<N> col:<M>` — the input-from-CSV pattern that
-// scripts use to pull a value out of a fixture spreadsheet at runtime.
-// Whitespace around `:` is tolerated.
-const CSV_REF_RE = /^([A-Za-z0-9_.\-]+\.csv)\s+line\s*:\s*(\d+)\s+col\s*:\s*(\d+)/i;
+// scripts use to pull a value out of a fixture spreadsheet at runtime — is
+// parsed by fileRefs.ts parseCsvCellRef (shared with the links / hover).
+// A value that starts with a `.csv` name but carries a %macro% is not one we
+// can resolve, and must not fall through to the literal checks either.
+const CSV_WITH_MACRO_RE = /^\S*\.csv\s[^#]*%|^[^\s#]*%[^\s#]*\.csv\s/i;
 const COMPONENT_TAG = COMPONENT_TAG_PATTERN;
 
 // "Parameter" fields TestPit accepts inside a message block in addition to the
@@ -153,18 +195,17 @@ function checkParameterValue(
 // This keeps the structural checks free of prose false-positives. The line is
 // classified by parseSectionTag.ts, which ports the reader's own grammar —
 // including the one-liner `[NAME/]` and the sloppy forms it repairs.
-const SEC_TEST_STEPS = "TEST STEPS";
-const SEC_TEST_DEFINITION = "TEST DEFINITION";
-const SEC_STEP_INPUTS = "STEP INPUTS";
-const SEC_MANUAL_VERIFY = "MANUAL_VERIFY";
-const SEC_EXTERNAL_VERIFY = "EXTERNAL_VERIFY";
 const A708_TAG_PREFIX = "708_";
 // occurrence/synchronize/match are output-only for EVERY bus
 // (ScriptMessageValidator.cpp outputFields), so inside a STEP INPUTS message they
 // are always an "unexpected output field in input message" — safe to flag
 // regardless of bus. Bus-specific output params (validity/angle/…) are
 // deliberately excluded to stay conservative.
-const OUTPUT_ONLY_IN_INPUT = new Set(["occurrence", "synchronize", "match"]);
+export const OUTPUT_ONLY_IN_INPUT: ReadonlySet<string> = new Set([
+  "occurrence",
+  "match",
+  "synchronize",
+]);
 
 interface StackEntry {
   name: string;
@@ -260,21 +301,10 @@ export function validateComponents(
         message: `Unknown field '${fieldName}' for message '${message.name}'.`,
         identifier: fieldName,
         kind: "unknownField",
+        fix: { messageFields: message.fields },
       });
       continue;
     }
-    // Validate against the enum table whenever the field has one — the type
-    // string varies across configs ("Enum", "Enum8", "Enum16", …), so the
-    // presence of an enum table is the reliable signal, not the type name.
-    if (!field.enums || field.enums.length === 0) {
-      // Non-enum (numeric) field: range-check a bare numeric-literal RHS
-      // against MinValue/MaxValue. Macros / CSV refs / ranges are skipped —
-      // the value may be resolved by a macro pass or include, so never guess.
-      checkNumericRange(field, line, lineNum, fieldName, issues);
-      continue;
-    }
-
-    // Validate the RHS identifier against the field's enum table.
     const eqIndex = line.indexOf("=");
     if (eqIndex === -1) {
       continue;
@@ -284,44 +314,84 @@ export function validateComponents(
       rhsStart += 1;
     }
     const rhsTail = line.slice(rhsStart);
+    // Validate against the enum table whenever the field has one — the type
+    // string varies across configs ("Enum", "Enum8", "Enum16", …), so the
+    // presence of an enum table is the reliable signal, not the type name.
+    const hasEnums = !!field.enums && field.enums.length > 0;
 
     // CSV reference form: `myfile.csv line:N col:M`. Look up the actual
-    // cell value and validate THAT against the field's enum table.
-    const csvMatch = CSV_REF_RE.exec(rhsTail);
-    if (csvMatch) {
-      const csvFile = csvMatch[1];
-      const csvLine = parseInt(csvMatch[2], 10);
-      const csvCol = parseInt(csvMatch[3], 10);
-      const refStartCol = rhsStart;
-      const refEndCol = rhsStart + csvMatch[0].length;
+    // cell value and validate THAT — against the enum table, or for a numeric
+    // field against its range — exactly as a literal would be.
+    const csvRef = parseCsvCellRef(rhsTail);
+    if (csvRef) {
       if (!csvLookup) {
         continue;
       }
-      const cellValue = csvLookup(csvFile, csvLine, csvCol);
-      if (cellValue === undefined) {
+      const where = `${csvRef.file} line:${csvRef.line} col:${csvRef.col}`;
+      const refStartCol = rhsStart;
+      const refEndCol = rhsStart + csvRef.length;
+      const cell = resolveCsvCell(csvLookup(csvRef.file, csvRef.line, csvRef.col), csvRef.line);
+      if (cell.skip) {
+        continue;
+      }
+      if (cell.value === undefined) {
         issues.push({
           line: lineNum,
           startCol: refStartCol,
           endCol: refEndCol,
-          message: `CSV cell '${csvFile}' line:${csvLine} col:${csvCol} not found (file unreadable or out-of-range).`,
-          identifier: csvMatch[0],
+          message: `CSV cell '${csvRef.file}' line:${csvRef.line} col:${csvRef.col} not found (${cell.why}).`,
+          identifier: rhsTail.slice(0, csvRef.length),
           kind: "unknownCsvCell",
         });
         continue;
       }
-      if (enumAccepts(field.enums, cellValue)) {
+      const cellValue = cell.value;
+      // A cell holding a %macro% is never judged — whether it is expanded is
+      // TestPit's business, and its real value isn't known here either way.
+      if (cellValue.includes("%")) {
+        continue;
+      }
+      if (!hasEnums) {
+        const out = numericRangeViolation(field, cellValue);
+        if (out) {
+          issues.push({
+            line: lineNum,
+            startCol: refStartCol,
+            endCol: refEndCol,
+            message: `Value ${out.literal} (from ${where}) for '${fieldName}' is outside the allowed range ${out.min}..${out.max}.`,
+            identifier: out.literal,
+            kind: "valueOutOfRange",
+            severity: "warning",
+            fix: { field, min: out.min, max: out.max, fromCsv: true },
+          });
+        }
+        continue;
+      }
+      if (enumAccepts(field.enums ?? [], cellValue)) {
         continue;
       }
       issues.push({
         line: lineNum,
         startCol: refStartCol,
         endCol: refEndCol,
-        message: `Unknown enum value '${cellValue}' (from ${csvFile} line:${csvLine} col:${csvCol}) for field '${fieldName}'. Valid: ${field.enums
+        message: `Unknown enum value '${cellValue}' (from ${where}) for field '${fieldName}'. Valid: ${(field.enums ?? [])
           .map((e) => e.name)
           .join(", ")}.`,
         identifier: cellValue,
         kind: "unknownEnum",
+        fix: { field, fromCsv: true },
       });
+      continue;
+    }
+    if (CSV_WITH_MACRO_RE.test(rhsTail)) {
+      continue;
+    }
+
+    if (!field.enums || field.enums.length === 0) {
+      // Non-enum (numeric) field: range-check a bare numeric-literal RHS
+      // against MinValue/MaxValue. Macros / ranges are skipped — the value
+      // may be resolved by a macro pass or include, so never guess.
+      checkNumericRange(field, line, lineNum, fieldName, issues);
       continue;
     }
 
@@ -346,6 +416,7 @@ export function validateComponents(
         .join(", ")}.`,
       identifier: value,
       kind: "unknownEnum",
+      fix: { field },
     });
   }
 
@@ -431,14 +502,71 @@ function checkEnumNumericValue(
     identifier: trimmed,
     kind: "unknownEnum",
     severity: "warning",
+    fix: { field },
   });
+}
+
+/**
+ * Normalise what a CsvLookup returned: the cell text, a reason it is missing,
+ * or "skip" when the address can't be resolved safely (nothing is reported).
+ */
+function resolveCsvCell(
+  result: string | undefined | CsvCellResult,
+  csvLine: number
+): { value?: string; why?: string; skip?: boolean } {
+  if (result === undefined) {
+    return { why: "file unreadable or out-of-range" };
+  }
+  if (typeof result === "string") {
+    return { value: result };
+  }
+  if (result.status === "ok") {
+    return { value: result.value };
+  }
+  if (result.status === "ambiguous") {
+    return { skip: true };
+  }
+  return { why: describeCsvMiss(result, csvLine) };
+}
+
+/**
+ * The ONE range rule for a numeric field, shared by literal values and values
+ * read from a CSV cell: only a bare numeric literal is judged, and only
+ * against a sensible closed range (min < max). Returns the violation, or
+ * undefined when the value is in range or can't be judged.
+ */
+function numericRangeViolation(
+  field: FieldDef,
+  rawValue: string
+): { literal: string; min: number; max: number } | undefined {
+  if (field.minValue === undefined || field.maxValue === undefined) {
+    return undefined;
+  }
+  const min = Number(field.minValue);
+  const max = Number(field.maxValue);
+  // Trust only a sensible closed range; skip placeholders like 0/0 or
+  // inverted bounds to avoid false positives.
+  if (!isFinite(min) || !isFinite(max) || !(max > min)) {
+    return undefined;
+  }
+  const literal = rawValue.trim();
+  // Bare numeric literal only — no %macro%, csv ref, range (a-b), or units.
+  if (!/^[+-]?\d+(?:\.\d+)?$/.test(literal)) {
+    return undefined;
+  }
+  const val = Number(literal);
+  if (!isFinite(val) || (val >= min && val <= max)) {
+    return undefined;
+  }
+  return { literal, min, max };
 }
 
 /**
  * Range-check a numeric field assignment against its MinValue/MaxValue.
  * Only fires for a bare numeric literal RHS and a sensible closed range
- * (min < max); anything with a macro, CSV reference, range, or units is
- * left alone — its real value may only be known after preprocessing.
+ * (min < max); anything with a macro, range, or units is left alone — its
+ * real value may only be known after preprocessing. (A CSV reference is
+ * resolved by the caller and judged by the same numericRangeViolation.)
  */
 function checkNumericRange(
   field: FieldDef,
@@ -447,16 +575,6 @@ function checkNumericRange(
   fieldName: string,
   issues: ComponentIssue[]
 ): void {
-  if (field.minValue === undefined || field.maxValue === undefined) {
-    return;
-  }
-  const min = Number(field.minValue);
-  const max = Number(field.maxValue);
-  // Trust only a sensible closed range; skip placeholders like 0/0 or
-  // inverted bounds to avoid false positives.
-  if (!isFinite(min) || !isFinite(max) || !(max > min)) {
-    return;
-  }
   const eqIndex = line.indexOf("=");
   if (eqIndex === -1) {
     return;
@@ -466,15 +584,11 @@ function checkNumericRange(
   if (hash !== -1) {
     rhs = rhs.slice(0, hash);
   }
-  const trimmed = rhs.trim();
-  // Bare numeric literal only — no %macro%, csv ref, range (a-b), or units.
-  if (!/^[+-]?\d+(?:\.\d+)?$/.test(trimmed)) {
+  const out = numericRangeViolation(field, rhs);
+  if (!out) {
     return;
   }
-  const val = Number(trimmed);
-  if (!isFinite(val) || (val >= min && val <= max)) {
-    return;
-  }
+  const { literal: trimmed, min, max } = out;
   const litStart = eqIndex + 1 + rhs.indexOf(trimmed);
   issues.push({
     line: lineNum,
@@ -484,6 +598,7 @@ function checkNumericRange(
     identifier: trimmed,
     kind: "valueOutOfRange",
     severity: "warning",
+    fix: { field, min, max },
   });
 }
 
@@ -561,6 +676,10 @@ export function validateStructure(documentText: string): ComponentIssue[] {
             identifier: name,
             kind: "unbalancedTag",
             severity: "error",
+            fix: {
+              unbalanced: "orphanClose",
+              openSections: stack.map((s) => s.name).reverse(),
+            },
           });
         } else {
           // Any tags opened after the match were never closed.
@@ -574,6 +693,7 @@ export function validateStructure(documentText: string): ComponentIssue[] {
               identifier: o.name,
               kind: "unbalancedTag",
               severity: "error",
+              fix: { unbalanced: "unclosed", closerLine: lineNum },
             });
           }
           stack.splice(matchIdx, stack.length - matchIdx);
@@ -678,6 +798,7 @@ export function validateStructure(documentText: string): ComponentIssue[] {
       identifier: o.name,
       kind: "unbalancedTag",
       severity: "error",
+      fix: { unbalanced: "unclosed" },
     });
   }
 

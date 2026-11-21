@@ -1,0 +1,27 @@
+# Integration-test fixture: a structurally clean script.
+# The indentation below is deliberately flat, so that
+# Format Document has something to change.
+[TEST DEFINITION]
+name = Outline fixture
+[/TEST DEFINITION]
+
+[TEST STEPS]
+[STEP 1]
+[STEP DEFINITION]
+description = First step
+[/STEP DEFINITION]
+[STEP INPUTS]
+[/STEP INPUTS]
+[STEP OUTPUTS]
+[/STEP OUTPUTS]
+[/STEP 1]
+[STEP 2]
+[STEP DEFINITION]
+description = Second step
+[/STEP DEFINITION]
+[STEP INPUTS]
+[/STEP INPUTS]
+[STEP OUTPUTS]
+[/STEP OUTPUTS]
+[/STEP 2]
+[/TEST STEPS]

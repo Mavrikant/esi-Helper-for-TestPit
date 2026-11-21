@@ -1,5 +1,5 @@
 import * as assert from "assert";
-import { resolveContext } from "../../lib/esiContext";
+import { findEnclosingBlock, resolveContext } from "../../lib/esiContext";
 
 describe("esiContext.resolveContext", () => {
   it("returns 'other' for an empty document", () => {
@@ -26,6 +26,34 @@ describe("esiContext.resolveContext", () => {
     const text = "[/429_";
     const ctx = resolveContext(text, 0, 6);
     assert.notStrictEqual(ctx.kind, "tagName");
+  });
+
+  it("returns 'closeTagName' with the text after [/ as the partial", () => {
+    const ctx = resolveContext("    [/STEP IN", 0, 13);
+    assert.deepStrictEqual(ctx, { kind: "closeTagName", partial: "STEP IN" });
+    assert.deepStrictEqual(resolveContext("[/]", 0, 2), {
+      kind: "closeTagName",
+      partial: "",
+    });
+  });
+
+  it("is not 'closeTagName' once the cursor is past the closing ]", () => {
+    const text = ["[429_A]", "    time = 1", "[/429_A]"].join("\n");
+    assert.notStrictEqual(resolveContext(text, 2, 8).kind, "closeTagName");
+  });
+
+  it("still resolves the enclosing message across earlier closed blocks", () => {
+    // Regression guard for the closer walk in findEnclosingMessage.
+    const text = [
+      "[429_A]",
+      "    time = 1",
+      "[/429_A]",
+      "[429_B]",
+      "    ",
+      "[/429_B]",
+    ].join("\r\n");
+    const ctx = resolveContext(text, 4, 4);
+    assert.deepStrictEqual(ctx, { kind: "fieldName", messageName: "429_B" });
   });
 
   it("returns 'fieldName' on a blank line inside an open component block", () => {
@@ -119,5 +147,44 @@ describe("esiContext.resolveContext", () => {
     // component tag, so it shouldn't be returned as the enclosing message.
     const text = "[STEP 10]\n";
     assert.strictEqual(resolveContext(text, 0, 9).kind, "other");
+  });
+
+  describe("findEnclosingBlock (tag grammar from parseSectionTag)", () => {
+    it("returns the block's name and opening line", () => {
+      const lines = ["[STEP INPUTS]", "  [429_A]", "    time = 1", "  [/429_A]", "[/STEP INPUTS]"];
+      assert.deepStrictEqual(findEnclosingBlock(lines, 2), { name: "429_A", line: 1 });
+      assert.strictEqual(findEnclosingBlock(lines, 4), undefined);
+    });
+
+    it("is never enclosed by a one-liner", () => {
+      const lines = ["[429_A/]", "    "];
+      assert.strictEqual(findEnclosingBlock(lines, 1), undefined);
+      assert.strictEqual(resolveContext(lines.join("\n"), 1, 4).kind, "other");
+      // …and a one-liner inside a block does not hide the block.
+      assert.deepStrictEqual(findEnclosingBlock(["[429_A]", "[DIS_X/]", ""], 2), { name: "429_A", line: 0 });
+    });
+
+    it("reads the sloppy forms TestPit repairs", () => {
+      assert.deepStrictEqual(findEnclosingBlock(["[[429_A]]", ""], 1), { name: "429_A", line: 0 });
+      assert.deepStrictEqual(findEnclosingBlock(["[429_A] junk", ""], 1), { name: "429_A", line: 0 });
+      assert.strictEqual(findEnclosingBlock(["[429_A]", "[//429_A]", ""], 2), undefined);
+    });
+
+    it("ignores a tag inside a comment or in the middle of a line", () => {
+      assert.strictEqual(findEnclosingBlock(["# [429_A]", ""], 1), undefined);
+      assert.deepStrictEqual(findEnclosingBlock(["[429_A]", "  x = 1 # [/429_A]", ""], 2), {
+        name: "429_A",
+        line: 0,
+      });
+    });
+
+    it("pairs each close with one opener of the same name", () => {
+      const lines = ["[429_A]", "[429_A]", "[/429_A]", ""];
+      assert.deepStrictEqual(findEnclosingBlock(lines, 3), { name: "429_A", line: 0 });
+    });
+
+    it("walks past structural sections to the component above", () => {
+      assert.deepStrictEqual(findEnclosingBlock(["[429_A]", "[NOTES]", ""], 2), { name: "429_A", line: 0 });
+    });
   });
 });

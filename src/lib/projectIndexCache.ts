@@ -21,6 +21,31 @@ import { getOutputChannel } from "./outputChannel";
 let cachedIndex: XmlIndex | undefined;
 let cachedKey: string | undefined;
 
+const indexListeners = new Set<() => void>();
+
+/**
+ * Fires after the index for the active profile was rebuilt or dropped: on a
+ * profile switch / registry reload AND when a resolved config file changes on
+ * disk (which raises no onActiveProfileChanged). Anything that shows
+ * index-derived results the editor does not re-request by itself (component
+ * diagnostics, inlay hints, semantic tokens) subscribes to this one. Only
+ * fires while registerIndexLifecycle() is registered.
+ */
+export function onIndexChanged(listener: () => void): { dispose(): void } {
+  indexListeners.add(listener);
+  return { dispose: () => void indexListeners.delete(listener) };
+}
+
+function fireIndexChanged(): void {
+  for (const listener of Array.from(indexListeners)) {
+    try {
+      listener();
+    } catch {
+      // One failing subscriber must not stop the others.
+    }
+  }
+}
+
 export function getActiveProjectIndex(): XmlIndex | undefined {
   const configs = getActiveConfigs();
   if (Object.keys(configs).length === 0) {
@@ -67,6 +92,7 @@ export function registerIndexLifecycle(): vscode.Disposable {
     const onChange = (): void => {
       cachedKey = undefined; // force rebuild
       rebuild(getActiveProfileName());
+      fireIndexChanged();
     };
     for (const file of Object.values(getActiveConfigs())) {
       if (!file) {
@@ -92,6 +118,7 @@ export function registerIndexLifecycle(): vscode.Disposable {
       rebuild(getActiveProfileName());
     }
     setupWatchers();
+    fireIndexChanged();
   };
 
   const profileChangeSub = onActiveProfileChanged(() => reload());
