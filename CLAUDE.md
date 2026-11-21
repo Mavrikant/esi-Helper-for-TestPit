@@ -110,7 +110,7 @@ walkthrough/                   # markdown for contributes.walkthroughs (ships in
 | Command | What it does |
 |---|---|
 | `npm run compile` | `tsc -p ./` → `out/` |
-| `npm test` | `compile` then `mocha` (`out/test/unit/**/*.test.js`) — 988 passing |
+| `npm test` | `compile` then `mocha` (`out/test/unit/**/*.test.js`) — 1010 passing |
 | `npm run coverage` | `c8 npm test` (config in [.c8rc.json](.c8rc.json); vscode-touching glue excluded) |
 | `npm run lint` | ESLint (flat config) — needs Node ≥ 20.19 / 22 |
 | F5 | Extension Development Host (uses [.vscode/launch.json](.vscode/launch.json); run `npm run watch` alongside) |
