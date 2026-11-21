@@ -1,7 +1,7 @@
 import * as vscode from "vscode";
 import * as fs from "fs";
 import * as path from "path";
-import { toDiagnostic } from "../componentDiagnostics";
+import { INCLUDER_DELAY_MS, toDiagnostic } from "../componentDiagnostics";
 import { createCsvCellLookup } from "../lib/csv";
 import { getOutputChannel } from "../lib/outputChannel";
 import { getActiveProfileName } from "../lib/profileRegistry";
@@ -18,7 +18,11 @@ import {
   summarizeWorkspace,
   unreadableFile,
 } from "../lib/workspaceValidation";
-import { createMacroResolver, includeIdentity } from "../providers/macroResolver";
+import {
+  createMacroResolver,
+  createOutsideIncludeWatchers,
+  includeIdentity,
+} from "../providers/macroResolver";
 
 export const VALIDATE_WORKSPACE_COMMAND = "extension.validateWorkspace";
 export const CLEAR_WORKSPACE_VALIDATION_COMMAND = "extension.clearWorkspaceValidation";
@@ -47,8 +51,8 @@ function findOpenDocument(uri: vscode.Uri): vscode.TextDocument | undefined {
 type CheckResult =
   | {
       issues: EsiIssue[];
-      /** includeIdentity of every file an include names, read or not. */
-      includes: Set<string>;
+      /** Every file an include names, read or not: includeIdentity → path. */
+      includes: Map<string, string>;
     }
   | { error: string };
 
@@ -73,7 +77,7 @@ async function checkFile(
   }
   // createMacroResolver only needs the path and the text of the script.
   const scriptLike = { uri, getText: () => text } as vscode.TextDocument;
-  const includes = new Set<string>();
+  const includes = new Map<string, string>();
   try {
     return {
       issues: collectEsiIssues(text, {
@@ -81,7 +85,7 @@ async function checkFile(
         index: getActiveProjectIndex(),
         csvLookup: createCsvCellLookup(uri.fsPath),
         macroResolver: createMacroResolver(scriptLike, (fullPath) =>
-          includes.add(includeIdentity(fullPath))
+          includes.set(includeIdentity(fullPath), fullPath)
         ),
       }),
       includes,
@@ -97,9 +101,10 @@ export function registerValidateWorkspace(): vscode.Disposable {
   const collection = vscode.languages.createDiagnosticCollection(COLLECTION_NAME);
   // Files of the last run (uri string -> uri); empty once cleared.
   const covered = new Map<string, vscode.Uri>();
-  // Covered file (uri string) -> the files its check read through includes:
-  // its %MACRO% results depend on their text too.
-  const includesOf = new Map<string, Set<string>>();
+  // Covered file (uri string) -> the files its check read through includes
+  // (includeIdentity -> full path): its %MACRO% results depend on their text
+  // too.
+  const includesOf = new Map<string, Map<string, string>>();
   // Bumped whenever results are invalidated; a run in flight notices and stops.
   let generation = 0;
   let running = false;
@@ -111,7 +116,10 @@ export function registerValidateWorkspace(): vscode.Disposable {
     generation++;
     covered.clear();
     includesOf.clear();
+    changedIds.clear();
+    changedKeys.clear();
     collection.clear();
+    watchOutside();
   };
 
   const isLive = (doc: vscode.TextDocument | undefined): boolean =>
@@ -136,6 +144,7 @@ export function registerValidateWorkspace(): vscode.Disposable {
     }
     if ("includes" in result) {
       includesOf.set(uri.toString(), result.includes);
+      watchOutside();
     }
     // Re-read the open state: the file may have been (re)opened as esi while
     // it was being read, and then the live collection owns it.
@@ -221,6 +230,9 @@ export function registerValidateWorkspace(): vscode.Disposable {
         }
       }
     );
+    // Once per run rather than per file: the union of every covered file's
+    // includes.
+    watchOutside();
 
     if (invalidated) {
       void vscode.window.showWarningMessage(
@@ -274,37 +286,89 @@ export function registerValidateWorkspace(): vscode.Disposable {
     if (covered.has(doc.uri.toString())) {
       void recheck(doc.uri, true);
     }
+    // A covered file's check reads an include from its editor while it is
+    // open: with the buffer gone (unsaved edits too), the disk counts again.
+    recheckIncluders(doc.uri);
+  });
+  const onEdit = vscode.workspace.onDidChangeTextDocument((event) => {
+    // Back to its text on disk (File: Revert, undo to the saved state, a
+    // save): what a covered file read from this buffer may be out of date.
+    // Not per keystroke — a dirty buffer is followed again once it is saved,
+    // reverted or closed.
+    if (!event.document.isDirty) {
+      recheckIncluders(event.document.uri);
+    }
   });
 
-  /** A file changed on disk: re-check the covered files that include it. */
+  // Files changed since the last includer pass (includeIdentity), and the
+  // covered ones among them (uri strings; re-checked on their own).
+  const changedIds = new Set<string>();
+  const changedKeys = new Set<string>();
+  let includerTimer: ReturnType<typeof setTimeout> | undefined;
+
+  /**
+   * A file changed: re-check (debounced, as the live check does) the covered
+   * files that include it — each once per burst, however many of its
+   * includes changed (a checkout rewriting the shared utility scripts).
+   */
   const recheckIncluders = (uri: vscode.Uri): void => {
-    const changed = includeIdentity(path.resolve(uri.fsPath));
-    for (const [key, includes] of includesOf) {
-      const includer = covered.get(key);
-      if (includer && key !== uri.toString() && includes.has(changed)) {
-        void recheck(includer, false);
-      }
+    if (uri.scheme !== "file" || includesOf.size === 0) {
+      return;
     }
+    changedIds.add(includeIdentity(path.resolve(uri.fsPath)));
+    changedKeys.add(uri.toString());
+    if (includerTimer) {
+      clearTimeout(includerTimer);
+    }
+    includerTimer = setTimeout(() => {
+      includerTimer = undefined;
+      const ids = Array.from(changedIds);
+      const keys = new Set(changedKeys);
+      changedIds.clear();
+      changedKeys.clear();
+      for (const [key, includes] of includesOf) {
+        const includer = covered.get(key);
+        if (includer && !keys.has(key) && ids.some((id) => includes.has(id))) {
+          void recheck(includer, false);
+        }
+      }
+    }, INCLUDER_DELAY_MS);
   };
 
   // Keep the snapshot honest when a covered file — or a file one of them
   // includes — changes on disk.
-  const watcher = vscode.workspace.createFileSystemWatcher(ESI_GLOB);
-  const onDiskChange = watcher.onDidChange((uri) => {
+  const onDiskChange = (uri: vscode.Uri): void => {
     if (covered.has(uri.toString())) {
       void recheck(uri, false);
     }
     recheckIncluders(uri);
-  });
-  // A created file may resolve an include that could not be read before.
-  const onDiskCreate = watcher.onDidCreate(recheckIncluders);
-  const onDiskDelete = watcher.onDidDelete((uri) => {
+  };
+  const onDiskDelete = (uri: vscode.Uri): void => {
     if (covered.delete(uri.toString())) {
-      includesOf.delete(uri.toString());
+      if (includesOf.delete(uri.toString())) {
+        watchOutside();
+      }
       collection.delete(uri);
     }
     recheckIncluders(uri);
-  });
+  };
+  const wire = (watcher: vscode.FileSystemWatcher): vscode.Disposable[] => [
+    watcher.onDidChange(onDiskChange),
+    // A created file may resolve an include that could not be read before.
+    watcher.onDidCreate(recheckIncluders),
+    watcher.onDidDelete(onDiskDelete),
+  ];
+  const watcher = vscode.workspace.createFileSystemWatcher(ESI_GLOB);
+  const onDisk = wire(watcher);
+  // Included files outside the workspace folders, which `watcher` does not
+  // see.
+  const outside = createOutsideIncludeWatchers(wire);
+  function watchOutside(): void {
+    outside.update(
+      Array.from(includesOf.values()).flatMap((includes) => Array.from(includes.values()))
+    );
+  }
+  const onFolders = vscode.workspace.onDidChangeWorkspaceFolders(() => watchOutside());
 
   // Results were computed against the old index (profile switch, registry
   // reload, config XML edited): showing them on would be misleading, and
@@ -326,10 +390,19 @@ export function registerValidateWorkspace(): vscode.Disposable {
     ),
     onOpen,
     onClose,
+    onEdit,
     watcher,
-    onDiskChange,
-    onDiskCreate,
-    onDiskDelete,
-    onIndexChange
+    ...onDisk,
+    outside,
+    onFolders,
+    onIndexChange,
+    {
+      dispose: () => {
+        if (includerTimer) {
+          clearTimeout(includerTimer);
+          includerTimer = undefined;
+        }
+      },
+    }
   );
 }

@@ -533,6 +533,24 @@ describe("tagCompletion", () => {
       assert.match(e.insertText, /^STEP \$\{1:\d+\}$/);
     });
 
+    it("proposes a paired step its own number, so the pair is not renumbered", () => {
+      // The next free number would be 30; linked editing would mirror it into
+      // [/STEP 25] (or, with it off, break the pair).
+      const lines = [
+        "[TEST STEPS]",
+        "    [STEP 10]",
+        "    [/STEP 10]",
+        "    [STEP 20]",
+        "    [/STEP 20]",
+        "    [STEP| 25]",
+        "    [/STEP 25]",
+        "[/TEST STEPS]",
+      ];
+      assert.strictEqual(entry(complete(lines), "STEP").insertText, "STEP ${1:25}");
+      const single = ["[TEST STEPS]", "    [|STEP 5]", "    [/STEP 5]", "[/TEST STEPS]"];
+      assert.strictEqual(entry(complete(single), "STEP").insertText, "STEP ${1:5}");
+    });
+
     it("still writes the bracket for a tag with no partner", () => {
       const e = entry(complete(["[STEP 10]", "    [STEP IN|PUTS]", "[/STEP 10]"]), "STEP OUTPUTS");
       assert.strictEqual(e.insertText, "STEP OUTPUTS]");

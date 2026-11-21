@@ -29,7 +29,11 @@ describe("component diagnostics (glue)", () => {
     obj[key] = value;
   };
   const listeners: Record<string, (arg: any) => void> = {};
+  /** Every watcher made: its pattern, listeners and whether it was disposed. */
+  let watchers: Array<{ pattern: any; on: Record<string, (uri: any) => void>; disposed: boolean }>;
   const published = new Map<string, string[]>();
+  /** How many times each document's diagnostics were set. */
+  const passes = new Map<string, number>();
   let dir: string;
   let live: vscode.Disposable | undefined;
 
@@ -47,6 +51,8 @@ describe("component diagnostics (glue)", () => {
   beforeEach(() => {
     dir = fs.mkdtempSync(path.join(os.tmpdir(), "esi-cd-"));
     published.clear();
+    passes.clear();
+    watchers = [];
     for (const [event, key] of [
       ["onDidChangeTextDocument", "change"],
       ["onDidOpenTextDocument", "open"],
@@ -57,14 +63,26 @@ describe("component diagnostics (glue)", () => {
         return { dispose() {} };
       });
     }
-    patch(mock.workspace, "createFileSystemWatcher", () => ({
-      onDidChange(l: any) { listeners.diskChange = l; return { dispose() {} }; },
-      onDidCreate(l: any) { listeners.diskCreate = l; return { dispose() {} }; },
-      onDidDelete(l: any) { listeners.diskDelete = l; return { dispose() {} }; },
-      dispose() {},
-    }));
+    patch(mock.workspace, "createFileSystemWatcher", (pattern: any) => {
+      const w = { pattern, on: {} as Record<string, (uri: any) => void>, disposed: false };
+      watchers.push(w);
+      const listen = (event: string, key: string) => (l: any) => {
+        w.on[event] = l;
+        listeners[key] = l;
+        return { dispose() {} };
+      };
+      return {
+        onDidChange: listen("change", "diskChange"),
+        onDidCreate: listen("create", "diskCreate"),
+        onDidDelete: listen("delete", "diskDelete"),
+        dispose() { w.disposed = true; },
+      };
+    });
     patch(mock.languages, "createDiagnosticCollection", () => ({
-      set: (uri: any, diags: any[]) => published.set(uri.toString(), diags.map((d) => d.code)),
+      set: (uri: any, diags: any[]) => {
+        passes.set(uri.toString(), (passes.get(uri.toString()) ?? 0) + 1);
+        published.set(uri.toString(), diags.map((d) => d.code));
+      },
       delete: (uri: any) => published.delete(uri.toString()),
       clear() {},
       dispose() {},
@@ -147,5 +165,58 @@ describe("component diagnostics (glue)", () => {
     listeners.diskChange(common);
     await sleep(400);
     assert.deepStrictEqual(codes(root), []);
+  });
+
+  it("re-checks the includers once typing in an included file pauses", async () => {
+    const root = docOf("root.esi", () => ROOT);
+    const included = docOf("common.esi", () => WITHOUT);
+    mock.workspace.textDocuments = [root, included];
+    live = registerComponentDiagnostics();
+    const key = root.uri.toString();
+    assert.strictEqual(passes.get(key), 1);
+    // A key every 200 ms (t = 0, 200, 400): each one restarts the 300 ms
+    // quiet period, so the one pass comes at t = 700.
+    for (let i = 0; i < 3; i++) {
+      if (i > 0) {
+        await sleep(200);
+      }
+      listeners.change({ document: included, contentChanges: [{ text: "x" }] });
+    }
+    await sleep(150);
+    assert.strictEqual(passes.get(key), 1, "no pass while typing goes on");
+    await sleep(300);
+    assert.strictEqual(passes.get(key), 2);
+  });
+
+  it("watches an include outside the workspace folders on its own", async () => {
+    const ws = path.join(dir, "ws");
+    fs.mkdirSync(ws);
+    fs.mkdirSync(path.join(dir, "lib"));
+    const outsidePath = path.join(dir, "lib", "common.esi");
+    fs.writeFileSync(outsidePath, WITHOUT);
+    fs.writeFileSync(path.join(ws, "inner.esi"), WITHOUT);
+    patch(mock.workspace, "workspaceFolders", [{ uri: vscode.Uri.file(ws) }]);
+    const text = ROOT.replace("include file = common.esi", "include file = ..\\lib\\common.esi\r\n    include file = inner.esi");
+    const root = docOf(path.join("ws", "root.esi"), () => text);
+    mock.workspace.textDocuments = [root];
+    live = registerComponentDiagnostics();
+    assert.deepStrictEqual(codes(root), ["undefinedMacro"]);
+    // The `**/*.esi` watcher, and one for the include outside `ws` only.
+    const own = watchers.filter((w) => typeof w.pattern !== "string");
+    assert.strictEqual(own.length, 1);
+    assert.strictEqual(path.resolve(own[0].pattern.base), path.join(dir, "lib"));
+    assert.strictEqual(own[0].pattern.pattern, "common.esi");
+
+    fs.writeFileSync(outsidePath, WITH);
+    const later = new Date(Date.now() + 5000);
+    fs.utimesSync(outsidePath, later, later);
+    own[0].on.change(vscode.Uri.file(outsidePath));
+    await sleep(400);
+    assert.deepStrictEqual(codes(root), []);
+
+    // Nothing includes it any more: its watcher goes.
+    mock.workspace.textDocuments = [];
+    listeners.close(root);
+    assert.strictEqual(own[0].disposed, true);
   });
 });

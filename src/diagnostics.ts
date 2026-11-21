@@ -1,3 +1,4 @@
+import { createHash } from "crypto";
 import * as vscode from "vscode";
 import { parseValidityOutput, type ValidityIssue } from "./lib/parseValidityOutput";
 import { runValidityCheckAsync } from "./lib/testpitRunner";
@@ -92,9 +93,11 @@ export interface ValidityRunHooks {
   onCommand?: (command: string) => void;
   /**
    * False: return the result without putting it in the Problems panel. For
-   * a document the caller opened only to validate it (Test Explorer): VS Code
-   * may dispose such a document at any time, and closing it would remove
-   * its problems again.
+   * a document no editor holds, opened by the caller only to validate it
+   * (Test Explorer): VS Code may dispose such a document at any time, and
+   * closing it would remove its problems again. It is published all the
+   * same if an editor shows the document by the time TestPit is done;
+   * otherwise the live check takes the document once one does.
    */
   publish?: boolean;
 }
@@ -105,8 +108,10 @@ export interface ValidityRunResult {
   output: string;
   issues: ValidityIssue[];
   /**
-   * False when a newer result was already shown, the document was closed,
-   * the profile changed during the run, or `hooks.publish` was false.
+   * False when the result was not put in the Problems panel: a newer one was
+   * already shown, the document was closed, the profile or the TestPit
+   * executable changed during the run, the text of a document no editor
+   * shows changed during it, or `hooks.publish` was false.
    */
   published: boolean;
 }
@@ -160,9 +165,10 @@ export function runValidityCheckForDocument(
 }
 
 /**
- * Live validation is for on-disk .esi documents only. A virtual document
- * (`git:` side of a diff, …) shares its fsPath with the working copy, and
- * both would write / delete the same `<path>.temp` file.
+ * Live validation is for on-disk .esi documents only. An untitled one has no
+ * folder for the temp copy (its relative includes could not resolve), and a
+ * virtual document (`git:` side of a diff, …) is a snapshot nobody types
+ * into — the explicit "Run Validity Check" still takes it.
  */
 export function isLiveTarget(document: vscode.TextDocument | undefined): document is vscode.TextDocument {
   return (
@@ -273,8 +279,11 @@ function handleConfigurationChange(event: vscode.ConfigurationChangeEvent): void
     scheduleOpenDocuments(false);
   } else {
     // Drop debounced live runs. A run in flight finishes; explicit
-    // "Run Validity Check" runs are unaffected by the setting.
+    // "Run Validity Check" runs are unaffected by the setting. Nothing checks
+    // a document when it is shown any more, so the marks go too: turning the
+    // setting back on marks the background documents again.
     scheduler.cancelAll();
+    notRechecked.clear();
   }
 }
 
@@ -320,9 +329,11 @@ async function validateDocument(
       hooks?.onCommand?.(command);
       const output = await runValidityCheckAsync(command);
       const issues = parseValidityOutput(output, text.split(/\r?\n/));
-      const published =
-        hooks?.publish !== false &&
-        publish(document, version, generation, issues);
+      if (hooks?.publish === false && !isVisible(key)) {
+        checkWhenShown(document);
+        return { command, output, issues, published: false };
+      }
+      const published = publish(document, version, generation, exe, issues);
       return { command, output, issues, published };
     });
   } finally {
@@ -331,20 +342,51 @@ async function validateDocument(
 }
 
 /**
+ * A document validated without publishing (no editor holds it): the live
+ * check takes it once an editor shows it, so its problems then appear in the
+ * Problems panel — and stay, the editor keeping the document open.
+ */
+function checkWhenShown(document: vscode.TextDocument): void {
+  if (
+    disposed ||
+    !isLiveTarget(document) ||
+    !isLiveValidationEnabled() ||
+    !getTestpitExe()
+  ) {
+    return;
+  }
+  notRechecked.add(document.uri.toString());
+}
+
+/**
  * Where the temp copy goes: beside the script, so its relative includes
  * resolve as for the script itself. A virtual document (`git:` side of a
  * diff, …) has the working copy's fsPath but is another document to the
- * scheduler, so a run for each can be in flight at once: the scheme keeps
- * their `.temp` files apart.
+ * scheduler, so a run for each can be in flight at once: the scheme — and
+ * for two revisions of one file (`git:` HEAD and index, Timeline), which
+ * differ only in the query — a hash of the query keep their `.temp` files
+ * apart.
  */
 export function tempBase(uri: vscode.Uri): string {
-  return uri.scheme === "file" ? uri.fsPath : `${uri.fsPath}.${uri.scheme}`;
+  if (uri.scheme === "file") {
+    return uri.fsPath;
+  }
+  const revision =
+    uri.query || uri.fragment
+      ? "-" +
+        createHash("sha1")
+          .update(`${uri.query ?? ""}#${uri.fragment ?? ""}`)
+          .digest("hex")
+          .slice(0, 8)
+      : "";
+  return `${uri.fsPath}.${uri.scheme}${revision}`;
 }
 
 function publish(
   document: vscode.TextDocument,
   version: number,
   generation: number,
+  exe: string,
   issues: ValidityIssue[]
 ): boolean {
   // Closed while TestPit was running: its diagnostics were cleared on close.
@@ -352,16 +394,21 @@ function publish(
   if (disposed || document.isClosed) {
     return false;
   }
-  // Started before a profile switch / registry reload, so produced with the
-  // previous profile's config files. A shown document already has a re-run
-  // queued (scheduleOpenDocuments); a background one is checked when shown.
-  if (generation !== profileGeneration) {
+  // Started before a profile switch / registry reload (so produced with the
+  // previous profile's config files), or run with a TestPit.exe that is no
+  // longer the configured one — repointed during the run, or after a Test
+  // Explorer run read it. While the live check is on, a shown document gets
+  // a re-run (scheduleOpenDocuments) and a background one is checked when
+  // shown.
+  if (generation !== profileGeneration || exe !== getTestpitExe()) {
     return false;
   }
   const key = document.uri.toString();
   // The stale results of a background document were dropped: a result for
-  // older text must not bring them back, nor cancel its check on show.
-  if (notRechecked.has(key) && version !== document.version) {
+  // older text must not bring them back, nor cancel its check on show. A
+  // shown document is left to the version gate, as any other: its newer
+  // text gets a run of its own.
+  if (notRechecked.has(key) && !isVisible(key) && version !== document.version) {
     return false;
   }
   if (!versionGate.accept(key, version)) {

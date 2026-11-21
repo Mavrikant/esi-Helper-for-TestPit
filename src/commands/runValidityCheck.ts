@@ -1,7 +1,7 @@
 import * as vscode from "vscode";
 import { runValidityCheckForDocument } from "../diagnostics";
 import { getOutputChannel } from "../lib/outputChannel";
-import { summarizeValidity } from "../lib/validityResults";
+import { NOT_PUBLISHED_NOTE, summarizeValidity } from "../lib/validityResults";
 import { ensureTestpitExe, getActiveProfileName } from "../lib/profileRegistry";
 
 export function registerRunValidityCheck(): vscode.Disposable {
@@ -58,7 +58,13 @@ export function registerRunValidityCheck(): vscode.Disposable {
       channel.show(true);
 
       const summary = summarizeValidity(result.output, result.issues);
-      if (summary.outcome === "clean") {
+      if (!result.published) {
+        // The Problems panel does not show this result: say so, rather than
+        // report counts nothing on screen matches.
+        void vscode.window.showWarningMessage(
+          `${summary.message} ${NOT_PUBLISHED_NOTE}`
+        );
+      } else if (summary.outcome === "clean") {
         void vscode.window.showInformationMessage(summary.message);
       } else if (summary.outcome === "warnings") {
         void vscode.window.showWarningMessage(summary.message);

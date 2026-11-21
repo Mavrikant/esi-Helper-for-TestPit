@@ -170,3 +170,10 @@ export function summarizeValidity(
   }
   return { outcome, errors, warnings, unlocated, unlocatedErrors, message };
 }
+
+/**
+ * Added to the "Run Validity Check" summary when its result was not put in
+ * the Problems panel (`ValidityRunResult.published` false).
+ */
+export const NOT_PUBLISHED_NOTE =
+  "Not put in the Problems panel: the script, the profile or the TestPit executable changed while TestPit was running (or the script was closed). Run the check again.";

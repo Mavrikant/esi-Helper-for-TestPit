@@ -130,6 +130,21 @@ describe("codeLens provider (glue)", () => {
     assert.strictEqual(lenses[2].range.start.line, 1);
   });
 
+  it("gives the summary of a step with nothing to fold a command that does nothing", async () => {
+    // An empty command id fails when picked from "Show CodeLens Commands for
+    // Current Line".
+    const lenses = provider.provideCodeLenses(
+      fakeDocument(["[TEST STEPS]", "    [STEP 10/]", "[/TEST STEPS]"].join("\r\n"))
+    );
+    const summary = lenses.find((l: any) => l.range.start.line === 1);
+    assert.ok(summary);
+    assert.strictEqual(summary.command.command, "extension.esiLens.none");
+    assert.strictEqual(summary.command.arguments, undefined);
+    assert.strictEqual(typeof commands["extension.esiLens.none"], "function");
+    await commands["extension.esiLens.none"]();
+    assert.deepStrictEqual(executed, []);
+  });
+
   it("passes the lens's own document to Validate / Open with TestPit", () => {
     // A lens clicked in an editor group that is not the active one must not
     // act on the active editor's file.

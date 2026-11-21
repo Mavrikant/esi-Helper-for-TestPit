@@ -6,6 +6,7 @@ import {
   validateStructure,
 } from "../../lib/componentValidator";
 import type { CsvCellResult } from "../../lib/csv";
+import { findEnclosingBlock } from "../../lib/esiContext";
 
 const FIXTURE_DIR = path.resolve(
   __dirname,
@@ -353,6 +354,61 @@ describe("componentValidator", () => {
     // No unknown connection for the commented-out tag, and no phantom
     // component scope that would flag `text` as an unknown field.
     assert.deepStrictEqual(validateComponents(text, idx), []);
+  });
+
+  it("ends a block left open with the section around it, as findEnclosingBlock does", () => {
+    // The connection block is never closed; [/STEP INPUTS] ends it
+    // (validateStructure reports it), so [STEP OUTPUTS] holds no block.
+    const lines = [
+      "[TEST STEPS]",
+      "[STEP 10]",
+      "[STEP INPUTS]",
+      "[429_L100SelectedCourseBNR_input1]",
+      "SDI = INSTALLATION_NUMBER_ONE",
+      "[/STEP INPUTS]",
+      "[STEP OUTPUTS]",
+      "SDI = BOGUS",
+      "[/STEP OUTPUTS]",
+      "[/STEP 10]",
+      "[/TEST STEPS]",
+    ];
+    const text = lines.join("\r\n");
+    assert.deepStrictEqual(validateComponents(text, idx), []);
+    assert.strictEqual(findEnclosingBlock(lines, 7), undefined);
+    // Inside the block it still checks.
+    assert.deepStrictEqual(
+      validateComponents(text.replace("INSTALLATION_NUMBER_ONE", "NOPE"), idx).map((i) => [i.line, i.kind]),
+      [[4, "unknownEnum"]]
+    );
+  });
+
+  it("reads a value after a tab, as TestPit does", () => {
+    const text = [
+      "[429_L100SelectedCourseBNR_input1]",
+      "    SDI =\tNOPE",
+      "[/429_L100SelectedCourseBNR_input1]",
+    ].join("\n");
+    assert.deepStrictEqual(
+      validateComponents(text, idx).map((i) => [i.line, i.kind, i.startCol, i.endCol]),
+      [[1, "unknownEnum", "    SDI =\t".length, "    SDI =\tNOPE".length]]
+    );
+  });
+
+  it("opens no scope for a tag in the middle of a line, and reads the tag forms TestPit repairs", () => {
+    const text = [
+      "[STEP DEFINITION]",
+      "    Step Description = sets [429_L100SelectedCourseBNR_input1] up",
+      "    SDI = whatever",
+      "[/STEP DEFINITION]",
+      "[[429_L100SelectedCourseBNR_input1]]",
+      "    SDI = NOPE",
+      "[//429_L100SelectedCourseBNR_input1]",
+      "SDI = after",
+    ].join("\r\n");
+    assert.deepStrictEqual(
+      validateComponents(text, idx).map((i) => [i.line, i.kind, i.identifier]),
+      [[5, "unknownEnum", "NOPE"]]
+    );
   });
 
   it("validates VORILS<N>_ tags for any unit number (matches the user's [VORILS1_VORILSDataMsg] sample)", () => {

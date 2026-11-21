@@ -293,7 +293,7 @@ function csvValueItems(
   }
   let entries: CsvValueEntry[];
   if (csv.kind === "tail") {
-    entries = [csvTailEntry({ withNumbers: !csv.hasAddress })];
+    entries = [csvTailEntry({ withNumbers: !csv.hasAddress, beforeCol: csv.colFollows })];
   } else if (document.uri.scheme === "file") {
     entries = csvFileEntries(
       listCsvFiles(

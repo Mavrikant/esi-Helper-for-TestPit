@@ -236,34 +236,39 @@ export function validateComponents(
   for (let lineNum = 0; lineNum < lines.length; lineNum++) {
     const line = lines[lineNum];
 
-    // Walk all tags on the line (open + close), maintain the depth stack
-    // and emit unknown-connection issues for any unrecognized component opener.
-    // Only the code part: a tag named in a `#` comment is no tag (TestPit's
-    // reader, like parseSectionTag.ts, drops everything from the `#`). The
-    // columns stay valid, `code` being a prefix of `line`.
-    const code = line.split("#")[0];
-    TAG_RE.lastIndex = 0;
-    let tagMatch: RegExpExecArray | null;
-    while ((tagMatch = TAG_RE.exec(code)) !== null) {
-      const isClosing = tagMatch[1] === "/";
-      const name = tagMatch[2];
-      if (isClosing) {
+    // Scopes follow the line's own tag, read as TestPit reads it
+    // (parseSectionTag.ts): the walk of validateStructure, tagPairs and
+    // findEnclosingBlock. A closer pops back to its opener — also one whose
+    // name has a blank (`[/STEP INPUTS]`), so a block left open inside a
+    // section ends with it — and a one-liner `[NAME/]` (a complete, empty
+    // block), a tag in a comment or one in the middle of a line opens nothing.
+    const section = parseSectionTagLine(line);
+    if (section && !section.invalid && section.kind !== "oneLiner") {
+      if (section.kind === "open") {
+        stack.push({ name: section.name, isComponent: COMPONENT_TAG.test(section.name) });
+      } else {
         for (let i = stack.length - 1; i >= 0; i--) {
-          if (stack[i].name === name) {
+          if (stack[i].name === section.name) {
             stack.splice(i, stack.length - i);
             break;
           }
         }
+      }
+    }
+
+    // Unknown-connection issues for every component tag in the code part of
+    // the line: a tag named in a `#` comment is no tag (TestPit's reader,
+    // like parseSectionTag.ts, drops everything from the `#`). The columns
+    // stay valid, `code` being a prefix of `line`.
+    const code = line.split("#")[0];
+    TAG_RE.lastIndex = 0;
+    let tagMatch: RegExpExecArray | null;
+    while ((tagMatch = TAG_RE.exec(code)) !== null) {
+      if (tagMatch[1] === "/") {
         continue;
       }
-      const isOneLiner = tagMatch[3] === "/";
-      const isComponent = COMPONENT_TAG.test(name);
-      // `[NAME/]` is a complete, empty block — the connection name is still
-      // worth checking, but it opens no scope for field assignments.
-      if (!isOneLiner) {
-        stack.push({ name, isComponent });
-      }
-      if (isComponent && !isKnownComponent(index, name)) {
+      const name = tagMatch[2];
+      if (COMPONENT_TAG.test(name) && !isKnownComponent(index, name)) {
         const startCol = tagMatch.index + 1; // skip the [
         issues.push({
           line: lineNum,
@@ -314,7 +319,9 @@ export function validateComponents(
       continue;
     }
     let rhsStart = eqIndex + 1;
-    while (rhsStart < line.length && line[rhsStart] === " ") {
+    // Spaces and tabs, as TestPit reads them (its reader turns tabs into
+    // spaces) and as semanticTokens.ts skips them.
+    while (rhsStart < line.length && (line[rhsStart] === " " || line[rhsStart] === "\t")) {
       rhsStart += 1;
     }
     const rhsTail = line.slice(rhsStart);

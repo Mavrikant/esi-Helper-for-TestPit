@@ -33,7 +33,10 @@ export type CsvValueContext =
     }
   | {
       kind: "tail";
-      /** Replace range on the line: the word of the tail at the cursor. */
+      /**
+       * Replace range on the line: the word of the tail at the cursor, while
+       * it can still be `line` (and the blanks before a `col:M` after it).
+       */
       startCol: number;
       endCol: number;
       /**
@@ -41,6 +44,11 @@ export type CsvValueContext =
        * the `line` word is inserted then.
        */
       hasAddress?: true;
+      /**
+       * Present (true) when a `col:M` already follows (`data.csv |col:2`):
+       * only `line:N ` goes in front of it.
+       */
+      colFollows?: true;
     };
 
 // A path being typed: optional drive, then the characters parseCsvCellRef
@@ -51,9 +59,11 @@ const TAIL_PARTIAL_RE = /^(?:[A-Za-z]:)?[A-Za-z0-9_.\-\\/]+\.csv\s+([A-Za-z]*)$/
 // After the cursor: the rest of a file name; then an address already there.
 const PATH_REST_RE = /^[A-Za-z0-9_.\-\\/]*/;
 const ADDRESS_AFTER_NAME_RE = /^\s+line\s*:\s*\d+\s+col\s*:\s*\d+/i;
-// After the cursor, in the tail: the rest of the word; then `:N`.
+// After the cursor, in the tail: the rest of the word; then `:N`, or the
+// column part of the address (with the blanks before it).
 const WORD_REST_RE = /^[A-Za-z]*/;
 const NUMBER_AFTER_WORD_RE = /^\s*:\s*\d+/;
+const COL_AFTER_RE = /^(\s*)col\s*:\s*\d+/i;
 
 /**
  * Where the cursor stands in a CSV reference, from the text of its line.
@@ -73,14 +83,26 @@ export function csvValueContext(
   const after = line.slice(character);
   const tail = TAIL_PARTIAL_RE.exec(rhs);
   if (tail) {
-    const rest = (WORD_REST_RE.exec(after) as RegExpExecArray)[0];
+    // The rest of the word at the cursor is replaced only while the word can
+    // still be `line`: another one (`data.csv |col:2`) is kept.
+    const wordRest = (WORD_REST_RE.exec(after) as RegExpExecArray)[0];
+    const inLineWord = "line".startsWith((tail[1] + wordRest).toLowerCase());
+    const rest = inLineWord ? wordRest : "";
+    const afterWord = after.slice(rest.length);
+    if (inLineWord && NUMBER_AFTER_WORD_RE.test(afterWord)) {
+      return {
+        kind: "tail",
+        startCol: character - tail[1].length,
+        endCol: character + rest.length,
+        hasAddress: true,
+      };
+    }
+    const col = COL_AFTER_RE.exec(afterWord);
     return {
       kind: "tail",
       startCol: character - tail[1].length,
-      endCol: character + rest.length,
-      ...(NUMBER_AFTER_WORD_RE.test(after.slice(rest.length))
-        ? { hasAddress: true as const }
-        : {}),
+      endCol: character + rest.length + (col ? col[1].length : 0),
+      ...(col ? { colFollows: true as const } : {}),
     };
   }
   if (!PATH_PARTIAL_RE.test(rhs)) {
@@ -138,16 +160,21 @@ export function csvFileEntries(
 
 /**
  * The ` line:N col:M` tail, for a `.csv` name that is already typed — or the
- * `line` word alone when its numbers already follow (`withNumbers: false`).
+ * `line` word alone when its numbers already follow (`withNumbers: false`),
+ * or `line:N ` alone in front of a `col:M` already there (`beforeCol`).
  */
 export function csvTailEntry(
-  options: { withNumbers?: boolean } = {}
+  options: { withNumbers?: boolean; beforeCol?: boolean } = {}
 ): CsvValueEntry {
   return {
     kind: "tail",
     label: "line:N col:M",
     detail: "CSV cell address (1-based line and column)",
-    insertText: options.withNumbers ?? true ? CSV_TAIL_SNIPPET : "line",
+    insertText: options.beforeCol
+      ? "line:${1:1} "
+      : options.withNumbers ?? true
+        ? CSV_TAIL_SNIPPET
+        : "line",
     filterText: "line",
     sortText: "90000",
   };

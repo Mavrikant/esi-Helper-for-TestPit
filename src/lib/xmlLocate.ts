@@ -400,33 +400,41 @@ export function sourceFileOf(target: DefinitionTarget): string | undefined {
 
 // ───────────────────────────── finders ─────────────────────────────
 
-/** `<Partition Name=partition>` → `<Port Name=port>`. */
+/**
+ * `<Partition Name=partition>` → `<Port Name=port>`. The LAST such port, in
+ * one partition or across two of that name: the index registers each in turn
+ * (Map.set), so the last one is what hover and validation show.
+ */
 function findPartitionPort(
   tree: XmlTree,
   partition: string,
   port: string
 ): XmlNode | undefined {
+  let last: XmlNode | undefined;
   for (const part of descendants(tree.root, "Partition")) {
     if (nameOf(part)?.value !== partition) {
       continue;
     }
-    const found = childrenOf(part, "Port").find((p) => nameOf(p)?.value === port);
-    if (found) {
-      return found;
+    for (const p of childrenOf(part, "Port")) {
+      if (nameOf(p)?.value === port) {
+        last = p;
+      }
     }
   }
-  return undefined;
+  return last;
 }
 
-/** `<Common><CommonPorts><Port Name=name>`. */
+/** `<Common><CommonPorts><Port Name=name>` — the last of that name, as above. */
 function findCommonPort(tree: XmlTree, name: string): XmlNode | undefined {
+  let last: XmlNode | undefined;
   for (const table of descendants(tree.root, "CommonPorts")) {
-    const found = childrenOf(table, "Port").find((p) => nameOf(p)?.value === name);
-    if (found) {
-      return found;
+    for (const p of childrenOf(table, "Port")) {
+      if (nameOf(p)?.value === name) {
+        last = p;
+      }
     }
   }
-  return undefined;
+  return last;
 }
 
 function findConnectionNode(tree: XmlTree, conn: ConnectionDef): XmlNode | undefined {

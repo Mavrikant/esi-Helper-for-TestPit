@@ -17,6 +17,13 @@ const v = require("vscode") as any;
 
 const BROKEN = "﻿[TEST STEPS]\r\n[/TEST STEPS]\r\n[/ORPHAN]\r\n";
 const CLEAN = "[TEST STEPS]\r\n[/TEST STEPS]\r\n";
+/** A root script using %SPEED%, which it gets from the files it includes. */
+const rootIncluding = (...files: string[]): string =>
+  "[INCLUDE]\r\n" +
+  files.map((f) => `    include file = ${f}\r\n`).join("") +
+  "[/INCLUDE]\r\n[TEST STEPS]\r\n    x = %SPEED%\r\n[/TEST STEPS]\r\n";
+const WITHOUT_SPEED = "[VARIABLES]\r\n[/VARIABLES]\r\n";
+const WITH_SPEED = "[VARIABLES]\r\n    %SPEED% = 5\r\n[/VARIABLES]\r\n";
 
 describe("validateWorkspace command (glue)", () => {
   let dir: string;
@@ -34,7 +41,11 @@ describe("validateWorkspace command (glue)", () => {
   let executed: string[] = [];
   let collectionName = "";
   const published = new Map<string, any[]>();
+  /** Set / delete calls per uri: one per (re-)check of a covered file. */
+  const writes = new Map<string, number>();
   const listeners: Record<string, (arg: any) => void> = {};
+  /** Every watcher made: its pattern, listeners and whether it was disposed. */
+  const watchers: Array<{ pattern: any; on: Record<string, (uri: any) => void>; disposed: boolean }> = [];
   const saved: Array<[any, string, PropertyDescriptor | undefined]> = [];
 
   const patch = (obj: any, key: string, value: any): void => {
@@ -48,6 +59,15 @@ describe("validateWorkspace command (glue)", () => {
   };
   const run = (): Promise<void> => v.__registered.commands[VALIDATE_WORKSPACE_COMMAND]();
   const settle = (): Promise<void> => new Promise((r) => setTimeout(r, 30));
+  /** Past the includer debounce (300 ms) and the re-check it starts. */
+  const settleIncluders = (): Promise<void> => new Promise((r) => setTimeout(r, 400));
+  const codesOf = (uri: any): string[] =>
+    (published.get(uri.toString()) ?? []).map((d: any) => d.code);
+  const touch = (uri: any): void => {
+    // The include cache is keyed by modification time: make sure it moves.
+    const later = new Date(Date.now() + 5000);
+    fs.utimesSync(uri.fsPath, later, later);
+  };
 
   before(() => {
     dir = fs.mkdtempSync(path.join(os.tmpdir(), "esi-ws-"));
@@ -64,17 +84,33 @@ describe("validateWorkspace command (glue)", () => {
       listeners.close = l;
       return { dispose() {} };
     });
-    patch(v.workspace, "createFileSystemWatcher", () => ({
-      onDidChange(l: any) { listeners.change = l; return { dispose() {} }; },
-      onDidCreate(l: any) { listeners.create = l; return { dispose() {} }; },
-      onDidDelete(l: any) { listeners.delete = l; return { dispose() {} }; },
-      dispose() {},
-    }));
+    patch(v.workspace, "onDidChangeTextDocument", (l: any) => {
+      listeners.edit = l;
+      return { dispose() {} };
+    });
+    patch(v.workspace, "createFileSystemWatcher", (pattern: any) => {
+      const w = { pattern, on: {} as Record<string, (uri: any) => void>, disposed: false };
+      watchers.push(w);
+      const listen = (key: string) => (l: any) => {
+        w.on[key] = l;
+        listeners[key] = l;
+        return { dispose() {} };
+      };
+      return {
+        onDidChange: listen("change"),
+        onDidCreate: listen("create"),
+        onDidDelete: listen("delete"),
+        dispose() { w.disposed = true; },
+      };
+    });
+    const wrote = (uri: any): void => {
+      writes.set(uri.toString(), (writes.get(uri.toString()) ?? 0) + 1);
+    };
     patch(v.languages, "createDiagnosticCollection", (name: string) => {
       collectionName = name;
       return {
-        set(uri: any, diags: any[]) { published.set(uri.toString(), diags); },
-        delete(uri: any) { published.delete(uri.toString()); },
+        set(uri: any, diags: any[]) { wrote(uri); published.set(uri.toString(), diags); },
+        delete(uri: any) { wrote(uri); published.delete(uri.toString()); },
         clear() { published.clear(); },
         dispose() {},
       };
@@ -131,6 +167,7 @@ describe("validateWorkspace command (glue)", () => {
     onReport = undefined;
     cancelAfterReports = Infinity;
     v.workspace.textDocuments = [];
+    writes.clear();
   });
 
   it("uses its own collection, not the live one", () => {
@@ -235,18 +272,108 @@ describe("validateWorkspace command (glue)", () => {
     assert.strictEqual(published.size, 0);
     const common = write("inc-common.esi", "[VARIABLES]\r\n[/VARIABLES]\r\n");
     listeners.create(common);
-    await settle();
-    assert.deepStrictEqual(
-      (published.get(root.toString()) ?? []).map((d: any) => d.code),
-      ["undefinedMacro"]
-    );
+    await settleIncluders();
+    assert.deepStrictEqual(codesOf(root), ["undefinedMacro"]);
     write("inc-common.esi", "[VARIABLES]\r\n    %SPEED% = 5\r\n[/VARIABLES]\r\n");
-    // The include cache is keyed by modification time: make sure it moves.
-    const later = new Date(Date.now() + 5000);
-    fs.utimesSync(common.fsPath, later, later);
+    touch(common);
     listeners.change(common);
-    await settle();
+    await settleIncluders();
     assert.strictEqual(published.size, 0);
+  });
+
+  it("re-checks a covered file from disk once an include's unsaved buffer is closed", async () => {
+    const root = write("buf-root.esi", rootIncluding("buf-common.esi"));
+    const common = write("buf-common.esi", WITHOUT_SPEED);
+    // Open, with an unsaved definition of %SPEED%: the run reads the buffer.
+    const doc = { uri: common, languageId: "esi", isDirty: true, getText: () => WITH_SPEED };
+    v.workspace.textDocuments = [doc];
+    found = [root, common];
+    await run();
+    assert.deepStrictEqual(codesOf(root), []);
+    // Closed without saving: the disk text is what counts again.
+    v.workspace.textDocuments = [];
+    listeners.close(doc);
+    await settleIncluders();
+    assert.deepStrictEqual(codesOf(root), ["undefinedMacro"]);
+  });
+
+  it("re-checks a covered file when an include's buffer is reverted, not per keystroke", async () => {
+    const root = write("rev-root.esi", rootIncluding("rev-common.esi"));
+    const common = write("rev-common.esi", WITHOUT_SPEED);
+    let text = WITH_SPEED;
+    const doc = { uri: common, languageId: "esi", isDirty: true, getText: () => text };
+    v.workspace.textDocuments = [doc];
+    found = [root];
+    await run();
+    assert.deepStrictEqual(codesOf(root), []);
+    writes.clear();
+    // Typing on (still unsaved): nothing to re-check yet.
+    listeners.edit({ document: doc, contentChanges: [{ text: "x" }] });
+    await settleIncluders();
+    assert.strictEqual(writes.get(root.toString()), undefined);
+    // File: Revert: the buffer is the disk text again.
+    text = WITHOUT_SPEED;
+    doc.isDirty = false;
+    listeners.edit({ document: doc, contentChanges: [{ text: "" }] });
+    await settleIncluders();
+    assert.deepStrictEqual(codesOf(root), ["undefinedMacro"]);
+  });
+
+  it("re-checks a covered file once when several of its includes change together", async () => {
+    // A checkout rewriting the shared utility scripts.
+    const root = write("many-root.esi", rootIncluding("many-a.esi", "many-b.esi"));
+    const a = write("many-a.esi", WITH_SPEED);
+    const b = write("many-b.esi", WITHOUT_SPEED);
+    found = [root];
+    await run();
+    assert.deepStrictEqual(codesOf(root), []);
+    writes.clear();
+    write("many-a.esi", WITHOUT_SPEED);
+    touch(a);
+    listeners.change(a);
+    listeners.change(b);
+    await settleIncluders();
+    assert.strictEqual(writes.get(root.toString()), 1);
+    assert.deepStrictEqual(codesOf(root), ["undefinedMacro"]);
+  });
+
+  it("watches an include outside the workspace folders on its own", async () => {
+    const elsewhere = fs.mkdtempSync(path.join(os.tmpdir(), "esi-ws-out-"));
+    try {
+      const outside = vscode.Uri.file(path.join(elsewhere, "lib.esi"));
+      fs.writeFileSync(outside.fsPath, WITH_SPEED);
+      write("near.esi", WITH_SPEED);
+      patch(v.workspace, "workspaceFolders", [{ uri: vscode.Uri.file(dir) }]);
+      const root = write("out-root.esi", rootIncluding(outside.fsPath, "near.esi"));
+      found = [root];
+      const before = watchers.length;
+      await run();
+      assert.deepStrictEqual(codesOf(root), []);
+      // One watcher, for the include outside `dir` only.
+      const own = watchers.slice(before);
+      assert.strictEqual(own.length, 1);
+      assert.strictEqual(path.resolve(own[0].pattern.base), elsewhere);
+      assert.strictEqual(own[0].pattern.pattern, "lib.esi");
+
+      fs.writeFileSync(outside.fsPath, WITHOUT_SPEED);
+      fs.writeFileSync(path.join(dir, "near.esi"), WITHOUT_SPEED);
+      touch(outside);
+      touch(uriOf("near.esi"));
+      own[0].on.change(outside);
+      await settleIncluders();
+      assert.deepStrictEqual(codesOf(root), ["undefinedMacro"]);
+      // Cleared: nothing depends on it any more.
+      v.__registered.commands[CLEAR_WORKSPACE_VALIDATION_COMMAND]();
+      assert.strictEqual(own[0].disposed, true);
+    } finally {
+      const [obj, key, desc] = saved.pop()!;
+      if (desc) {
+        Object.defineProperty(obj, key, desc);
+      } else {
+        delete obj[key];
+      }
+      fs.rmSync(elsewhere, { recursive: true, force: true });
+    }
   });
 
   it("an unreadable file is reported, not passed as clean", async () => {

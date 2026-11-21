@@ -185,7 +185,8 @@ export function computeSemanticTokens(
     }
     const eqIndex = line.indexOf("=", fieldStart + fieldName.length);
     const rhs = line.slice(eqIndex + 1);
-    const rhsTrimmed = rhs.trimStart();
+    // The blanks componentValidator skips before a value: spaces and tabs.
+    const rhsTrimmed = rhs.replace(/^[ \t]+/, "");
     // The values the validator does not judge get no token either: a mark
     // without its warning would be a false "unknown" (macro anywhere in the
     // value, CSV reference with or without a macro, hex / float literals).

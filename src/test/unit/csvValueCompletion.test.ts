@@ -68,6 +68,34 @@ describe("csvValueCompletion", () => {
       assert.strictEqual(csvTailEntry({ withNumbers: false }).insertText, "line");
     });
 
+    it("keeps a word that cannot be `line`, and puts only line:N before a col:M already there", () => {
+      // The column was typed first: the line part goes in front of it.
+      assert.deepStrictEqual(ctx("    type_code = data.csv |col:2"), {
+        kind: "tail",
+        startCol: 25,
+        endCol: 25,
+        colFollows: true,
+      });
+      assert.deepStrictEqual(ctx("SDI = in.csv l| col:2"), { kind: "tail", startCol: 13, endCol: 15, colFollows: true });
+      assert.deepStrictEqual(ctx("SDI = in.csv li|ne col:2"), { kind: "tail", startCol: 13, endCol: 18, colFollows: true });
+      // Any other word after the cursor is not replaced.
+      assert.deepStrictEqual(ctx("SDI = in.csv |foo"), { kind: "tail", startCol: 13, endCol: 13 });
+      const apply = (marked: string): string => {
+        const c = ctx(marked);
+        assert.ok(c && c.kind === "tail");
+        const at = marked.indexOf("|");
+        const text = marked.slice(0, at) + marked.slice(at + 1);
+        const insert = csvTailEntry({ withNumbers: !c.hasAddress, beforeCol: c.colFollows })
+          .insertText.replace(/\$\{\d+:([^}]*)\}/g, "$1");
+        return text.slice(0, c.startCol) + insert + text.slice(c.endCol);
+      };
+      assert.strictEqual(apply("    type_code = data.csv |col:2"), "    type_code = data.csv line:1 col:2");
+      assert.strictEqual(apply("SDI = in.csv l| col:2"), "SDI = in.csv line:1 col:2");
+      assert.strictEqual(apply("SDI = in.csv li|ne:4 col:2"), "SDI = in.csv line:4 col:2");
+      assert.strictEqual(apply("SDI = in.csv |"), "SDI = in.csv line:1 col:1");
+      assert.ok(parseCsvCellRef(apply("    type_code = data.csv |col:2").split("= ")[1]));
+    });
+
     it("stays out of anything that cannot start a CSV reference", () => {
       assert.strictEqual(ctx("SDI |"), undefined); // no '=' yet
       assert.strictEqual(ctx("SDI = %MAC|"), undefined); // macro

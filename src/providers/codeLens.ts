@@ -10,6 +10,13 @@ import {
 /** Internal commands behind the step lenses (not in the command palette). */
 export const CMD_LENS_TOGGLE_FOLD = "extension.esiLens.toggleStepFold";
 export const CMD_LENS_SHOW_PROBLEMS = "extension.esiLens.showStepProblems";
+/**
+ * Does nothing: the command of a lens that is only a label. An empty command
+ * id would draw it as plain text, but "Show CodeLens Commands for Current
+ * Line" (the keyboard / screen-reader route) still lists it and then fails
+ * with "command '' not found".
+ */
+export const CMD_LENS_NONE = "extension.esiLens.none";
 
 const SETTING = "codeLens.enabled";
 const REFRESH_DEBOUNCE_MS = 300;
@@ -81,8 +88,7 @@ function toCommand(
         arguments: [uri, action.startLine, action.endLine],
       };
     case "none":
-      // An empty command id: VS Code shows the lens as plain text.
-      return { title, tooltip, command: "" };
+      return { title, tooltip, command: CMD_LENS_NONE };
   }
 }
 
@@ -240,6 +246,7 @@ export function registerEsiCodeLensProvider(): vscode.Disposable {
     vscode.languages.registerCodeLensProvider({ language: "esi" }, provider),
     vscode.commands.registerCommand(CMD_LENS_TOGGLE_FOLD, toggleStepFold),
     vscode.commands.registerCommand(CMD_LENS_SHOW_PROBLEMS, showStepProblems),
+    vscode.commands.registerCommand(CMD_LENS_NONE, () => undefined),
     onDiagnostics,
     onConfigChange,
     new vscode.Disposable(() => {

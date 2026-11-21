@@ -286,6 +286,52 @@ describe("xmlLocate — NEOCAS Ref forms", () => {
     );
   });
 
+  it("opens the LAST of two same-named ports, as the index keeps", () => {
+    // Twice in one partition, again in a second partition of that name, and
+    // a shared port declared twice: the index's Map.set keeps the last each
+    // time — the field New exists in the last ones only.
+    const dir = fs.mkdtempSync(path.join(require("os").tmpdir(), "esi-dup-ports-"));
+    try {
+      const file = path.join(dir, "Ports.xml");
+      fs.writeFileSync(
+        file,
+        [
+          "<Partitions>", // 0
+          "  <Common><CommonPorts>", // 1
+          '    <Port Name="P"><Message Name="PMsg1"><Field Name="Old" Type="UInt8"/></Message></Port>', // 2
+          '    <Port Name="P"><Message Name="PMsg2"><Field Name="New" Type="UInt8"/></Message></Port>', // 3
+          "  </CommonPorts></Common>", // 4
+          '  <Partition Name="HSI">', // 5
+          '    <Port Name="Status"><Message Name="Status"><Field Name="Old" Type="UInt8"/></Message></Port>', // 6
+          '    <Port Name="Status"><Message Name="Status"><Field Name="Mid" Type="UInt8"/></Message></Port>', // 7
+          "  </Partition>", // 8
+          '  <Partition Name="HSI">', // 9
+          '    <Port Name="Status"><Message Name="Status"><Field Name="New" Type="UInt8"/></Message></Port>', // 10
+          '    <Port Name="Shared" Ref="P"/>', // 11
+          "  </Partition>", // 12
+          "</Partitions>",
+        ].join("\n")
+      );
+      const idx = parseConfigFiles({ partition: file });
+      const status = "[PART_HSI_Status]\nNew = 1\n[/PART_HSI_Status]";
+      assert.deepStrictEqual(
+        idx.resolveConnectionMessage("PART_HSI_Status")?.fields.map((f) => f.name),
+        ["New"]
+      );
+      assert.strictEqual(define(idx, status, "PART_HSI")[0].line, 10);
+      const [field] = define(idx, status, "New =");
+      assert.strictEqual(field.line, 10);
+      assert.strictEqual(field.exact, true);
+
+      const shared = "[PART_HSI_Shared]\nNew = 1\n[/PART_HSI_Shared]";
+      const [sharedField] = define(idx, shared, "New =");
+      assert.strictEqual(sharedField.line, 3);
+      assert.strictEqual(sharedField.exact, true);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it("cable <Connection Ref> → the connection; message file not configured → one result", () => {
     const locs = define(idx, "[429_L164RadioAltitude]", "429_L164");
     assert.strictEqual(locs.length, 1);

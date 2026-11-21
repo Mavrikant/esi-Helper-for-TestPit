@@ -46,7 +46,13 @@ export function registerInsertComponent(
         );
         return;
       }
-      const key = JSON.stringify(arg);
+      // Identity fields only: the view's context menu passes the tree node
+      // itself, whose fields carry whole message definitions (serializing
+      // it costs O(fields²) and overflows on a large message).
+      const key =
+        arg.kind === "field"
+          ? `field\u0000${arg.connectionName ?? ""}\u0000${arg.name}`
+          : `${arg.kind}\u0000${arg.name}`;
       const now = Date.now();
       if (last && last.key === key && now - last.at < REPEAT_WINDOW_MS) {
         // The second click of a double-click took the focus back to the

@@ -373,7 +373,6 @@ describe("syntaxes/esi.json", () => {
         "[/ STEP DEFINITION]",
         "[/STEP DEFINITION",
         "[/STEP DEFINITION/]",
-        "[[/STEP DEFINITION]]",
         "    [/STEP DEFINITION] # c",
         "[/STEP DEFINITION # c",
       ]) {
@@ -383,7 +382,15 @@ describe("syntaxes/esi.json", () => {
           `still inside the block after ${JSON.stringify(closer)}`
         );
       }
-      for (const notACloser of ["[/STEP DEFINITIONS]", "[/STEP DEFINITIONX"]) {
+      // `[[/NAME]]` is an opener to parseSectionTag.ts, and a tag only counts
+      // at the start of its line.
+      for (const notACloser of [
+        "[/STEP DEFINITIONS]",
+        "[/STEP DEFINITIONX",
+        "[[/STEP DEFINITION]]",
+        "  Ends with [/STEP DEFINITION",
+        "  see [/STEP DEFINITION] above",
+      ]) {
         const lines = tokenize([...open, notACloser, "n = 5"]);
         assert.ok(
           lines[2].every((t) => t.scopes.includes("meta.definition.esi")),

@@ -506,12 +506,14 @@ export function computeTagCompletions(
     return { insertText: name + bracket, isSnippet: false };
   };
 
-  // A step is proposed the number of the closer it already has below (a
-  // retyped opener), otherwise the one the file's own numbering leads to.
+  // A step is proposed the number it already has: its partner's, when the
+  // tag is paired (linked editing mirrors the name into the partner, so
+  // another number would renumber the pair — or break it with linked editing
+  // off), or that of the closer below a retyped opener. Otherwise the one the
+  // file's own numbering leads to.
+  const ownCloseLine = linked && pair ? pair.close.line : closes?.ownCloseLine;
   const ownClose =
-    closes?.ownCloseLine !== undefined
-      ? parseNumberedStepTag(lines[closes.ownCloseLine])
-      : undefined;
+    ownCloseLine !== undefined ? parseNumberedStepTag(lines[ownCloseLine]) : undefined;
   const stepNameSnippet = `STEP \${1:${
     ownClose?.digits ?? nextStepNumber(lines, lineIndex)
   }}`;

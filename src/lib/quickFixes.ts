@@ -721,8 +721,11 @@ function blockEnd(
 }
 
 /**
- * Sections that hold `key = value` lines (and prose) only, never another
- * section — like a component (message) block.
+ * Sections that hold `key = value` lines (and prose) only, like a component
+ * (message) block — or, for [INCLUDE], also command sections ([CMD_EXECUTE],
+ * …), which may as well stand outside it: with no indentation to tell, its
+ * closer goes after its own lines too. Never one that wraps the sections
+ * after it.
  */
 const FIELDS_ONLY_SECTIONS: ReadonlySet<string> = new Set([
   SEC_STEP_DEFINITION,

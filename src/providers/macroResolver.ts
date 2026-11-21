@@ -94,3 +94,74 @@ export function createMacroResolver(
 export function macroFileLabel(key: string): string {
   return path.basename(key);
 }
+
+/** Watchers kept in step with the include targets a caller depends on. */
+export interface OutsideIncludeWatchers extends vscode.Disposable {
+  /** The full paths of every include target still depended on. */
+  update(paths: Iterable<string>): void;
+}
+
+/**
+ * File watchers for include targets outside every workspace folder. The
+ * include re-checks listen to a `**\/*.esi` watcher, and a string glob only
+ * reports events from the workspace folders (none at all with no folder
+ * open), while includes often climb out of them (`..\Utilities\…`). Each such
+ * file gets a watcher of its own — made and dropped as `update` is given the
+ * current targets — whose events `wire` subscribes to, as for the main one.
+ */
+export function createOutsideIncludeWatchers(
+  wire: (watcher: vscode.FileSystemWatcher) => vscode.Disposable[]
+): OutsideIncludeWatchers {
+  // includeIdentity → the watcher and its subscriptions.
+  const watchers = new Map<string, vscode.Disposable>();
+  const drop = (key: string): void => {
+    watchers.get(key)?.dispose();
+    watchers.delete(key);
+  };
+  return {
+    update(paths) {
+      const wanted = new Map<string, string>();
+      for (const fullPath of paths) {
+        if (!isInWorkspaceFolder(fullPath)) {
+          wanted.set(includeIdentity(fullPath), fullPath);
+        }
+      }
+      for (const key of Array.from(watchers.keys())) {
+        if (!wanted.has(key)) {
+          drop(key);
+        }
+      }
+      for (const [key, fullPath] of wanted) {
+        if (watchers.has(key)) {
+          continue;
+        }
+        const watcher = vscode.workspace.createFileSystemWatcher(
+          new vscode.RelativePattern(path.dirname(fullPath), path.basename(fullPath))
+        );
+        watchers.set(key, vscode.Disposable.from(watcher, ...wire(watcher)));
+      }
+    },
+    dispose() {
+      for (const key of Array.from(watchers.keys())) {
+        drop(key);
+      }
+    },
+  };
+}
+
+/** True when `fullPath` lies inside one of the open (on-disk) workspace folders. */
+function isInWorkspaceFolder(fullPath: string): boolean {
+  const file = includeIdentity(path.resolve(fullPath));
+  return (vscode.workspace.workspaceFolders ?? []).some((folder) => {
+    if (folder.uri.scheme !== "file") {
+      return false;
+    }
+    const relative = path.relative(includeIdentity(path.resolve(folder.uri.fsPath)), file);
+    return (
+      relative === "" ||
+      (relative !== ".." &&
+        !relative.startsWith(`..${path.sep}`) &&
+        !path.isAbsolute(relative))
+    );
+  });
+}

@@ -8,11 +8,13 @@ import {
   runValidityCheckForDocument,
   tempBase,
 } from "../../diagnostics";
+import { registerRunValidityCheck } from "../../commands/runValidityCheck";
 import {
   initPluginStore,
   notifyActiveProfileChanged,
   setTestpitExe,
 } from "../../lib/pluginStore";
+import { NOT_PUBLISHED_NOTE } from "../../lib/validityResults";
 
 // Glue for the live TestPit check (diagnostics.ts), driven through the vscode
 // mock (test/setup.js). The members the live check listens to are replaced
@@ -58,6 +60,9 @@ describe("live TestPit check (glue)", () => {
   };
   let changeListener: ((e: unknown) => void) | undefined;
   let visibleListener: ((editors: unknown[]) => void) | undefined;
+  let configListener: ((e: unknown) => void) | undefined;
+  /** What `getConfiguration("esihelper").get(key)` returns. */
+  let settings: Record<string, unknown>;
   /** What the "esi-testpit" collection was asked to do, in order. */
   let ops: string[];
   let live: vscode.Disposable | undefined;
@@ -66,6 +71,9 @@ describe("live TestPit check (glue)", () => {
     ops = [];
     changeListener = undefined;
     visibleListener = undefined;
+    configListener = undefined;
+    // Shortest debounce the setting allows.
+    settings = { liveValidationDelay: 200 };
     patch(mock.workspace, "onDidChangeTextDocument", (l: any) => {
       changeListener = l;
       return { dispose: () => (changeListener = undefined) };
@@ -82,10 +90,13 @@ describe("live TestPit check (glue)", () => {
       clear() {},
       dispose() {},
     }));
-    // Shortest debounce the setting allows.
     patch(mock.workspace, "getConfiguration", () => ({
-      get: (key: string) => (key === "liveValidationDelay" ? 200 : undefined),
+      get: (key: string) => settings[key],
     }));
+    patch(mock.workspace, "onDidChangeConfiguration", (l: any) => {
+      configListener = l;
+      return { dispose: () => (configListener = undefined) };
+    });
     // The profile / exe events live in the plugin store; with no storage
     // folder nothing is read or written.
     initPluginStore({ subscriptions: [] } as any);
@@ -108,6 +119,7 @@ describe("live TestPit check (glue)", () => {
 
   it("does not publish a result produced with the previous profile", async () => {
     const document = fakeDocument("profile.esi");
+    setTestpitExe("echo");
     const stale = await runValidityCheckForDocument(document, "echo", {
       // Fired after the run read the profile's config files.
       onCommand: () => notifyActiveProfileChanged(),
@@ -174,10 +186,122 @@ describe("live TestPit check (glue)", () => {
     assert.deepStrictEqual(ops, ["set older.esi", "delete older.esi"]);
   });
 
+  it("does not publish a result produced with a TestPit.exe replaced since", async () => {
+    const document = fakeDocument("exe.esi");
+    setTestpitExe("echo");
+    // Repointed while TestPit runs…
+    const inFlight = await runValidityCheckForDocument(document, "echo", {
+      onCommand: () => setTestpitExe("echo-new"),
+    });
+    assert.strictEqual(inFlight.published, false);
+    // …or before a run that read the old one (a Test Explorer run's later
+    // scripts).
+    const late = await runValidityCheckForDocument(document, "echo");
+    assert.strictEqual(late.published, false);
+    assert.deepStrictEqual(ops, []);
+    setTestpitExe("echo");
+    const fresh = await runValidityCheckForDocument(document, "echo");
+    assert.strictEqual(fresh.published, true);
+    assert.deepStrictEqual(ops, ["set exe.esi"]);
+  });
+
+  it("says so when a Run Validity Check result is not put in the Problems panel", async () => {
+    const document = fakeDocument("command.esi");
+    mock.workspace.textDocuments = [document];
+    setTestpitExe("echo");
+    const warnings: string[] = [];
+    patch(mock.window, "showWarningMessage", (message: string) => {
+      warnings.push(message);
+      return Promise.resolve(undefined);
+    });
+    patch(mock.window, "activeTextEditor", { document });
+    const command = registerRunValidityCheck();
+    // The profile changes once TestPit has started.
+    const sub = onDidChangeValidityRun((event) => {
+      if (event.running) {
+        notifyActiveProfileChanged();
+      }
+    });
+    try {
+      await mock.__registered.commands["extension.runValidityCheck"]();
+    } finally {
+      sub.dispose();
+      command.dispose();
+    }
+    assert.deepStrictEqual(ops, []);
+    assert.strictEqual(warnings.length, 1);
+    assert.ok(warnings[0].endsWith(NOT_PUBLISHED_NOTE), warnings[0]);
+  });
+
+  it("checks a document validated without publishing once an editor shows it", async () => {
+    const document = fakeDocument("unshown.esi");
+    // Picked before the document is open: picking it marks the background
+    // documents for a check of their own.
+    setTestpitExe("echo");
+    mock.workspace.textDocuments = [document];
+    const result = await runValidityCheckForDocument(document, "echo", { publish: false });
+    assert.strictEqual(result.published, false);
+    assert.deepStrictEqual(ops, []);
+
+    const ended = nextRunEnd(document.uri, 5000);
+    const editor = { document };
+    mock.window.visibleTextEditors = [editor];
+    assert.ok(visibleListener, "listens to visible editors");
+    visibleListener([editor]);
+    await ended;
+    assert.deepStrictEqual(ops, ["set unshown.esi"]);
+  });
+
+  it("publishes a result asked not to be if an editor shows the document by then", async () => {
+    const document = fakeDocument("shown.esi");
+    mock.workspace.textDocuments = [document];
+    setTestpitExe("echo");
+    const result = await runValidityCheckForDocument(document, "echo", {
+      publish: false,
+      onCommand: () => (mock.window.visibleTextEditors = [{ document }]),
+    });
+    assert.strictEqual(result.published, true);
+    assert.deepStrictEqual(ops, ["set shown.esi"]);
+  });
+
+  it("with the live check turned off, takes an explicit result for a document left for later", async () => {
+    const document = fakeDocument("liveoff.esi");
+    mock.workspace.textDocuments = [document];
+    setTestpitExe("echo");
+    await runValidityCheckForDocument(document, "echo");
+    // Changed with no editor showing it: its results are dropped, and it is
+    // left to be checked when shown.
+    document.version = 2;
+    changeListener?.({ document, contentChanges: [{ text: "x" }] });
+    assert.deepStrictEqual(ops, ["set liveoff.esi", "delete liveoff.esi"]);
+
+    settings.liveValidation = false;
+    assert.ok(configListener, "listens to settings");
+    configListener({ affectsConfiguration: (key: string) => key === "esihelper.liveValidation" });
+    // Shown now, but nothing checks it with the live check off: an explicit
+    // run, typed into meanwhile, still puts its result up.
+    const editor = { document };
+    mock.window.visibleTextEditors = [editor];
+    visibleListener?.([editor]);
+    const result = await runValidityCheckForDocument(document, "echo", {
+      onCommand: () => (document.version = 3),
+    });
+    assert.strictEqual(result.published, true);
+    assert.deepStrictEqual(ops, ["set liveoff.esi", "delete liveoff.esi", "set liveoff.esi"]);
+  });
+
   it("keeps the temp copy of a virtual document apart from the working copy's", () => {
     const file = vscode.Uri.file(path.join(os.tmpdir(), "a.esi"));
     assert.strictEqual(tempBase(file), file.fsPath);
     const head = { ...file, scheme: "git" } as vscode.Uri;
     assert.strictEqual(tempBase(head), `${file.fsPath}.git`);
+    // Two revisions of one file (HEAD and the index of a staged diff) differ
+    // only in the query.
+    const atHead = { ...head, query: '{"path":"a.esi","ref":"HEAD"}' } as vscode.Uri;
+    const inIndex = { ...head, query: '{"path":"a.esi","ref":""}' } as vscode.Uri;
+    assert.match(tempBase(atHead), /\.git-[0-9a-f]{8}$/);
+    assert.notStrictEqual(tempBase(atHead), tempBase(inIndex));
+    assert.strictEqual(tempBase({ ...atHead } as vscode.Uri), tempBase(atHead));
+    assert.ok(tempBase(atHead).startsWith(`${file.fsPath}.git`));
   });
 });

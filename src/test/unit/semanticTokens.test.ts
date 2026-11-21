@@ -190,6 +190,17 @@ describe("computeSemanticTokens", () => {
     );
   });
 
+  it("reads a value after the blanks the validator skips: spaces and tabs", () => {
+    const text = ["[ED_Type1]", "    type_code =\tBOGUS", "    type_code =\u00a0BOGUS", "[/ED_Type1]"].join("\n");
+    const tokens = computeSemanticTokens(text, loadIndex()).filter((t) => t.type === "enumMember");
+    // After a tab: marked unknown, where the validator warns. After any
+    // other blank the validator reads no value, so nothing is marked.
+    assert.deepStrictEqual(
+      tokens.map((t) => [t.line, t.start, t.length, t.modifiers.length]),
+      [[1, "    type_code =\t".length, "BOGUS".length, 0]]
+    );
+  });
+
   it("handles CRLF and the sloppy tag forms TestPit repairs", () => {
     assert.deepStrictEqual(
       run(["[[ED_Type1]]", "type_code = AIRCRAFT_CATEGORY_SET_D", "[//ED_Type1]"], loadIndex(), "\r\n"),

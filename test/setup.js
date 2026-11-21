@@ -231,6 +231,9 @@ mock('vscode', {
     onDidChangeActiveTextEditor() { return { dispose() {} }; },
     onDidChangeVisibleTextEditors() { return { dispose() {} }; },
     visibleTextEditors: [],
+    // Editor tabs: each group's `tabs[].input` is `{ uri }` (text) or
+    // `{ original, modified }` (diff).
+    tabGroups: { all: [] },
     createTreeView(id, options) {
       return { id, options, description: undefined, message: undefined, title: undefined, dispose() {} };
     },
@@ -351,6 +354,7 @@ mock('vscode', {
     onDidCloseTextDocument() { return { dispose() {} }; },
     onWillSaveTextDocument() { return { dispose() {} }; },
     onDidSaveTextDocument() { return { dispose() {} }; },
+    onDidChangeWorkspaceFolders() { return { dispose() {} }; },
     getConfiguration() {
       return {
         get() { return undefined; },
