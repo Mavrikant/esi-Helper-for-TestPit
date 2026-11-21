@@ -19,6 +19,10 @@ import * as store from "./pluginStore";
 export const onActiveProfileChanged: vscode.Event<void> =
   store.onActiveProfileChanged;
 
+/** Fires when the TestPit.exe path is picked or repointed. */
+export const onDidChangeTestpitExe: vscode.Event<void> =
+  store.onDidChangeTestpitExe;
+
 /** First-run load: populate the cache from the registry if it's empty. */
 export function ensureRegistryLoaded(): void {
   if (!store.getRegistryModel()) {

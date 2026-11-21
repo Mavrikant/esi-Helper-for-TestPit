@@ -80,6 +80,9 @@ function toCommand(
         command: CMD_LENS_SHOW_PROBLEMS,
         arguments: [uri, action.startLine, action.endLine],
       };
+    case "none":
+      // An empty command id: VS Code shows the lens as plain text.
+      return { title, tooltip, command: "" };
   }
 }
 

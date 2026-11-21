@@ -6,8 +6,8 @@ import { buildOpenCommand } from "../profiles";
 export function registerOpenWithTestPit(): vscode.Disposable {
   return vscode.commands.registerCommand(
     "extension.openWithTestPit",
-    // Menus (editor/title, explorer/context) pass the clicked resource; the
-    // palette and the CodeLens pass nothing — then it is the active editor.
+    // Menus (editor/title, explorer/context) and the CodeLens pass the
+    // resource; the palette passes nothing — then it is the active editor.
     async (uri?: vscode.Uri) => {
       const filePath =
         (isUri(uri) ? uri.fsPath : undefined) ??

@@ -317,6 +317,44 @@ describe("componentValidator", () => {
     assert.deepStrictEqual(validateComponents(text, idx), []);
   });
 
+  it("skips an enum value with a macro inside it, and still flags a plain one", () => {
+    const text = [
+      "[429_L100SelectedCourseBNR_input1]",
+      "    SDI = INSTALLATION_NUMBER_%N%",
+      "    SDI = INSTALLATION_%N%_ONE # comment",
+      "[/429_L100SelectedCourseBNR_input1]",
+    ].join("\n");
+    assert.deepStrictEqual(validateComponents(text, idx), []);
+    const bogus = text.replace("INSTALLATION_NUMBER_%N%", "BOGUS");
+    assert.deepStrictEqual(
+      validateComponents(bogus, idx).map((i) => [i.kind, i.identifier]),
+      [["unknownEnum", "BOGUS"]]
+    );
+  });
+
+  it("ignores a tag named in a comment", () => {
+    const text = [
+      "[TEST STEPS]",
+      "    # [429_L100SelectedCourseBNR_input9] was dropped",
+      "    # see [429_L100SelectedCourseBNR_input1]",
+      "    [STEP 10]",
+      "        [STEP OUTPUTS]",
+      "            [MANUAL_VERIFY]",
+      "                text = Check the display",
+      "            [/MANUAL_VERIFY]",
+      "            [429_L100SelectedCourseBNR_input2]",
+      "                SDI = 0 # was [429_L100SelectedCourseBNR_input1]",
+      "            [/429_L100SelectedCourseBNR_input2]",
+      "            text = after the block",
+      "        [/STEP OUTPUTS]",
+      "    [/STEP 10]",
+      "[/TEST STEPS]",
+    ].join("\r\n");
+    // No unknown connection for the commented-out tag, and no phantom
+    // component scope that would flag `text` as an unknown field.
+    assert.deepStrictEqual(validateComponents(text, idx), []);
+  });
+
   it("validates VORILS<N>_ tags for any unit number (matches the user's [VORILS1_VORILSDataMsg] sample)", () => {
     const text = [
       "[VORILS1_VORILSDataMsg]",

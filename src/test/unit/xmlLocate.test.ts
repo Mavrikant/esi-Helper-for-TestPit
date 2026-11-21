@@ -384,6 +384,41 @@ describe("xmlLocate — fallbacks and helpers", () => {
     assert.strictEqual(pos.line, 2);
   });
 
+  it("takes the LAST of two same-named connections on a bus, as the index does", () => {
+    // The hover card shows the last one's card / channel: F12 must open it.
+    const xml =
+      '<Root><Devices>\n<Device Type="A429"><Connection Name="Dup"><Parameter Card="1" Channel="1"/></Connection></Device>\n<Device Type="A429"><Connection Name="Dup"><Parameter Card="2" Channel="9"/></Connection></Device>\n</Devices></Root>';
+    const pos = locateInXml(xml, {
+      kind: "connection",
+      conn: { fullName: "429_Dup", bus: "429", rawName: "Dup" },
+    });
+    assert.strictEqual(pos.line, 2);
+  });
+
+  it("reads an attribute value trimmed, as the index's parser does", () => {
+    // `Name = "HSI "` names partition HSI: its port must be found there, not
+    // in the next partition that has a port of the same name.
+    const xml = [
+      "<Partitions>",
+      '<Partition Name = "HSI ">',
+      '<Port Name="Status"><Message Name="Status"><Field Name="Value"/></Message></Port>',
+      "</Partition>",
+      '<Partition Name = "TEST">',
+      '<Port Name="Status"><Message Name="Status"><Field Name="Value"/></Message></Port>',
+      "</Partition>",
+      "</Partitions>",
+    ].join("\n");
+    const tree = scanXml(xml);
+    const attr = tree.root.children[0].children[0].attrs[0];
+    assert.strictEqual(attr.value, "HSI");
+    assert.strictEqual(xml.slice(attr.valueStart, attr.valueStart + attr.rawLength), "HSI");
+    const conn = { fullName: "PART_HSI_Status", bus: "Mem" as const, rawName: "Status", partition: "HSI" };
+    assert.strictEqual(locateInXml(xml, { kind: "connection", conn }).line, 2);
+    // A port that is not in its partition is no exact hit elsewhere.
+    const lost = locateInXml(xml, { kind: "connection", conn: { ...conn, partition: "NONE" } });
+    assert.strictEqual(lost.exact, false);
+  });
+
   it("resolveDefinition: no source file or unreadable file → undefined", () => {
     const target: DefinitionTarget = { kind: "message", message };
     assert.strictEqual(sourceFileOf(target), message.sourceFile);

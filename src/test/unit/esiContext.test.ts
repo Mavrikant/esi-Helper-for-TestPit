@@ -186,5 +186,23 @@ describe("esiContext.resolveContext", () => {
     it("walks past structural sections to the component above", () => {
       assert.deepStrictEqual(findEnclosingBlock(["[429_A]", "[NOTES]", ""], 2), { name: "429_A", line: 0 });
     });
+
+    it("does not count a block left open inside a section closed since", () => {
+      // [429_B] is never closed, but [/STEP INPUTS] ends it, as in the
+      // validator (which reports it): the next section holds no block.
+      const lines = [
+        "[TEST STEPS]",
+        "[STEP 10]",
+        "[STEP INPUTS]",
+        "[429_B]",
+        "time = 1",
+        "[/STEP INPUTS]",
+        "[STEP OUTPUTS]",
+        "",
+      ];
+      assert.deepStrictEqual(findEnclosingBlock(lines, 4), { name: "429_B", line: 3 });
+      assert.strictEqual(findEnclosingBlock(lines, 7), undefined);
+      assert.strictEqual(resolveContext(lines.join("\r\n"), 7, 0).kind, "other");
+    });
   });
 });

@@ -1,4 +1,4 @@
-import { PARAMETER_FIELDS } from "./componentValidator";
+import { CSV_WITH_MACRO_RE, PARAMETER_FIELDS } from "./componentValidator";
 import { parseCsvCellRef } from "./fileRefs";
 import { parseSectionTagLine } from "./parseSectionTag";
 import { COMPONENT_TAG_PATTERN, XmlIndex, isKnownComponent } from "./xmlIndex";
@@ -45,7 +45,8 @@ export interface EsiSemanticToken {
 
 // Field name may include dots (1553 `Mode.SelectedCourse`).
 const ASSIGNMENT_RE = /^(\s*)([A-Za-z_][A-Za-z0-9_.]*)\s*=\s*(.*)$/;
-const FIRST_IDENT_RE = /[A-Za-z_][A-Za-z0-9_]*/;
+/** The value's leading identifier, as componentValidator reads it (anchored). */
+const FIRST_IDENT_RE = /^[A-Za-z_][A-Za-z0-9_]*/;
 const COMMENT_CHARACTER = "#";
 
 const KNOWN: EsiSemanticTokenModifier = "defaultLibrary";
@@ -185,17 +186,24 @@ export function computeSemanticTokens(
     const eqIndex = line.indexOf("=", fieldStart + fieldName.length);
     const rhs = line.slice(eqIndex + 1);
     const rhsTrimmed = rhs.trimStart();
-    if (rhsTrimmed.startsWith("%") || parseCsvCellRef(rhsTrimmed) !== undefined) {
+    // The values the validator does not judge get no token either: a mark
+    // without its warning would be a false "unknown" (macro anywhere in the
+    // value, CSV reference with or without a macro, hex / float literals).
+    if (
+      rhsTrimmed.split("#")[0].includes("%") ||
+      parseCsvCellRef(rhsTrimmed) !== undefined ||
+      CSV_WITH_MACRO_RE.test(rhsTrimmed)
+    ) {
       continue;
     }
-    const valueMatch = FIRST_IDENT_RE.exec(rhs);
+    const valueMatch = FIRST_IDENT_RE.exec(rhsTrimmed);
     if (!valueMatch) {
       continue;
     }
     const known = field.enums.some((e) => e.name === valueMatch[0]);
     tokens.push({
       line: lineNum,
-      start: eqIndex + 1 + valueMatch.index,
+      start: eqIndex + 1 + (rhs.length - rhsTrimmed.length),
       length: valueMatch[0].length,
       type: "enumMember",
       modifiers: known ? [KNOWN] : [],

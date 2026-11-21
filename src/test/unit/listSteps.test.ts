@@ -1,4 +1,5 @@
 import * as assert from "assert";
+import { buildOutline } from "../../lib/esiOutline";
 import {
   findStepAtLine,
   findStepByQuery,
@@ -77,6 +78,28 @@ describe("listSteps", () => {
       ].join("\n")
     );
     assert.deepStrictEqual(steps, []);
+  });
+
+  it("decides what a step is exactly as the outline does", () => {
+    // sectionNames.isStepSectionName: only the reserved names as spelt are
+    // parts of a step, so these odd spellings are steps everywhere (outline,
+    // CodeLens, grammar) — and in the picker / Test Explorer too.
+    const text = [
+      "[TEST STEPS]",
+      "[STEP  INPUTS]",
+      "[/STEP  INPUTS]",
+      "[STEP inputs]",
+      "[/STEP inputs]",
+      "[STEP 10]",
+      "[/STEP 10]",
+      "[/TEST STEPS]",
+    ].join("\r\n");
+    const fromOutline = buildOutline(text)[0].children
+      .filter((s) => s.kind === "step")
+      .map((s) => s.name);
+    const steps = listSteps(text);
+    assert.deepStrictEqual(steps.map((s) => s.label), fromOutline);
+    assert.deepStrictEqual(steps.map((s) => s.number), ["INPUTS", "inputs", "10"]);
   });
 
   it("ignores the test definition and text outside any step", () => {

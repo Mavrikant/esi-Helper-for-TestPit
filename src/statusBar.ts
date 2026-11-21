@@ -3,6 +3,7 @@ import {
   getActiveProfileName,
   getProfiles,
   onActiveProfileChanged,
+  onDidChangeTestpitExe,
   getTestpitExe,
 } from "./lib/profileRegistry";
 import {
@@ -124,6 +125,8 @@ export function registerValidationStatusBar(): vscode.Disposable {
     }),
     // Profile switch / registry reload: a re-check is on its way.
     onActiveProfileChanged(() => refresh()),
+    // The tooltip says whether a TestPit.exe is set.
+    onDidChangeTestpitExe(() => refresh()),
     vscode.workspace.onDidChangeConfiguration((event) => {
       if (event.affectsConfiguration(CONFIG_SECTION)) {
         refresh();

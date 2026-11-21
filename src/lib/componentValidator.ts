@@ -97,7 +97,7 @@ const RHS_IDENT_RE = /^[A-Za-z_][A-Za-z0-9_]*/;
 // parsed by fileRefs.ts parseCsvCellRef (shared with the links / hover).
 // A value that starts with a `.csv` name but carries a %macro% is not one we
 // can resolve, and must not fall through to the literal checks either.
-const CSV_WITH_MACRO_RE = /^\S*\.csv\s[^#]*%|^[^\s#]*%[^\s#]*\.csv\s/i;
+export const CSV_WITH_MACRO_RE = /^\S*\.csv\s[^#]*%|^[^\s#]*%[^\s#]*\.csv\s/i;
 const COMPONENT_TAG = COMPONENT_TAG_PATTERN;
 
 // "Parameter" fields TestPit accepts inside a message block in addition to the
@@ -238,9 +238,13 @@ export function validateComponents(
 
     // Walk all tags on the line (open + close), maintain the depth stack
     // and emit unknown-connection issues for any unrecognized component opener.
+    // Only the code part: a tag named in a `#` comment is no tag (TestPit's
+    // reader, like parseSectionTag.ts, drops everything from the `#`). The
+    // columns stay valid, `code` being a prefix of `line`.
+    const code = line.split("#")[0];
     TAG_RE.lastIndex = 0;
     let tagMatch: RegExpExecArray | null;
-    while ((tagMatch = TAG_RE.exec(line)) !== null) {
+    while ((tagMatch = TAG_RE.exec(code)) !== null) {
       const isClosing = tagMatch[1] === "/";
       const name = tagMatch[2];
       if (isClosing) {
@@ -395,6 +399,11 @@ export function validateComponents(
       continue;
     }
 
+    // A value holding a %macro% (`INSTALLATION_NUMBER_%N%`) only resolves at
+    // run time: never judged, as for parameters and CSV cells.
+    if (rhsTail.split("#")[0].includes("%")) {
+      continue;
+    }
     const valueMatch = RHS_IDENT_RE.exec(rhsTail);
     if (!valueMatch) {
       // Not a symbolic identifier — may be a numeric enum value. TestPit

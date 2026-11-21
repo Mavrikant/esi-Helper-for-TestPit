@@ -19,10 +19,24 @@ import { IncludedFile, MacroResolver } from "../lib/macros";
  */
 const diskCache = new Map<string, { mtimeMs: number; text: string }>();
 
+/**
+ * One file, one key: Windows (where TestPit runs) and macOS file systems do
+ * not tell `C:\\T\\a.esi` and `c:\\t\\A.esi` apart. The key itself keeps its
+ * real spelling (file labels, Uri.file); this only decides "same file".
+ */
+export function includeIdentity(key: string): string {
+  if (process.platform === "win32") {
+    return path.win32.normalize(key).toLowerCase();
+  }
+  return process.platform === "darwin" ? key.toLowerCase() : key;
+}
+
 function readText(fullPath: string): string | undefined {
-  const lower = fullPath.toLowerCase();
+  const wanted = includeIdentity(fullPath);
   for (const doc of vscode.workspace.textDocuments) {
-    if (doc.uri.fsPath && doc.uri.fsPath.toLowerCase() === lower) {
+    // Only the file itself: a `git:` document (the HEAD side of a diff) has
+    // the working copy's fsPath but older text.
+    if (doc.uri.scheme === "file" && includeIdentity(doc.uri.fsPath) === wanted) {
       return doc.getText();
     }
   }
@@ -31,32 +45,43 @@ function readText(fullPath: string): string | undefined {
     if (!stat.isFile()) {
       return undefined;
     }
-    const hit = diskCache.get(fullPath);
+    const hit = diskCache.get(wanted);
     if (hit && hit.mtimeMs === stat.mtimeMs) {
       return hit.text;
     }
     const text = fs.readFileSync(fullPath, "utf-8");
-    diskCache.set(fullPath, { mtimeMs: stat.mtimeMs, text });
+    diskCache.set(wanted, { mtimeMs: stat.mtimeMs, text });
     return text;
   } catch {
     return undefined;
   }
 }
 
-export function createMacroResolver(document: vscode.TextDocument): MacroResolver {
-  const selfPath = document.uri.fsPath;
-  if (!selfPath) {
-    // Untitled document: includes cannot be located, so they stay unresolved.
+/**
+ * `onInclude` is told the full path of every file an include names, read or
+ * not: what a check of the document depends on besides its own text (an
+ * unreadable one may appear later).
+ */
+export function createMacroResolver(
+  document: vscode.TextDocument,
+  onInclude?: (fullPath: string) => void
+): MacroResolver {
+  if (document.uri.scheme !== "file") {
+    // Untitled (its fsPath is a bare name), or a virtual document such as the
+    // `git:` side of a diff: there is no folder of its own to resolve
+    // includes from, so they stay unresolved and the macro checks stand down.
     return {};
   }
-  const selfKey = path.resolve(selfPath);
+  const selfKey = path.resolve(document.uri.fsPath);
   return {
     selfKey,
+    identity: includeIdentity,
     readInclude(includePath, fromKey): IncludedFile | undefined {
       // The ONE resolve-relative-to-the-script rule (lib/fileRefs.ts), shared
       // with CSV refs and document links; it accepts both slash styles.
       const fullPath = resolveScriptRelative(fromKey ?? selfKey, includePath);
-      if (fullPath === selfKey) {
+      onInclude?.(fullPath);
+      if (includeIdentity(fullPath) === includeIdentity(selfKey)) {
         return { key: selfKey, text: document.getText() };
       }
       const text = readText(fullPath);

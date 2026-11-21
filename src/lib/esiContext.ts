@@ -1,4 +1,4 @@
-import { parseSectionTagLine } from "./parseSectionTag";
+import { openSectionsBefore } from "./tagCompletion";
 import { COMPONENT_TAG_PATTERN } from "./xmlIndex";
 
 export type EsiContext =
@@ -90,11 +90,11 @@ export interface EnclosingBlock {
 }
 
 /**
- * Walk backwards from `lineIndex` (that line included) to the nearest
- * COMPONENT opening tag not yet closed between it and the cursor. Tag lines
- * are classified by parseSectionTag.ts: a one-liner `[NAME/]` opens and
- * closes on its own line, so it never encloses anything, and a name TestPit
- * would reject is skipped.
+ * The innermost COMPONENT block still open at `lineIndex` (that line
+ * included). Tag lines are classified by parseSectionTag.ts: a one-liner
+ * `[NAME/]` opens and closes on its own line, so it never encloses anything,
+ * and a name TestPit would reject is skipped. A closer ends everything opened
+ * after its own opener, as in the validator's stack walk.
  *
  * Structural containers (STEP, STEP INPUTS, VARIABLES, …) are walked past:
  * only a bus-prefixed tag (429_*, 1553_*, DIS_*, Mem_*, …) holds field
@@ -104,25 +104,17 @@ export function findEnclosingBlock(
   lines: readonly string[],
   lineIndex: number
 ): EnclosingBlock | undefined {
-  // Closing tags met on the way up, by name: each one pairs with the next
-  // opener of that name above it.
-  const pendingCloses = new Map<string, number>();
-  for (let i = Math.min(lineIndex, lines.length - 1); i >= 0; i--) {
-    const tag = parseSectionTagLine(lines[i]);
-    if (!tag || tag.invalid || tag.kind === "oneLiner") {
-      continue;
-    }
-    const pending = pendingCloses.get(tag.name) ?? 0;
-    if (tag.kind === "close") {
-      pendingCloses.set(tag.name, pending + 1);
-      continue;
-    }
-    if (pending > 0) {
-      pendingCloses.set(tag.name, pending - 1);
-      continue;
-    }
-    if (COMPONENT_TAG_PATTERN.test(tag.name)) {
-      return { name: tag.name, line: i };
+  // The sections open at the cursor line (its own tag included), walked the
+  // way the validator walks its stack: a closer pops back to its opener, so a
+  // block left unclosed inside an already-closed section is not open any
+  // more. The innermost component on it is the block.
+  const open = openSectionsBefore(
+    lines,
+    Math.min(lineIndex, lines.length - 1) + 1
+  );
+  for (let i = open.length - 1; i >= 0; i--) {
+    if (COMPONENT_TAG_PATTERN.test(open[i].name)) {
+      return { name: open[i].name, line: open[i].line };
     }
   }
   return undefined;

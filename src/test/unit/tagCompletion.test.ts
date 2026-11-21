@@ -375,8 +375,24 @@ describe("tagCompletion", () => {
     it("skips the pair for STEP when an unclaimed step close is below", () => {
       const lines = ["[TEST STEPS]", "    [|]", "    [/STEP 20]", "[/TEST STEPS]"];
       const e = entry(complete(lines), "STEP");
-      assert.strictEqual(e.insertText, "STEP ${1:10}]");
+      // …and proposes the number of that closer: it is this block's own.
+      assert.strictEqual(e.insertText, "STEP ${1:20}]");
       assert.strictEqual(e.isSnippet, true);
+    });
+
+    it("proposes the retyped step's own closer number, not the next free one", () => {
+      const lines = [
+        "[TEST STEPS]",
+        "    [|]",
+        "        [STEP INPUTS]",
+        "        [/STEP INPUTS]",
+        "    [/STEP 10]",
+        "    [STEP 20]",
+        "    [/STEP 20]",
+        "[/TEST STEPS]",
+      ];
+      assert.strictEqual(entry(complete(lines), "STEP").insertText, "STEP ${1:10}]");
+      assert.strictEqual(apply(lines, "STEP")[1], "    [STEP 10]");
     });
 
     it("never adds a closing tag when the line has other content", () => {
@@ -477,9 +493,49 @@ describe("tagCompletion", () => {
     it("puts the number on a tag that gets no closing tag too", () => {
       const lines = ["[TEST STEPS]", "[STEP 5]", "[/STEP 5]", "[|]", "    x", "[/STEP 99]", "[/TEST STEPS]"];
       const e = entry(complete(lines), "STEP");
-      assert.strictEqual(e.insertText, "STEP ${1:10}]");
+      assert.strictEqual(e.insertText, "STEP ${1:99}]");
       // Nothing new is being written: no skeleton variant either.
       assert.ok(!complete(lines).entries.some((x) => x.label === STEP_SKELETON_LABEL));
+    });
+  });
+
+  describe("a tag with its partner (linked editing)", () => {
+    // Linked editing mirrors what changes inside the name into the partner
+    // tag. The edit must end with the name, keeping the line's own `]`: run
+    // through it, a name of another length would not mirror whole.
+    const nameEnd = (line: string): number => line.indexOf("]");
+
+    it("replaces only the name of a paired opener, whatever the new length", () => {
+      for (const [lines, label] of [
+        [["[STEP 10]", "    [STEP IN|PUTS]", "    [/STEP INPUTS]", "[/STEP 10]"], "STEP OUTPUTS"],
+        [["[STEP 10]", "    [STEP |INPUTS]", "    [/STEP INPUTS]", "[/STEP 10]"], "STEP DUMP"],
+        [["[STEP INPUTS]", "    [429_|L100]", "    [/429_L100]", "[/STEP INPUTS]"], "1553_Foo"],
+      ] as Array<[string[], string]>) {
+        const r = complete(lines);
+        const e = entry(r, label);
+        assert.strictEqual(r.endCol, nameEnd(stripMarker(lines[1])), label);
+        assert.strictEqual(e.insertText, label, "a one-liner too: the pair stays a pair");
+        assert.strictEqual(apply(lines, label)[1], `    [${label}]`);
+      }
+    });
+
+    it("replaces only the name of a paired closer", () => {
+      const lines = ["[STEP 10]", "    [STEP INPUTS]", "    [/STEP IN|PUTS]", "[/STEP 10]"];
+      const r = complete(lines);
+      assert.strictEqual(r.endCol, nameEnd(stripMarker(lines[2])));
+      assert.strictEqual(entry(r, "STEP INPUTS").insertText, "STEP INPUTS");
+    });
+
+    it("keeps the step number tab stop on a paired step opener", () => {
+      const lines = ["[TEST STEPS]", "    [STEP 1|0]", "    [/STEP 10]", "[/TEST STEPS]"];
+      const e = entry(complete(lines), "STEP");
+      assert.strictEqual(e.isSnippet, true);
+      assert.match(e.insertText, /^STEP \$\{1:\d+\}$/);
+    });
+
+    it("still writes the bracket for a tag with no partner", () => {
+      const e = entry(complete(["[STEP 10]", "    [STEP IN|PUTS]", "[/STEP 10]"]), "STEP OUTPUTS");
+      assert.strictEqual(e.insertText, "STEP OUTPUTS]");
     });
   });
 
@@ -514,8 +570,10 @@ describe("tagCompletion", () => {
     });
 
     it("keeps the body out when only the name is replaced", () => {
-      const e = entry(complete(["[STEP 10]", "    [STEP IN|PUTS]", "    [/STEP INPUTS]", "[/STEP 10]"]), "STEP DEFINITION");
-      assert.strictEqual(e.insertText, "STEP DEFINITION]");
+      const lines = ["[STEP 10]", "    [STEP IN|PUTS]", "    [/STEP INPUTS]", "[/STEP 10]"];
+      const e = entry(complete(lines), "STEP DEFINITION");
+      assert.strictEqual(e.insertText, "STEP DEFINITION");
+      assert.strictEqual(apply(lines, "STEP DEFINITION")[1], "    [STEP DEFINITION]");
     });
 
     it("offers the full step skeleton right below the plain STEP", () => {

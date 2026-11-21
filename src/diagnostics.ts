@@ -15,6 +15,7 @@ import {
   getActiveConfigs,
   getTestpitExe,
   onActiveProfileChanged,
+  onDidChangeTestpitExe,
 } from "./lib/profileRegistry";
 import { CONFIG_SECTION } from "./constants";
 import { buildValidityCommand } from "./profiles";
@@ -27,6 +28,11 @@ const COLLECTION_NAME = "esi-testpit";
 let collection: vscode.DiagnosticCollection | undefined;
 /** Set on teardown: a run still in flight then must not publish anything. */
 let disposed = false;
+/**
+ * Bumped on every profile switch / registry reload. A run started before one
+ * used the previous profile's config files, so its result is not published.
+ */
+let profileGeneration = 0;
 const versionGate = createVersionGate<string>();
 const scheduler = createValidityScheduler<string>({
   // Quiet period after the last keystroke before TestPit.exe is started.
@@ -84,6 +90,13 @@ function getLiveValidationDelay(): number {
 export interface ValidityRunHooks {
   /** Called with the exact command line just before TestPit.exe starts. */
   onCommand?: (command: string) => void;
+  /**
+   * False: return the result without putting it in the Problems panel. For
+   * a document the caller opened only to validate it (Test Explorer): VS Code
+   * may dispose such a document at any time, and closing it would remove
+   * its problems again.
+   */
+  publish?: boolean;
 }
 
 export interface ValidityRunResult {
@@ -91,7 +104,10 @@ export interface ValidityRunResult {
   /** Raw stdout+stderr of TestPit.exe. */
   output: string;
   issues: ValidityIssue[];
-  /** False when a newer result was already shown, or the document was closed. */
+  /**
+   * False when a newer result was already shown, the document was closed,
+   * the profile changed during the run, or `hooks.publish` was false.
+   */
   published: boolean;
 }
 
@@ -102,7 +118,12 @@ export function registerLiveDiagnostics(): vscode.Disposable {
     vscode.workspace.onDidCloseTextDocument(handleDocumentClose),
     // Other config files / flags now apply: results shown were produced with
     // the previous profile. Fired by a profile switch and a registry reload.
-    onActiveProfileChanged(() => scheduleOpenDocuments(true)),
+    onActiveProfileChanged(() => {
+      profileGeneration++;
+      scheduleOpenDocuments(true);
+    }),
+    // TestPit.exe picked (or repointed): the shown documents can be checked.
+    onDidChangeTestpitExe(() => scheduleOpenDocuments(false)),
     // A document that was in the background then is checked when it is
     // shown again.
     vscode.window.onDidChangeVisibleTextEditors((editors) =>
@@ -169,7 +190,24 @@ function handleDocumentChange(event: vscode.TextDocumentChangeEvent): void {
   if (!isLiveValidationEnabled() || !getTestpitExe()) {
     return;
   }
-  scheduler.schedule(document.uri.toString());
+  const key = document.uri.toString();
+  if (!isVisible(key)) {
+    // Changed without an editor showing it: reloaded from disk (git checkout,
+    // pull, stash, Discard All…), Replace All, a multi-file edit. Each such
+    // event would start a TestPit.exe at the same moment — the scheduler
+    // serializes runs per document only. Its shown results no longer match
+    // its text; it is checked when it is shown again (or edited there).
+    collection?.delete(document.uri);
+    notRechecked.add(key);
+    return;
+  }
+  scheduler.schedule(key);
+}
+
+function isVisible(key: string): boolean {
+  return vscode.window.visibleTextEditors.some(
+    (editor) => editor.document.uri.toString() === key
+  );
 }
 
 /**
@@ -190,15 +228,12 @@ function scheduleOpenDocuments(profileChanged: boolean): void {
   if (disposed || !isLiveValidationEnabled() || !getTestpitExe()) {
     return;
   }
-  const visible = new Set(
-    vscode.window.visibleTextEditors.map((e) => e.document.uri.toString())
-  );
   for (const document of vscode.workspace.textDocuments) {
     if (!isLiveTarget(document)) {
       continue;
     }
     const key = document.uri.toString();
-    if (visible.has(key)) {
+    if (isVisible(key)) {
       scheduler.schedule(key);
     } else {
       if (profileChanged) {
@@ -209,7 +244,12 @@ function scheduleOpenDocuments(profileChanged: boolean): void {
   }
 }
 
-/** Background documents whose stale results scheduleOpenDocuments dropped. */
+/**
+ * Background documents whose check scheduleOpenDocuments or
+ * handleDocumentChange put off until they are shown again. Results shown for
+ * them that went stale (other profile, other text) were dropped, and only a
+ * result for their current text is published for them (see publish).
+ */
 const notRechecked = new Set<string>();
 
 function scheduleUncheckedVisible(editors: readonly vscode.TextEditor[]): void {
@@ -266,19 +306,23 @@ async function validateDocument(
   exe: string,
   hooks?: ValidityRunHooks
 ): Promise<ValidityRunResult> {
-  // Text and version are captured together, before the (slow) run.
+  // Text, version and profile are captured together, before the (slow) run:
+  // getActiveConfigs() below is read in the same tick.
   const version = document.version;
   const text = document.getText();
+  const generation = profileGeneration;
   const key = document.uri.toString();
   runUris.set(key, document.uri);
   runTracker.begin(key);
   try {
-    return await withTempScript(document.uri.fsPath, text, async (tempPath) => {
+    return await withTempScript(tempBase(document.uri), text, async (tempPath) => {
       const command = buildValidityCommand(exe, tempPath, getActiveConfigs());
       hooks?.onCommand?.(command);
       const output = await runValidityCheckAsync(command);
       const issues = parseValidityOutput(output, text.split(/\r?\n/));
-      const published = publish(document, version, issues);
+      const published =
+        hooks?.publish !== false &&
+        publish(document, version, generation, issues);
       return { command, output, issues, published };
     });
   } finally {
@@ -286,9 +330,21 @@ async function validateDocument(
   }
 }
 
+/**
+ * Where the temp copy goes: beside the script, so its relative includes
+ * resolve as for the script itself. A virtual document (`git:` side of a
+ * diff, …) has the working copy's fsPath but is another document to the
+ * scheduler, so a run for each can be in flight at once: the scheme keeps
+ * their `.temp` files apart.
+ */
+export function tempBase(uri: vscode.Uri): string {
+  return uri.scheme === "file" ? uri.fsPath : `${uri.fsPath}.${uri.scheme}`;
+}
+
 function publish(
   document: vscode.TextDocument,
   version: number,
+  generation: number,
   issues: ValidityIssue[]
 ): boolean {
   // Closed while TestPit was running: its diagnostics were cleared on close.
@@ -296,11 +352,23 @@ function publish(
   if (disposed || document.isClosed) {
     return false;
   }
-  if (!versionGate.accept(document.uri.toString(), version)) {
+  // Started before a profile switch / registry reload, so produced with the
+  // previous profile's config files. A shown document already has a re-run
+  // queued (scheduleOpenDocuments); a background one is checked when shown.
+  if (generation !== profileGeneration) {
+    return false;
+  }
+  const key = document.uri.toString();
+  // The stale results of a background document were dropped: a result for
+  // older text must not bring them back, nor cancel its check on show.
+  if (notRechecked.has(key) && version !== document.version) {
+    return false;
+  }
+  if (!versionGate.accept(key, version)) {
     return false;
   }
   collection ??= vscode.languages.createDiagnosticCollection(COLLECTION_NAME);
   collection.set(document.uri, issues.map(toDiagnostic));
-  notRechecked.delete(document.uri.toString());
+  notRechecked.delete(key);
   return true;
 }

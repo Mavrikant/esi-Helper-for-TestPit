@@ -76,9 +76,17 @@ function quote(value: string): string {
   return `"${value.replace(/"/g, "")}"`;
 }
 
+/**
+ * Characters that make cmd.exe (which `exec` runs the command line through)
+ * read a bare path as something else: whitespace and the ones `cmd /?` lists
+ * as needing quotes, plus the pipe / redirection operators. `D:\R&D\…`
+ * unquoted would run `D:\R` and then `D\…`.
+ */
+const CMD_NEEDS_QUOTES = /[\s&()[\]{}^=;!'+,`~|<>]/;
+
 function quoteIfNeeded(p: string): string {
   if (p.startsWith('"') && p.endsWith('"')) {
     return p;
   }
-  return p.includes(" ") ? `"${p}"` : p;
+  return CMD_NEEDS_QUOTES.test(p) ? `"${p}"` : p;
 }

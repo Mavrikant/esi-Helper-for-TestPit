@@ -365,6 +365,33 @@ describe("syntaxes/esi.json", () => {
       ]);
     });
 
+    it("ends on every closer shape TestPit repairs, not on a longer name", () => {
+      // parseSectionTag.ts reads each of these as a close of STEP DEFINITION.
+      for (const closer of [
+        "[/STEP DEFINITION ]",
+        "[//STEP DEFINITION]",
+        "[/ STEP DEFINITION]",
+        "[/STEP DEFINITION",
+        "[/STEP DEFINITION/]",
+        "[[/STEP DEFINITION]]",
+        "    [/STEP DEFINITION] # c",
+        "[/STEP DEFINITION # c",
+      ]) {
+        const lines = tokenize([...open, "Step Description = x", closer, "n = 5"]);
+        assert.ok(
+          lines[3].some((t) => t.scopes.includes("constant.numeric.esi")),
+          `still inside the block after ${JSON.stringify(closer)}`
+        );
+      }
+      for (const notACloser of ["[/STEP DEFINITIONS]", "[/STEP DEFINITIONX"]) {
+        const lines = tokenize([...open, notACloser, "n = 5"]);
+        assert.ok(
+          lines[2].every((t) => t.scopes.includes("meta.definition.esi")),
+          `left the block at ${JSON.stringify(notACloser)}`
+        );
+      }
+    });
+
     it("still colours comments, macros, strings and the markup", () => {
       assert.deepStrictEqual(leaf("  Step Conditions = <pre>", open).slice(2), ["<pre>→meta.tag.markup"]);
       assert.deepStrictEqual(leaf('    <br/> * use %PORT% and "quoted 7" # note 9', open), [

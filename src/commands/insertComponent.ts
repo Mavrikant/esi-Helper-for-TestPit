@@ -9,6 +9,13 @@ import { XmlIndex } from "../lib/xmlIndex";
 
 export const INSERT_COMPONENT_COMMAND = "extension.insertComponent";
 
+/**
+ * A double-click in a tree runs the item's command twice (once per click, the
+ * second with `detail === 2`): the same component again within this window
+ * is that second click, not a second insert.
+ */
+export const REPEAT_WINDOW_MS = 500;
+
 /** What the component browser passes: a connection, or a field of one. */
 export type InsertComponentArg =
   | { kind: "connection"; name: string }
@@ -25,6 +32,7 @@ export type InsertComponentArg =
 export function registerInsertComponent(
   getIndex: () => XmlIndex | undefined = getActiveProjectIndex
 ): vscode.Disposable {
+  let last: { key: string; at: number } | undefined;
   return vscode.commands.registerCommand(
     INSERT_COMPONENT_COMMAND,
     async (arg?: InsertComponentArg) => {
@@ -36,6 +44,17 @@ export function registerInsertComponent(
         void vscode.window.showInformationMessage(
           "Open a .esi file and place the cursor where the component should go."
         );
+        return;
+      }
+      const key = JSON.stringify(arg);
+      const now = Date.now();
+      if (last && last.key === key && now - last.at < REPEAT_WINDOW_MS) {
+        // The second click of a double-click took the focus back to the
+        // view: give it to the editor again, insert nothing.
+        await vscode.window.showTextDocument(editor.document, {
+          viewColumn: editor.viewColumn,
+          preserveFocus: false,
+        });
         return;
       }
       const text = editor.document.getText();
@@ -53,6 +72,7 @@ export function registerInsertComponent(
       if (!plan) {
         return;
       }
+      last = { key, at: now };
       await editor.insertSnippet(
         new vscode.SnippetString(plan.snippet),
         new vscode.Range(plan.line, plan.startCol, plan.line, plan.endCol),

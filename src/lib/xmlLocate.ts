@@ -237,11 +237,21 @@ export function scanXml(source: string): XmlTree {
         p = n;
         break;
       }
+      // Trimmed, as the index's parser (fast-xml-parser, trimValues) reads
+      // it: `Name = "HSI "` names partition HSI. The span is the trimmed run.
+      let vs = p + 1;
+      let ve = valueEnd;
+      while (vs < ve && WHITESPACE.test(text[vs])) {
+        vs++;
+      }
+      while (ve > vs && WHITESPACE.test(text[ve - 1])) {
+        ve--;
+      }
       node.attrs.push({
         name: attrName,
-        value: decode(text.slice(p + 1, valueEnd)),
-        valueStart: p + 1,
-        rawLength: valueEnd - p - 1,
+        value: decode(text.slice(vs, ve)),
+        valueStart: vs,
+        rawLength: ve - vs,
       });
       p = valueEnd + 1;
     }
@@ -428,12 +438,13 @@ function findConnectionNode(tree: XmlTree, conn: ConnectionDef): XmlNode | undef
   const named = descendants(tree.root, "Connection").filter(
     (c) => attr(c, "Name")?.value === conn.rawName
   );
-  return (
-    named.find((c) => {
-      const type = c.parent ? attr(c.parent, "Type")?.value : undefined;
-      return type !== undefined && BUS_PREFIX[type] === conn.bus;
-    }) ?? named[0]
-  );
+  const sameBus = named.filter((c) => {
+    const type = c.parent ? attr(c.parent, "Type")?.value : undefined;
+    return type !== undefined && BUS_PREFIX[type] === conn.bus;
+  });
+  // The index keeps the last connection registered under a name (its card
+  // shows that one's card / channel); so does this.
+  return sameBus[sameBus.length - 1] ?? named[named.length - 1];
 }
 
 /** The name a `<Message>` goes by: its own, or — where format 2 leaves it out
@@ -584,7 +595,11 @@ export function locateInTree(tree: XmlTree, target: DefinitionTarget): XmlPositi
       sourceFile: target.conn.sourceFile,
     };
     const messageNode = findMessageNode(tree, stand);
-    return messageNode ? toPosition(tree, spanOf(messageNode), true) : TOP_OF_FILE;
+    // A partition port that was not found is not pinpointed by a message of
+    // the same name elsewhere in the file.
+    return messageNode
+      ? toPosition(tree, spanOf(messageNode), target.conn.partition === undefined)
+      : TOP_OF_FILE;
   }
 
   const messageNode = findMessageNode(tree, target.message, target.conn);

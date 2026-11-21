@@ -40,10 +40,14 @@ const DEFAULT_REPARSE_DELAY_MS = 300;
 export interface EsiTestControllerDeps {
   /** The configured TestPit.exe, or undefined. Must never prompt. */
   getExe(): string | undefined;
-  /** Run TestPit's validity check on a document. */
+  /**
+   * Run TestPit's validity check on a document. `publish: false`: keep the
+   * issues out of the Problems panel (a script the run opened itself).
+   */
   validate(
     document: vscode.TextDocument,
-    exe: string
+    exe: string,
+    options?: { publish?: boolean }
   ): Promise<{ output: string; issues: ValidityIssue[] }>;
   /** Quiet period before an edited document's steps are re-listed. */
   reparseDelayMs?: number;
@@ -51,7 +55,8 @@ export interface EsiTestControllerDeps {
 
 const DEFAULT_DEPS: EsiTestControllerDeps = {
   getExe: getTestpitExe,
-  validate: (document, exe) => runValidityCheckForDocument(document, exe),
+  validate: (document, exe, options) =>
+    runValidityCheckForDocument(document, exe, { publish: options?.publish }),
 };
 
 function isEsiFile(document: vscode.TextDocument): boolean {
@@ -344,6 +349,11 @@ export function registerEsiTestController(
     }
     run.started(file);
 
+    // Only an already open script's issues go to the Problems panel. One the
+    // run opens itself has no editor, and VS Code may dispose it at any time
+    // — which would remove its problems again, while the Test Results view
+    // keeps them. The test messages below carry the locations either way.
+    const wasOpen = findOpenDocument(uri) !== undefined;
     let document: vscode.TextDocument;
     try {
       // A TextDocument, not an editor: nothing is shown. An already open
@@ -376,7 +386,7 @@ export function registerEsiTestController(
 
     let result: { output: string; issues: ValidityIssue[] };
     try {
-      result = await deps.validate(document, exe);
+      result = await deps.validate(document, exe, { publish: wasOpen });
     } catch (err) {
       run.errored(
         file,

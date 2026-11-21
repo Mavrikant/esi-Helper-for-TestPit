@@ -19,15 +19,28 @@ export type CsvValueContext =
       kind: "file";
       /** Folder part typed so far, with its trailing separator ("" = none). */
       dirPart: string;
-      /** Replace range on the line: the file-name part typed so far. */
+      /**
+       * Replace range on the line: the file-name part, through the rest of
+       * it after the cursor (retyping a name replaces it whole).
+       */
       startCol: number;
       endCol: number;
+      /**
+       * Present (true) when a ` line:N col:M` address already follows the
+       * name: only the name is inserted then.
+       */
+      hasTail?: true;
     }
   | {
       kind: "tail";
-      /** Replace range on the line: what is typed of the tail so far. */
+      /** Replace range on the line: the word of the tail at the cursor. */
       startCol: number;
       endCol: number;
+      /**
+       * Present (true) when the numbers already follow (`li|:4 col:2`): only
+       * the `line` word is inserted then.
+       */
+      hasAddress?: true;
     };
 
 // A path being typed: optional drive, then the characters parseCsvCellRef
@@ -35,6 +48,12 @@ export type CsvValueContext =
 const PATH_PARTIAL_RE = /^(?:[A-Za-z]:)?[A-Za-z0-9_.\-\\/]*$/;
 // `<file>.csv`, blanks, and the start of the tail (nothing of it, or letters).
 const TAIL_PARTIAL_RE = /^(?:[A-Za-z]:)?[A-Za-z0-9_.\-\\/]+\.csv\s+([A-Za-z]*)$/i;
+// After the cursor: the rest of a file name; then an address already there.
+const PATH_REST_RE = /^[A-Za-z0-9_.\-\\/]*/;
+const ADDRESS_AFTER_NAME_RE = /^\s+line\s*:\s*\d+\s+col\s*:\s*\d+/i;
+// After the cursor, in the tail: the rest of the word; then `:N`.
+const WORD_REST_RE = /^[A-Za-z]*/;
+const NUMBER_AFTER_WORD_RE = /^\s*:\s*\d+/;
 
 /**
  * Where the cursor stands in a CSV reference, from the text of its line.
@@ -51,12 +70,17 @@ export function csvValueContext(
     return undefined;
   }
   const rhs = before.slice(eq + 1).replace(/^\s+/, "");
+  const after = line.slice(character);
   const tail = TAIL_PARTIAL_RE.exec(rhs);
   if (tail) {
+    const rest = (WORD_REST_RE.exec(after) as RegExpExecArray)[0];
     return {
       kind: "tail",
       startCol: character - tail[1].length,
-      endCol: character,
+      endCol: character + rest.length,
+      ...(NUMBER_AFTER_WORD_RE.test(after.slice(rest.length))
+        ? { hasAddress: true as const }
+        : {}),
     };
   }
   if (!PATH_PARTIAL_RE.test(rhs)) {
@@ -64,11 +88,15 @@ export function csvValueContext(
   }
   const lastSep = Math.max(rhs.lastIndexOf("/"), rhs.lastIndexOf("\\"));
   const dirPart = rhs.slice(0, lastSep + 1);
+  const rest = (PATH_REST_RE.exec(after) as RegExpExecArray)[0];
   return {
     kind: "file",
     dirPart,
     startCol: character - (rhs.length - dirPart.length),
-    endCol: character,
+    endCol: character + rest.length,
+    ...(ADDRESS_AFTER_NAME_RE.test(after.slice(rest.length))
+      ? { hasTail: true as const }
+      : {}),
   };
 }
 
@@ -87,25 +115,39 @@ function escapeSnippet(text: string): string {
   return text.replace(/[\\$}]/g, "\\$&");
 }
 
-/** One entry per file: the file name followed by the cell-address tab stops. */
-export function csvFileEntries(fileNames: readonly string[]): CsvValueEntry[] {
+/**
+ * One entry per file: the file name followed by the cell-address tab stops —
+ * or the name alone when an address already follows (`withTail: false`).
+ */
+export function csvFileEntries(
+  fileNames: readonly string[],
+  options: { withTail?: boolean } = {}
+): CsvValueEntry[] {
+  const withTail = options.withTail ?? true;
   return fileNames.map((name, i) => ({
     kind: "file" as const,
     label: name,
     detail: "CSV cell: line:N col:M",
-    insertText: `${escapeSnippet(name)} ${CSV_TAIL_SNIPPET}`,
+    insertText: withTail
+      ? `${escapeSnippet(name)} ${CSV_TAIL_SNIPPET}`
+      : escapeSnippet(name),
     filterText: name,
     sortText: `9${String(i).padStart(4, "0")}`,
   }));
 }
 
-/** The ` line:N col:M` tail, for a `.csv` name that is already typed. */
-export function csvTailEntry(): CsvValueEntry {
+/**
+ * The ` line:N col:M` tail, for a `.csv` name that is already typed — or the
+ * `line` word alone when its numbers already follow (`withNumbers: false`).
+ */
+export function csvTailEntry(
+  options: { withNumbers?: boolean } = {}
+): CsvValueEntry {
   return {
     kind: "tail",
     label: "line:N col:M",
     detail: "CSV cell address (1-based line and column)",
-    insertText: CSV_TAIL_SNIPPET,
+    insertText: options.withNumbers ?? true ? CSV_TAIL_SNIPPET : "line",
     filterText: "line",
     sortText: "90000",
   };

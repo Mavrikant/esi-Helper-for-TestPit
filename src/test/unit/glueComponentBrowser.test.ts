@@ -334,6 +334,21 @@ describe("component browser glue", () => {
       assert.strictEqual(shown[0].target, editor.document);
     });
 
+    it("inserts once for the two clicks of a double-click, refocusing the editor each time", async () => {
+      // A tree runs the item's command on each click of a double-click.
+      registerInsertComponent(() => RNE);
+      const editor = fakeEditor("[STEP INPUTS]\r\n\r\n[/STEP INPUTS]", 1);
+      mock.window.activeTextEditor = editor;
+      const arg = { kind: "connection", name: "DIS_PowerOnOff" };
+      await commands[INSERT_COMPONENT_COMMAND](arg);
+      await commands[INSERT_COMPONENT_COMMAND]({ ...arg });
+      assert.strictEqual(editor.calls.length, 1);
+      assert.strictEqual(shown.length, 2);
+      // Another component right after is a new insert.
+      await commands[INSERT_COMPONENT_COMMAND]({ kind: "field", name: "value", connectionName: "DIS_PowerOnOff" });
+      assert.strictEqual(editor.calls.length, 2);
+    });
+
     it("inserts 'field = ' below the cursor line", async () => {
       registerInsertComponent(() => RNE);
       const editor = fakeEditor("    [DIS_PowerOnOff]\n    [/DIS_PowerOnOff]", 0);

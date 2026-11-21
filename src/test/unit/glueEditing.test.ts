@@ -124,6 +124,70 @@ describe("editing glue (keyword hover, inlay hints, semantic tokens)", () => {
     }
   });
 
+  it("component hover: an enum value is the state of the field being assigned", () => {
+    // Two fields of one message share state names with other numbers.
+    const { createEmptyIndex, messageKey } = require("../../lib/xmlIndex");
+    const index = createEmptyIndex();
+    const message = {
+      name: "L270",
+      bus: "429",
+      fields: [
+        { name: "Bit11", dataType: "Enum", enums: [{ name: "OFF", value: "0" }, { name: "ON", value: "1" }] },
+        { name: "Bit12", dataType: "Enum", enums: [{ name: "ON", value: "0" }, { name: "OFF", value: "1" }] },
+        { name: "Mode", dataType: "Enum", enums: [{ name: "STANDBY", value: "0" }, { name: "ACTIVE", value: "1" }] },
+      ],
+    };
+    index.messages.set("L270", message);
+    index.messagesByBus.set(messageKey("429", "L270"), message);
+    index.connections.set("429_L270_TX", {
+      fullName: "429_L270_TX",
+      bus: "429",
+      rawName: "L270_TX",
+      messageName: "L270",
+    });
+    const text = [
+      "[TEST STEPS]",
+      "    [429_L270_TX]",
+      "        Bit12 = ON",
+      "        Mode  = ON",
+      "        occurrence = ACTIVE",
+      "    [/429_L270_TX]",
+      "[/TEST STEPS]",
+    ].join("\r\n");
+    const document = fakeDocument(text);
+    const at = (line: number, word: string): any => {
+      const start = document.lineAt(line).text.indexOf(word, 10);
+      return {
+        document: {
+          ...document,
+          getWordRangeAtPosition: () => new vscode.Range(line, start, line, start + word.length),
+        },
+        position: pos(line, start + 1),
+      };
+    };
+    const cache = require("../../lib/projectIndexCache");
+    const original = cache.getActiveProjectIndex;
+    cache.getActiveProjectIndex = () => index;
+    try {
+      registerEsiHoverProvider();
+      const component = registered.providers.hover;
+      const bit12 = at(2, "ON");
+      const card = component.provideHover(bit12.document, bit12.position);
+      assert.ok(card, "a card for Bit12's ON");
+      const value = card.contents.value as string;
+      assert.ok(value.includes("**ON** = `0`") && value.includes("Enum value of `Bit12`"), value);
+      // Mode has no state ON: no card from another field's table.
+      const mode = at(3, "ON");
+      assert.strictEqual(component.provideHover(mode.document, mode.position), undefined);
+      // A parameter key: the one field holding the state answers.
+      const param = at(4, "ACTIVE");
+      const paramCard = component.provideHover(param.document, param.position);
+      assert.ok((paramCard.contents.value as string).includes("Enum value of `Mode`"));
+    } finally {
+      cache.getActiveProjectIndex = original;
+    }
+  });
+
   it("inlay hints: registered, and silent with no profile loaded", () => {
     const disposable = registerEsiInlayHintsProvider();
     const provider = registered.providers.inlayHints;

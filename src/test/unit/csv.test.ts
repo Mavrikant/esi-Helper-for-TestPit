@@ -124,6 +124,19 @@ describe("csv", () => {
       assert.strictEqual(lookupCsvCell(t, 1, 1).status, "ok");
       assert.strictEqual(lookupCsvCell(t, 2, 1).status, "ambiguous");
       assert.strictEqual(lookupCsvCell(t, 3, 1).status, "ambiguous");
+      assert.strictEqual(lookupCsvCell(t, 4, 1).status, "ambiguous");
+    });
+
+    it("still knows a line past the end of the file is missing", () => {
+      // 3 records on 4 physical lines: line 5 exists under neither reading.
+      const t = parseCsvTable('id,mode\n1,"first\nsecond"\n2,NORMAL\n');
+      assert.strictEqual(t.physicalLines, 4);
+      assert.deepStrictEqual(lookupCsvCell(t, 5, 1), { status: "rowMissing", rowCount: 4 });
+      assert.deepStrictEqual(lookupCsvCell(t, 50, 1), { status: "rowMissing", rowCount: 4 });
+      assert.strictEqual(lookupCsvCell(t, 4, 1).status, "ambiguous");
+      assert.strictEqual(parseCsvTable("a\nb").physicalLines, 2);
+      assert.strictEqual(parseCsvTable("a\nb\r\n").physicalLines, 2);
+      assert.strictEqual(parseCsvTable("").physicalLines, 0);
     });
   });
 

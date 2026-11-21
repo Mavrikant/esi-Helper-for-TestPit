@@ -57,6 +57,8 @@ describe("esiTestController (glue)", () => {
   let exe: string | undefined;
   let validate: (doc: any) => { output: string; issues: any[] };
   let validated: string[] = [];
+  /** `<file>:<publish option>` per validate call. */
+  let publishFlags: string[] = [];
   let found: any[] = [];
   let openDocs: any[] = [];
   let runs: RunLog[] = [];
@@ -181,8 +183,9 @@ describe("esiTestController (glue)", () => {
     const { registerEsiTestController } = require(CONTROLLER_MODULE) as typeof controllerModule;
     disposable = registerEsiTestController({
       getExe: () => exe,
-      validate: (doc: any) => {
+      validate: (doc: any, _exe: string, options?: { publish?: boolean }) => {
         validated.push(path.basename(doc.uri.fsPath));
+        publishFlags.push(`${path.basename(doc.uri.fsPath)}:${options?.publish}`);
         return Promise.resolve(validate(doc));
       },
       reparseDelayMs: 1,
@@ -207,6 +210,7 @@ describe("esiTestController (glue)", () => {
     exe = "C:\\TestPit\\TestPit.exe";
     validate = () => ({ output: "[Info] done", issues: [] });
     validated = [];
+    publishFlags = [];
     runs = [];
     openDocs.length = 0;
     found = [write("a.esi", SCRIPT), write("b.esi", "[TEST STEPS]\r\n[/TEST STEPS]\r\n")];
@@ -302,6 +306,14 @@ describe("esiTestController (glue)", () => {
     assert.match(run.name ?? "", /validity check/i);
     assert.match(run.output[0].text, /NOT executed/);
     assert.strictEqual(run.ended, true);
+  });
+
+  it("puts the issues of an already open script in the Problems panel, not of one it opened", async () => {
+    // A document the run opens has no editor: VS Code may dispose it at any
+    // time, and its problems would vanish again with it.
+    openDocs.push(docOf(found[0], SCRIPT));
+    await runAll();
+    assert.deepStrictEqual(publishFlags, ["a.esi:true", "b.esi:false"]);
   });
 
   it("fails the step holding the error, with a located message; the other step passes", async () => {

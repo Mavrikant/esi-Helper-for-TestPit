@@ -417,14 +417,61 @@ describe("macros", () => {
       assert.strictEqual(prepareMacroRename(ROOT, 5, 11).ok, false); // %N% not defined here
       const arg = doc("[INCLUDE]", "%ARG% = 1", "include file = a.esi", "[/INCLUDE]");
       assert.strictEqual(prepareMacroRename(arg, 1, 2).ok, false);
-      const text = doc("[VARIABLES]", "%S% = 1", "[/VARIABLES]", "[INCLUDE]", "include file = a.esi", "[/INCLUDE]");
+      const text = doc("[VARIABLES]", "%S% = 1", "[/VARIABLES]", "[INCLUDE]", "include file = a.esi", "[/INCLUDE]", "[TEST STEPS]", "[/TEST STEPS]");
       assert.strictEqual(prepareMacroRename(text, 1, 1, reader({ "a.esi": "x = %S%" })).ok, false);
       assert.strictEqual(prepareMacroRename(text, 1, 1, reader({ "a.esi": "x = 1" })).ok, true);
     });
 
+    it("refuses in an include fragment: the scripts including it may use the name", () => {
+      // No [TEST STEPS] / [TEST DEFINITION]: probably included elsewhere,
+      // where %SPEED% may be used or passed in an [INCLUDE] block.
+      const fragment = doc("[VARIABLES]", "%SPEED% = 5", "[/VARIABLES]", "x = %SPEED%");
+      const refused = prepareMacroRename(fragment, 1, 2);
+      assert.ok(!refused.ok && refused.reason.includes("included by other scripts"), JSON.stringify(refused));
+      assert.strictEqual(computeMacroRename(fragment, 3, 6, "VELOCITY").ok, false);
+      assert.strictEqual(prepareMacroRename(doc(fragment, "[TEST STEPS]", "[/TEST STEPS]"), 1, 2).ok, true);
+    });
+
+    it("refuses a new name that differs only by case from another macro", () => {
+      const text = doc("[VARIABLES]", "%A% = 1", "%COURSE% = 2", "[/VARIABLES]", "[TEST STEPS]", "x = %A% %COURSE%", "[/TEST STEPS]");
+      const twin = computeMacroRename(text, 1, 1, "course");
+      assert.ok(!twin.ok && twin.reason.includes("differs only by case from the existing %COURSE%"), JSON.stringify(twin));
+      const same = computeMacroRename(text, 1, 1, "COURSE");
+      assert.ok(!same.ok && same.reason.includes("already exists"));
+      // Changing the case of the macro itself is fine.
+      const own = computeMacroRename(text, 1, 1, "a");
+      assert.ok(own.ok && own.edits.length === 2);
+    });
+
+    it("reads a file reached under two spellings once, when the resolver says they are one", () => {
+      const files: Record<string, string> = {
+        "C:\\T\\lib\\common.esi": "[VARIABLES]\n%A% = 5\n[/VARIABLES]",
+        "c:\\t\\lib\\COMMON.esi": "[VARIABLES]\n%A% = 5\n[/VARIABLES]",
+      };
+      const text = doc("[INCLUDE]", "include file = C:\\T\\lib\\common.esi", "[/INCLUDE]", "[INCLUDE]", "include file = c:\\t\\lib\\COMMON.esi", "[/INCLUDE]", "[TEST STEPS]", "x = %A%", "[/TEST STEPS]");
+      const resolver = (identity?: (key: string) => string): MacroResolver => ({
+        selfKey: "C:\\T\\root.esi",
+        identity,
+        readInclude: (p) => (files[p] === undefined ? undefined : { key: p, text: files[p] }),
+      });
+      assert.strictEqual(findMacroDefinitions(buildMacroModel(text, resolver()), "A").length, 2);
+      const once = buildMacroModel(text, resolver((k) => k.toLowerCase()));
+      assert.strictEqual(once.included.length, 1);
+      assert.strictEqual(findMacroDefinitions(once, "A").length, 1);
+      // The document itself, reached again under another spelling.
+      const self = doc("[INCLUDE]", "include file = c:\\t\\ROOT.esi", "[/INCLUDE]", "[TEST STEPS]", "[/TEST STEPS]");
+      const selfFiles: Record<string, string> = { "c:\\t\\ROOT.esi": self };
+      const back = buildMacroModel(self, {
+        selfKey: "C:\\T\\root.esi",
+        identity: (k) => k.toLowerCase(),
+        readInclude: (p) => ({ key: p, text: selfFiles[p] }),
+      });
+      assert.strictEqual(back.included.length, 0);
+    });
+
     it("refuses when an include could not be read (it may use the name)", () => {
       const withInclude = (includePath: string): string =>
-        doc("[VARIABLES]", "%A% = 1", "[/VARIABLES]", "[INCLUDE]", `include file = ${includePath}`, "[/INCLUDE]", "x=%A%");
+        doc("[VARIABLES]", "%A% = 1", "[/VARIABLES]", "[INCLUDE]", `include file = ${includePath}`, "[/INCLUDE]", "x=%A%", "[TEST STEPS]", "[/TEST STEPS]");
       const files = { "common.esi": "x = 1" };
       assert.strictEqual(prepareMacroRename(withInclude("common.esi"), 1, 1, reader(files)).ok, true);
       // Unreadable file, no reader at all, and a macro-valued path.
@@ -465,6 +512,19 @@ describe("macros", () => {
     it("does not swallow the opening % of a following macro", () => {
       const c = computeMacroCompletions(text("x = %TI%TIME_B%"), 4, 7);
       assert.deepStrictEqual([c?.startCol, c?.endCol], [4, 7]);
+    });
+
+    it("replaces the closing % when a lone % follows later on the line", () => {
+      // `% to 50%` cannot open a macro, so the `%` after the cursor is ours.
+      const line = "Step Description = set %TI% to 50%";
+      const at = line.indexOf("%TI") + 3;
+      const c = computeMacroCompletions(text(line), 4, at);
+      assert.deepStrictEqual([c?.startCol, c?.endCol], [at - 3, at + 1]);
+      const inside = computeMacroCompletions(text(line), 4, at - 1);
+      assert.deepStrictEqual([inside?.startCol, inside?.endCol], [at - 3, at + 1]);
+      // Still pairs up an odd count the way the scanner does.
+      const odd = computeMacroCompletions(text("x = %A%B%C%"), 4, 6);
+      assert.deepStrictEqual([odd?.startCol, odd?.endCol], [4, 7]);
     });
 
     it("offers nothing after a complete macro, in a comment, or with no %", () => {

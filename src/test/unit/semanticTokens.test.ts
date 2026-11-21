@@ -162,6 +162,34 @@ describe("computeSemanticTokens", () => {
     );
   });
 
+  it("marks no part of a value the validator does not judge as an unknown state", () => {
+    // Hex / float literals, a macro inside the value, a macro CSV reference
+    // and a quoted CSV name: no warning, so no "unknown" mark either.
+    assert.deepStrictEqual(
+      run([
+        "[ED_Type1]",
+        "    type_code = 0x1F",
+        "    type_code = 1e5",
+        "    type_code = AIRCRAFT_%SET%",
+        "    type_code = data_%RUN%.csv line:1 col:2",
+        '    type_code = "data with space.csv" line:1 col:2',
+        "    type_code = BOGUS # still marked",
+        "[/ED_Type1]",
+      ]),
+      [
+        "0:ED_Type1:class:defaultLibrary",
+        "1:type_code:property:defaultLibrary",
+        "2:type_code:property:defaultLibrary",
+        "3:type_code:property:defaultLibrary",
+        "4:type_code:property:defaultLibrary",
+        "5:type_code:property:defaultLibrary",
+        "6:type_code:property:defaultLibrary",
+        "6:BOGUS:enumMember",
+        "7:ED_Type1:class:defaultLibrary",
+      ]
+    );
+  });
+
   it("handles CRLF and the sloppy tag forms TestPit repairs", () => {
     assert.deepStrictEqual(
       run(["[[ED_Type1]]", "type_code = AIRCRAFT_CATEGORY_SET_D", "[//ED_Type1]"], loadIndex(), "\r\n"),

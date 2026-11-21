@@ -56,7 +56,7 @@
 	],
 	"repository": {
 		"definition-section": {
-			"comment": "TEST/STEP DEFINITION blocks hold prose values. Inside them only comments, macros, strings, the <pre>/<br/> markup and the field keys are highlighted — numbers, units, operators, literals and constants in descriptions are left as default text.",
+			"comment": "TEST/STEP DEFINITION blocks hold prose values. Inside them only comments, macros, strings, the <pre>/<br/> markup and the field keys are highlighted — numbers, units, operators, literals and constants in descriptions are left as default text. The end accepts every closer shape TestPit repairs ([/NAME ], [//NAME], [/ NAME], [/NAME, [/NAME/] — see parseSectionTag.ts): one it misses would leave the rest of the file inside the block.",
 			"begin": "(\\[)(TEST DEFINITION|STEP DEFINITION)(\\])",
 			"beginCaptures": {
 				"1": {
@@ -69,7 +69,7 @@
 					"name": "punctuation.definition.tag.end.esi"
 				}
 			},
-			"end": "(\\[)(/)(TEST DEFINITION|STEP DEFINITION)(\\])",
+			"end": "(\\[+)(/+)[ \\t]*(TEST DEFINITION|STEP DEFINITION)[ \\t]*/*(\\]|(?=[ \\t]*(?:#|$)))",
 			"endCaptures": {
 				"1": {
 					"name": "punctuation.definition.tag.begin.esi"

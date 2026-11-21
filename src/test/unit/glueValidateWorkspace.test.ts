@@ -27,6 +27,10 @@ describe("validateWorkspace command (glue)", () => {
   let reports: any[] = [];
   let messages: Array<{ level: string; message: string; actions: string[] }> = [];
   let answer: string | undefined;
+  /** The summary stays open: neither a button nor a close settles it. */
+  let summaryStaysOpen = false;
+  /** Called with each progress report, after it is recorded. */
+  let onReport: (() => void) | undefined;
   let executed: string[] = [];
   let collectionName = "";
   const published = new Map<string, any[]>();
@@ -62,7 +66,7 @@ describe("validateWorkspace command (glue)", () => {
     });
     patch(v.workspace, "createFileSystemWatcher", () => ({
       onDidChange(l: any) { listeners.change = l; return { dispose() {} }; },
-      onDidCreate() { return { dispose() {} }; },
+      onDidCreate(l: any) { listeners.create = l; return { dispose() {} }; },
       onDidDelete(l: any) { listeners.delete = l; return { dispose() {} }; },
       dispose() {},
     }));
@@ -85,7 +89,9 @@ describe("validateWorkspace command (glue)", () => {
         get isCancellationRequested() { return reports.length > cancelAfterReports; },
         onCancellationRequested() { return { dispose() {} }; },
       };
-      return Promise.resolve(task({ report(r: any) { reports.push(r); } }, token));
+      return Promise.resolve(
+        task({ report(r: any) { reports.push(r); onReport?.(); } }, token)
+      );
     });
     for (const [fn, level] of [
       ["showInformationMessage", "info"],
@@ -94,7 +100,9 @@ describe("validateWorkspace command (glue)", () => {
     ]) {
       patch(v.window, fn, (message: string, ...actions: string[]) => {
         messages.push({ level, message, actions });
-        return Promise.resolve(answer);
+        return summaryStaysOpen && actions.length > 0
+          ? new Promise<string | undefined>(() => undefined)
+          : Promise.resolve(answer);
       });
     }
     disposable = registerValidateWorkspace();
@@ -119,6 +127,8 @@ describe("validateWorkspace command (glue)", () => {
     messages = [];
     executed = [];
     answer = undefined;
+    summaryStaysOpen = false;
+    onReport = undefined;
     cancelAfterReports = Infinity;
     v.workspace.textDocuments = [];
   });
@@ -213,6 +223,32 @@ describe("validateWorkspace command (glue)", () => {
     assert.strictEqual(published.size, 0);
   });
 
+  it("re-checks a covered file when a file it includes appears or changes on disk", async () => {
+    const root = write(
+      "inc-root.esi",
+      "[INCLUDE]\r\n    include file = inc-common.esi\r\n[/INCLUDE]\r\n[TEST STEPS]\r\n    x = %SPEED%\r\n[/TEST STEPS]\r\n"
+    );
+    found = [root];
+    await run();
+    // inc-common.esi is missing: the include is unresolved, the macro checks
+    // stand down.
+    assert.strictEqual(published.size, 0);
+    const common = write("inc-common.esi", "[VARIABLES]\r\n[/VARIABLES]\r\n");
+    listeners.create(common);
+    await settle();
+    assert.deepStrictEqual(
+      (published.get(root.toString()) ?? []).map((d: any) => d.code),
+      ["undefinedMacro"]
+    );
+    write("inc-common.esi", "[VARIABLES]\r\n    %SPEED% = 5\r\n[/VARIABLES]\r\n");
+    // The include cache is keyed by modification time: make sure it moves.
+    const later = new Date(Date.now() + 5000);
+    fs.utimesSync(common.fsPath, later, later);
+    listeners.change(common);
+    await settle();
+    assert.strictEqual(published.size, 0);
+  });
+
   it("an unreadable file is reported, not passed as clean", async () => {
     found = [uriOf("missing.esi")];
     await run();
@@ -236,6 +272,53 @@ describe("validateWorkspace command (glue)", () => {
     assert.strictEqual(published.size, 1);
     answer = "Clear";
     await run();
+    assert.strictEqual(published.size, 0);
+  });
+
+  it("a summary left open does not block the next run", async () => {
+    // A notification settles only on a click or when it is closed; one that
+    // timed out sits in the Notification Center, still open.
+    found = [write("open-summary.esi", BROKEN)];
+    summaryStaysOpen = true;
+    await run();
+    await run();
+    assert.strictEqual(messages.length, 2);
+    assert.ok(
+      messages.every((m) => m.message.includes("Checked 1 .esi file")),
+      JSON.stringify(messages)
+    );
+  });
+
+  it("a Clear during a run stops it, saying so", async () => {
+    found = [write("cl1.esi", BROKEN), write("cl2.esi", BROKEN)];
+    onReport = () => {
+      if (reports.length === 2) {
+        v.__registered.commands[CLEAR_WORKSPACE_VALIDATION_COMMAND]();
+      }
+    };
+    await run();
+    assert.deepStrictEqual(messages.map((m) => m.message), [
+      "Workspace validation stopped: its results were cleared.",
+    ]);
+    assert.strictEqual(published.size, 0);
+  });
+
+  it("does not publish a file opened as esi while it was being read", async () => {
+    const uri = write("opened-during-read.esi", BROKEN);
+    found = [uri];
+    const esiDoc = { uri, languageId: "esi", getText: () => BROKEN };
+    const promises = fs.promises as any;
+    const readFile = promises.readFile;
+    promises.readFile = (...args: any[]) => {
+      v.workspace.textDocuments = [esiDoc];
+      return readFile.apply(promises, args);
+    };
+    try {
+      await run();
+    } finally {
+      promises.readFile = readFile;
+    }
+    // The live collection owns it now: no second row here.
     assert.strictEqual(published.size, 0);
   });
 

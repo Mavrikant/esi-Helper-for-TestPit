@@ -1,8 +1,8 @@
 import { parseSectionTagLine } from "./parseSectionTag";
 import {
-  RESERVED_STEP_SECTIONS,
   SEC_STEP_DEFINITION,
   STEP_PREFIX,
+  isStepSectionName,
 } from "./sectionNames";
 
 /**
@@ -24,22 +24,22 @@ export interface StepInfo {
   requirements: string;
 }
 
-const STEP_NAME_RE = /^STEP\s+(\S.*)$/;
 const KEY_RE = /^\s*Step (Description|Requirements)\s*=\s*(.*)$/i;
 const PRE_OPEN_RE = /^<pre>/i;
 const PRE_CLOSE_RE = /<\/pre>/i;
 const MAX_TEXT = 120;
 
+/**
+ * The id of a step tag, by the ONE rule (sectionNames.isStepSectionName) the
+ * outline, CodeLens and grammar use too: `STEP DEFINITION` / `INPUTS` /
+ * `OUTPUTS` / `DUMP`, exactly as spelt, are parts of a step.
+ */
 function stepNumberOf(tagName: string): string | undefined {
-  const m = STEP_NAME_RE.exec(tagName);
-  if (!m) {
+  if (!isStepSectionName(tagName)) {
     return undefined;
   }
-  const id = m[1].trim();
-  // `STEP DEFINITION` / `INPUTS` / `OUTPUTS` / `DUMP` are parts of a step.
-  return RESERVED_STEP_SECTIONS.has(STEP_PREFIX + id.toUpperCase())
-    ? undefined
-    : id;
+  const id = tagName.slice(STEP_PREFIX.length).trim();
+  return id === "" ? undefined : id;
 }
 
 /** Drop markup (`<br/>`, `<pre>`), collapse whitespace, cap the length. */

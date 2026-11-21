@@ -34,6 +34,12 @@ export interface CsvTable {
    * record on, "line N" could mean the Nth record or the Nth physical line.
    */
   firstMultilineRow: number;
+  /**
+   * Physical lines in the file (a trailing line break opens no new one).
+   * Never fewer than the records: a line past it is missing whichever way
+   * TestPit counts.
+   */
+  physicalLines: number;
 }
 
 const BOM = "﻿";
@@ -153,10 +159,11 @@ export function parseCsvTable(input: string): CsvTable {
     line += 1;
     lineStart = pos;
   }
+  const physicalLines = row.length > 0 ? line + 1 : line;
   if (row.length > 0) {
     rows.push(row);
   }
-  return { rows, firstMultilineRow };
+  return { rows, firstMultilineRow, physicalLines };
 }
 
 /** Parse CSV text into rows of field values. */
@@ -194,6 +201,10 @@ export function lookupCsvCell(
 ): CsvCellResult {
   if (!table) {
     return { status: "fileMissing" };
+  }
+  if (line > table.physicalLines) {
+    // Past the end as a record number and as a physical line alike.
+    return { status: "rowMissing", rowCount: table.physicalLines };
   }
   if (table.firstMultilineRow > 0 && line >= table.firstMultilineRow) {
     return { status: "ambiguous" };

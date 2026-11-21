@@ -148,6 +148,12 @@ export interface MacroResolver {
   readInclude?: MacroFileReader;
   /** Key the reader would give the document itself (keeps cycles out). */
   selfKey?: string;
+  /**
+   * When two keys name the same file: equal results. Default: the key as
+   * is. On a case-insensitive file system `C:\\T\\a.esi` and `c:\\t\\A.esi` are
+   * one file, which must be read (and counted) once.
+   */
+  identity?: (key: string) => string;
   /** Extra names to treat as defined elsewhere (never reported undefined). */
   knownNames?: Iterable<string>;
   /** How many include levels to follow. Default 8. */
@@ -320,9 +326,10 @@ export function buildMacroModel(
     unresolvedIncludes: false,
     knownNames: new Set(resolver.knownNames ?? []),
   };
+  const id = resolver.identity ?? ((key: string): string => key);
   const visited = new Set<string>();
   if (resolver.selfKey !== undefined) {
-    visited.add(resolver.selfKey);
+    visited.add(id(resolver.selfKey));
   }
 
   const follow = (scan: MacroScan, fromKey: string | undefined, depth: number): void => {
@@ -345,10 +352,10 @@ export function buildMacroModel(
         model.unresolvedIncludes = true;
         continue;
       }
-      if (visited.has(file.key)) {
+      if (visited.has(id(file.key))) {
         continue;
       }
-      visited.add(file.key);
+      visited.add(id(file.key));
       const child = scanMacros(file.text);
       for (const d of child.definitions) {
         d.file = file.key;
@@ -659,6 +666,15 @@ export function prepareMacroRename(
       reason: `%${at.name}% is passed to an included file in an [INCLUDE] block; renaming it here would not rename it there.`,
     };
   }
+  if (!model.local.isRootScript) {
+    // An include fragment: the scripts that include it (unknown from here)
+    // may use %X% or pass it in an [INCLUDE] block, as validateMacros and
+    // the hover assume too.
+    return {
+      ok: false,
+      reason: `This file has no [TEST STEPS] / [TEST DEFINITION], so it is probably included by other scripts, which may use or pass %${at.name}%; renaming it here would not rename it there.`,
+    };
+  }
   const elsewhere = model.included.find((inc) =>
     inc.scan.occurrences.some((o) => o.name === at.name)
   );
@@ -714,13 +730,24 @@ export function computeMacroRename(
   }
   const model = buildMacroModel(text, resolver);
   if (name !== target.name) {
+    // Whether TestPit tells macro names apart by case is not known (see the
+    // case-twin hint), so a name differing only by case counts as taken. A
+    // case change of the macro itself stays allowed.
+    const lower = name.toLowerCase();
+    const clash = (o: MacroOccurrence): boolean =>
+      o.name.toLowerCase() === lower && o.name !== target.name;
     const taken =
-      model.local.occurrences.some((o) => o.name === name) ||
-      model.included.some((inc) => inc.scan.occurrences.some((o) => o.name === name));
+      model.local.occurrences.find(clash) ??
+      model.included
+        .map((inc) => inc.scan.occurrences.find(clash))
+        .find((o) => o !== undefined);
     if (taken) {
       return {
         ok: false,
-        reason: `%${name}% already exists; renaming to it would merge two macros.`,
+        reason:
+          taken.name === name
+            ? `%${name}% already exists; renaming to it would merge two macros.`
+            : `%${name}% differs only by case from the existing %${taken.name}%; renaming to it could merge two macros.`,
       };
     }
   }
@@ -799,8 +826,14 @@ export function computeMacroCompletions(
   let endCol = character;
   const closing = new RegExp(`^[${NAME_CHARS}]*%`).exec(after);
   if (closing) {
+    // That `%` closes the name being typed (and is replaced, not doubled)
+    // unless it opens a macro further on: an odd number of `%` after the
+    // cursor pairs it with the one before it, and a `%` that no name + `%`
+    // follows cannot open one (`set %SP|% to 50%`).
     const percents = after.split("%").length - 1;
-    if (percents % 2 === 1) {
+    const rest = after.slice(closing[0].length);
+    const opensMacro = new RegExp(`^[${NAME_CHARS}]+%`).test(rest);
+    if (percents % 2 === 1 || !opensMacro) {
       endCol = character + closing[0].length;
     }
   }

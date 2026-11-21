@@ -69,6 +69,24 @@ describe("profiles.buildValidityCommand", () => {
     const cmd = buildValidityCommand("C:\\t\\TestPit.exe", "s.esi", {}, allExist);
     assert.ok(cmd.startsWith("C:\\t\\TestPit.exe --sf="));
   });
+
+  it("quotes an executable path cmd.exe would split without spaces", () => {
+    // Unquoted, cmd.exe reads `&` as "then run": `D:\R` and then `D\…`.
+    for (const exe of [
+      "D:\\R&D\\TestPit\\TestPit.exe",
+      "D:\\Tools(x86)\\TestPit.exe",
+      "D:\\a^b\\TestPit.exe",
+      "D:\\a,b\\TestPit.exe",
+    ]) {
+      const cmd = buildValidityCommand(exe, "s.esi", {}, allExist);
+      assert.ok(cmd.startsWith(`"${exe}" --sf=`), cmd);
+    }
+    assert.ok(
+      buildOpenCommand("D:\\R&D\\TestPit.exe", "C:\\s\\t.esi").startsWith(
+        '"D:\\R&D\\TestPitw.exe" --ow='
+      )
+    );
+  });
 });
 
 describe("profiles.deriveGuiExecutable", () => {

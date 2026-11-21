@@ -7,19 +7,27 @@ import { ensureTestpitExe, getActiveProfileName } from "../lib/profileRegistry";
 export function registerRunValidityCheck(): vscode.Disposable {
   return vscode.commands.registerCommand(
     "extension.runValidityCheck",
-    // Menus (editor/title, editor/context) pass the resource they were
-    // invoked on — the title button of an unfocused editor group must check
-    // THAT file. The palette and the CodeLens pass nothing: active editor.
+    // Menus (editor/title, editor/context) and the CodeLens pass the
+    // resource they were invoked on — the title button of an unfocused editor
+    // group must check THAT file. The palette passes nothing: active editor.
     async (uri?: vscode.Uri) => {
       const document = await resolveDocument(uri);
       if (!document) {
+        return;
+      }
+      if (document.uri.scheme === "untitled") {
+        // The temp copy is written beside the script (so its includes resolve
+        // from the script's folder); an unsaved file has no folder.
+        void vscode.window.showWarningMessage(
+          "Save the script first: the TestPit validity check needs it on disk."
+        );
         return;
       }
       const exe = await ensureTestpitExe();
       if (!exe) {
         return;
       }
-      const channel = getOutputChannel();
+      let profile = "<none>";
       const result = await vscode.window.withProgress(
         {
           location: vscode.ProgressLocation.Notification,
@@ -28,19 +36,24 @@ export function registerRunValidityCheck(): vscode.Disposable {
         },
         () =>
           runValidityCheckForDocument(document, exe, {
-            onCommand: (command) => {
-              channel.clear();
-              channel.appendLine(`[profile]   ${getActiveProfileName() ?? "<none>"}`);
-              channel.appendLine(`[script]    ${document.uri.fsPath}`);
-              channel.appendLine(
-                "[temp copy] validated against a temp copy of the current buffer (see --sf below)"
-              );
-              channel.appendLine(`[command]   ${command}`);
-              channel.appendLine("");
-              channel.appendLine("--- TestPit output ---");
+            // Read when TestPit starts: the profile the command line is for.
+            onCommand: () => {
+              profile = getActiveProfileName() ?? "<none>";
             },
           })
       );
+      // Written in one go once the run is over: runs for two different files
+      // can overlap, and each must leave its own header above its own output.
+      const channel = getOutputChannel();
+      channel.clear();
+      channel.appendLine(`[profile]   ${profile}`);
+      channel.appendLine(`[script]    ${document.uri.fsPath}`);
+      channel.appendLine(
+        "[temp copy] validated against a temp copy of the current buffer (see --sf below)"
+      );
+      channel.appendLine(`[command]   ${result.command}`);
+      channel.appendLine("");
+      channel.appendLine("--- TestPit output ---");
       channel.appendLine(result.output);
       channel.show(true);
 

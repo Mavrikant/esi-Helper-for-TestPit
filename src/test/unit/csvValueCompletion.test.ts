@@ -42,6 +42,32 @@ describe("csvValueCompletion", () => {
       assert.deepStrictEqual(ctx("SDI = In.CSV  li|"), { kind: "tail", startCol: 14, endCol: 16 });
     });
 
+    it("replaces a whole file name when retyping it, and keeps an address after it", () => {
+      assert.deepStrictEqual(ctx("    SDI = ne|.csv line:4 col:2"), {
+        kind: "file",
+        dirPart: "",
+        startCol: 10,
+        endCol: 16,
+        hasTail: true,
+      });
+      assert.deepStrictEqual(ctx("    SDI = |old.csv line:4 col:2"), {
+        kind: "file",
+        dirPart: "",
+        startCol: 10,
+        endCol: 17,
+        hasTail: true,
+      });
+      assert.deepStrictEqual(ctx("    SDI = ne|w"), { kind: "file", dirPart: "", startCol: 10, endCol: 13 });
+      // …and then only the name is inserted.
+      assert.strictEqual(csvFileEntries(["new.csv"], { withTail: false })[0].insertText, "new.csv");
+    });
+
+    it("completes only the word of a tail whose numbers are already there", () => {
+      assert.deepStrictEqual(ctx("SDI = in.csv li|:4 col:2"), { kind: "tail", startCol: 13, endCol: 15, hasAddress: true });
+      assert.deepStrictEqual(ctx("SDI = in.csv li|ne:4 col:2"), { kind: "tail", startCol: 13, endCol: 17, hasAddress: true });
+      assert.strictEqual(csvTailEntry({ withNumbers: false }).insertText, "line");
+    });
+
     it("stays out of anything that cannot start a CSV reference", () => {
       assert.strictEqual(ctx("SDI |"), undefined); // no '=' yet
       assert.strictEqual(ctx("SDI = %MAC|"), undefined); // macro
