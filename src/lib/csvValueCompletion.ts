@@ -34,8 +34,9 @@ export type CsvValueContext =
   | {
       kind: "tail";
       /**
-       * Replace range on the line: the word of the tail at the cursor, while
-       * it can still be `line` (and the blanks before a `col:M` after it).
+       * Replace range on the line: the word of the tail at the cursor —
+       * unless a column part (`col`, with or without `:M`) follows, which is
+       * kept, and then the blanks before it are replaced too.
        */
       startCol: number;
       endCol: number;
@@ -162,7 +163,7 @@ export function csvFileEntries(
 /**
  * The ` line:N col:M` tail, for a `.csv` name that is already typed — or the
  * `line` word alone when its numbers already follow (`withNumbers: false`),
- * or `line:N ` alone in front of a `col:M` already there (`beforeCol`).
+ * or `line:N ` alone in front of a column part already there (`beforeCol`).
  */
 export function csvTailEntry(
   options: { withNumbers?: boolean; beforeCol?: boolean } = {}

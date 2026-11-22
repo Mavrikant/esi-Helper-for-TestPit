@@ -520,8 +520,14 @@ function findMessageNode(
       return bus === undefined || bus === message.bus;
     });
     // The index keeps the last message registered under a name; so does this.
-    const pool = sameBus.length > 0 ? sameBus : named;
-    return pool[pool.length - 1];
+    if (sameBus.length > 0) {
+      return sameBus[sameBus.length - 1];
+    }
+    // For a bare port, one of another bus is not the message: the index made
+    // the field-less one of its own bus for it (its guard is per bus).
+    if (!barePort) {
+      return named[named.length - 1];
+    }
   }
   // A port with no <Message> at all still registers a (field-less) message.
   return (

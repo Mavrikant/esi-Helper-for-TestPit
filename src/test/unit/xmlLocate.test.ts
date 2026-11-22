@@ -388,6 +388,26 @@ describe("xmlLocate — NEOCAS Ref forms", () => {
       const [late] = define(idx, "[PART_HSI_Status]\nLate = 1\n[/PART_HSI_Status]", "Late =");
       assert.strictEqual(late.line, 6);
       assert.strictEqual(late.exact, true);
+
+      // One of another bus is not the message: the index made a field-less
+      // Mem one for the bare port, so F12 on the tag opens the port alone.
+      fs.writeFileSync(
+        file,
+        [
+          "<Partitions>", // 0
+          '  <Partition Name="HSI">', // 1
+          '    <Port Name="Status"/>', // 2
+          "  </Partition>", // 3
+          '  <Partition Name="A429">', // 4
+          '    <Port Name="Status" Type="A429Sim"><Message><Field Name="X" Type="UInt8"/></Message></Port>', // 5
+          "  </Partition>", // 6
+          "</Partitions>",
+        ].join("\n")
+      );
+      const other = parseConfigFiles({ partition: file });
+      assert.deepStrictEqual(other.resolveConnectionMessage("PART_HSI_Status")?.fields, []);
+      const tag = define(other, "[PART_HSI_Status]\n[/PART_HSI_Status]", "PART_HSI");
+      assert.deepStrictEqual(tag.map((l) => l.line), [2]);
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }

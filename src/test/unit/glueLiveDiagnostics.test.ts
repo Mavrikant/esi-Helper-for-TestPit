@@ -280,6 +280,29 @@ describe("live TestPit check (glue)", () => {
     assert.deepStrictEqual(ops, ["set released.esi"]);
   });
 
+  it("checks such a script once shown even when VS Code let go of it during the run", async () => {
+    setTestpitExe("echo");
+    const loaded = fakeDocument("released-mid-run.esi");
+    mock.workspace.textDocuments = [loaded];
+    await runValidityCheckForDocument(loaded, "echo", {
+      publish: false,
+      // Released while TestPit runs (its 3-minute age timer ran out).
+      onCommand: () => {
+        loaded.isClosed = true;
+        mock.workspace.textDocuments = [];
+        closeListener?.(loaded);
+      },
+    });
+    const reopened = fakeDocument("released-mid-run.esi");
+    mock.workspace.textDocuments = [reopened];
+    const ended = nextRunEnd(reopened.uri, 5000);
+    const editor = { document: reopened };
+    mock.window.visibleTextEditors = [editor];
+    visibleListener?.([editor]);
+    await ended;
+    assert.deepStrictEqual(ops, ["set released-mid-run.esi"]);
+  });
+
   it("publishes a result asked not to be if an editor shows the document by then", async () => {
     const document = fakeDocument("shown.esi");
     mock.workspace.textDocuments = [document];

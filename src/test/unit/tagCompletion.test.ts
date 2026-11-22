@@ -572,6 +572,25 @@ describe("tagCompletion", () => {
       );
     });
 
+    it("keeps a macro step id, and an unpaired tag's own number", () => {
+      const steps = (opener: string, closer: string): string[] => [
+        "[TEST STEPS]",
+        "    [STEP 10]",
+        "    [/STEP 10]",
+        `    ${opener}`,
+        `    ${closer}`,
+        "[/TEST STEPS]",
+      ];
+      // `[STEP %ID%]` is a valid non-numeric id: not turned into STEP 20.
+      assert.strictEqual(entry(complete(steps("[STEP| %ID%]", "[/STEP %ID%]")), "STEP").insertText, "STEP ${1:%ID%}");
+      assert.strictEqual(entry(complete(steps("[STE| %ID%]", "[/STE %ID%]")), "STEP").insertText, "STEP ${1:%ID%}");
+      // Linked editing off: retyping the word has unpaired the opener; the
+      // edit replaces its name, number included — which it keeps.
+      assert.strictEqual(entry(complete(steps("[STE| 25]", "[/STEP 25]")), "STEP").insertText, "STEP ${1:25}]");
+      // A fresh line still takes the number of the closer below it.
+      assert.strictEqual(entry(complete(steps("[|]", "[/STEP 25]")), "STEP").insertText.split("]")[0], "STEP ${1:25}");
+    });
+
     it("still writes the bracket for a tag with no partner", () => {
       const e = entry(complete(["[STEP 10]", "    [STEP IN|PUTS]", "[/STEP 10]"]), "STEP OUTPUTS");
       assert.strictEqual(e.insertText, "STEP OUTPUTS]");

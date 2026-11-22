@@ -365,9 +365,13 @@ async function validateDocument(
  * appear in the Problems panel — and stay, the editor keeping it open.
  */
 function checkWhenShown(document: vscode.TextDocument): void {
+  // Not isLiveTarget: the document may have been closed — VS Code letting go
+  // of it — while TestPit ran. The mark is per uri, and the document an editor
+  // shows later is checked for being a live target then.
   if (
     disposed ||
-    !isLiveTarget(document) ||
+    document.languageId !== "esi" ||
+    document.uri.scheme !== "file" ||
     !isLiveValidationEnabled() ||
     !getTestpitExe()
   ) {

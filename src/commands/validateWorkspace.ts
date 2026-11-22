@@ -197,6 +197,9 @@ export function registerValidateWorkspace(): vscode.Disposable {
         progress.report({ message: "finding files…" });
         // `exclude` left undefined = the default excludes, i.e. files.exclude.
         const found = await vscode.workspace.findFiles(ESI_GLOB, undefined, undefined, token);
+        if (disposed) {
+          return;
+        }
         if (token.isCancellationRequested) {
           cancelled = true;
           return;

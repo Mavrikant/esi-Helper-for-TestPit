@@ -410,14 +410,25 @@ describe("syntaxes/esi.json", () => {
       ]);
       assert.ok(lines.flat().every((t) => !t.scopes.includes("meta.definition.esi")));
       assert.ok(lines[3].some((t) => t.scopes.includes("constant.numeric.esi")));
-      // The forms TestPit repairs, indented, still begin one.
-      for (const opener of ["    [STEP DEFINITION]", "[[STEP DEFINITION]]"]) {
+      // The forms TestPit repairs, indented too, begin one; a one-liner not.
+      for (const opener of [
+        "    [STEP DEFINITION]",
+        "[[STEP DEFINITION]]",
+        "[ STEP DEFINITION]",
+        "[STEP DEFINITION ]",
+        "[\tSTEP DEFINITION]",
+        "[STEP DEFINITION",
+        "[STEP DEFINITION # c",
+        "[[/STEP DEFINITION]]",
+      ]) {
         const block = tokenize([opener, "n = 5"]);
         assert.ok(
           block[1].every((t) => t.scopes.includes("meta.definition.esi")),
           `no block after ${JSON.stringify(opener)}`
         );
       }
+      const oneLiner = tokenize(["[STEP DEFINITION/]", "n = 5"]);
+      assert.ok(oneLiner[1].some((t) => t.scopes.includes("constant.numeric.esi")));
     });
 
     it("still colours comments, macros, strings and the markup", () => {

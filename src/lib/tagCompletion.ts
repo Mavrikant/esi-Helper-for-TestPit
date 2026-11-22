@@ -225,8 +225,11 @@ export interface TagCompletionResult {
 
 const isStepName = isStepSectionName;
 
-/** The number a tag name ends with, as a word of its own (`STE 25` → 25). */
-const TRAILING_NUMBER_RE = /(?:^|\s)(\d+)$/;
+/**
+ * The step id a tag name ends with, as a word of its own: a number
+ * (`STE 25` → 25) or a macro (`STEP %ID%` → %ID%, a valid non-numeric id).
+ */
+const TRAILING_ID_RE = /(?:^|\s)(\d+|%[A-Za-z0-9_]+%)$/;
 
 /**
  * Sections still open just before `lineIndex`, outermost first. A proper
@@ -509,20 +512,26 @@ export function computeTagCompletions(
     return { insertText: name + bracket, isSnippet: false };
   };
 
-  // A step is proposed the number it already has. For a paired tag, the one
-  // its name still ends with — the word being retyped (`[STE| 25]`, which
-  // linked editing has mirrored into the partner) is no `STEP n` yet — since
-  // another number would renumber the pair (or break it with linked editing
-  // off, or with the cursor before a padded name, `[| STEP 25]`). For a
-  // retyped opener, that of the closer below. Otherwise the one the file's
-  // own numbering leads to.
-  const pairDigits = pair ? TRAILING_NUMBER_RE.exec(pair.name)?.[1] : undefined;
+  // A step is proposed the id it already has. For a paired tag, the one its
+  // name still ends with — the word being retyped (`[STE| 25]`, which linked
+  // editing has mirrored into the partner) is no `STEP n` yet — since another
+  // would renumber the pair (or break it with the cursor before a padded
+  // name, `[| STEP 25]`). With no pair — linked editing off, the retyped word
+  // has unpaired the tag — the id its own name ends with, which the edit
+  // replaces. For a retyped opener on a fresh line, that of the closer below.
+  // Otherwise the number the file's own numbering leads to.
+  const ownTag = pair ? undefined : parseSectionTagLine(line);
+  const keptId = pair
+    ? TRAILING_ID_RE.exec(pair.name)?.[1]
+    : ownTag && !ownTag.invalid
+      ? TRAILING_ID_RE.exec(ownTag.name)?.[1]
+      : undefined;
   const ownClose =
     !pair && closes?.ownCloseLine !== undefined
       ? parseNumberedStepTag(lines[closes.ownCloseLine])
       : undefined;
   const stepNameSnippet = `STEP \${1:${
-    pairDigits ?? ownClose?.digits ?? nextStepNumber(lines, lineIndex)
+    keptId ?? ownClose?.digits ?? nextStepNumber(lines, lineIndex)
   }}`;
 
   const entries: TagCompletionEntry[] = [];
