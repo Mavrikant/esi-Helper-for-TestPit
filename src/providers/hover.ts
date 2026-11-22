@@ -9,6 +9,7 @@ import {
 import {
   COMPONENT_TAG_PATTERN,
   ConnectionDef,
+  FieldDef,
 } from "../lib/xmlIndex";
 
 import { findConnectionByBareName } from "../lib/bareConnectionLookup";
@@ -106,21 +107,11 @@ export function registerEsiHoverProvider(): vscode.Disposable {
         );
       }
 
-      // 2. Connection name without its prefix — any prefix the index
-      //    registers (429_, 1553_, DIS_, Mem_, VORILS<N>_, ED_,
-      //    PART_<partition>_), derived from COMPONENT_TAG_PREFIXES.
-      const bare = findConnectionByBareName(index.connections, word);
-      if (bare) {
-        return new vscode.Hover(
-          withDefinitionLink(renderConnection(bare, index), {
-            kind: "connection",
-            conn: bare,
-          }),
-          range
-        );
-      }
-
-      // 3. Field or enum: use the enclosing context to figure out the message.
+      // 2. Field or enum: use the enclosing context to figure out the message.
+      //    Before the bare-name lookup below, as in Go to Definition
+      //    (xmlLocate.findDefinitionTargets): a field of the enclosing block
+      //    must not be shadowed by a port / message elsewhere that happens to
+      //    share its name.
       const ctx = resolveContext(
         document.getText(),
         position.line,
@@ -132,26 +123,39 @@ export function registerEsiHoverProvider(): vscode.Disposable {
           // Passing the connection selects the right partition's port for a
           // PART_<partition>_<port> block.
           const owner = index.connections.get(ctx.messageName);
-          const field = message.fields.find((f) => f.name === word);
-          if (field) {
-            return new vscode.Hover(
-              withDefinitionLink(renderField(field, message), {
-                kind: "field",
-                message,
-                field,
-                conn: owner,
-              }),
-              range
-            );
-          }
-          for (const f of message.fields) {
-            const enumVal = f.enums?.find((e) => e.name === word);
-            if (enumVal) {
+          if (ctx.kind === "fieldName") {
+            const field = message.fields.find((f) => f.name === word);
+            if (field) {
               return new vscode.Hover(
-                withDefinitionLink(renderEnum(enumVal, f, message), {
+                withDefinitionLink(renderField(field, message), {
+                  kind: "field",
+                  message,
+                  field,
+                  conn: owner,
+                }),
+                range
+              );
+            }
+          } else {
+            // A state of the field being assigned: several fields of one
+            // message often share state names (VALID, ON, NCD…) with other
+            // numbers. When the key is no field (a parameter), only a state
+            // of exactly one field is answered. The same choice as Go to
+            // Definition (xmlLocate.findDefinitionTargets).
+            const hasState = (f: FieldDef): boolean =>
+              f.enums?.some((e) => e.name === word) === true;
+            let field = message.fields.find((f) => f.name === ctx.fieldName);
+            if (!field) {
+              const owners = message.fields.filter(hasState);
+              field = owners.length === 1 ? owners[0] : undefined;
+            }
+            const enumVal = field?.enums?.find((e) => e.name === word);
+            if (field && enumVal) {
+              return new vscode.Hover(
+                withDefinitionLink(renderEnum(enumVal, field, message), {
                   kind: "enum",
                   message,
-                  field: f,
+                  field,
                   enumName: enumVal.name,
                   conn: owner,
                 }),
@@ -160,6 +164,20 @@ export function registerEsiHoverProvider(): vscode.Disposable {
             }
           }
         }
+      }
+
+      // 3. Connection name without its prefix — any prefix the index
+      //    registers (429_, 1553_, DIS_, Mem_, VORILS<N>_, ED_,
+      //    PART_<partition>_), derived from COMPONENT_TAG_PREFIXES.
+      const bare = findConnectionByBareName(index.connections, word);
+      if (bare) {
+        return new vscode.Hover(
+          withDefinitionLink(renderConnection(bare, index), {
+            kind: "connection",
+            conn: bare,
+          }),
+          range
+        );
       }
       return undefined;
     },

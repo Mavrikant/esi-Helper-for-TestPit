@@ -40,10 +40,16 @@ const DEFAULT_REPARSE_DELAY_MS = 300;
 export interface EsiTestControllerDeps {
   /** The configured TestPit.exe, or undefined. Must never prompt. */
   getExe(): string | undefined;
-  /** Run TestPit's validity check on a document. */
+  /**
+   * Run TestPit's validity check on a document. `publish: false`: a script
+   * no editor tab holds (not loaded before, loaded by a run, or held with no
+   * tab) — its issues stay out of the Problems panel unless an editor shows
+   * it by the time TestPit is done.
+   */
   validate(
     document: vscode.TextDocument,
-    exe: string
+    exe: string,
+    options?: { publish?: boolean }
   ): Promise<{ output: string; issues: ValidityIssue[] }>;
   /** Quiet period before an edited document's steps are re-listed. */
   reparseDelayMs?: number;
@@ -51,11 +57,44 @@ export interface EsiTestControllerDeps {
 
 const DEFAULT_DEPS: EsiTestControllerDeps = {
   getExe: getTestpitExe,
-  validate: (document, exe) => runValidityCheckForDocument(document, exe),
+  validate: (document, exe, options) =>
+    runValidityCheckForDocument(document, exe, { publish: options?.publish }),
 };
 
 function isEsiFile(document: vscode.TextDocument): boolean {
   return document.languageId === "esi" && document.uri.scheme === "file";
+}
+
+/**
+ * True when an editor tab shows `uri`: a text editor, a side of a diff, the
+ * result of a merge editor, or a side of one of a multi-diff editor's diffs.
+ * A tab keeps its document open; one the extension opened with
+ * openTextDocument stays in `workspace.textDocuments` only until VS Code
+ * releases it, which it may do at any time.
+ */
+function hasEditorTab(uri: vscode.Uri): boolean {
+  const key = uri.toString();
+  return vscode.window.tabGroups.all.some((group) =>
+    group.tabs.some((tab) => {
+      const input = tab.input as
+        | {
+            uri?: vscode.Uri;
+            original?: vscode.Uri;
+            modified?: vscode.Uri;
+            result?: vscode.Uri;
+            textDiffs?: ReadonlyArray<{ original?: vscode.Uri; modified?: vscode.Uri }>;
+          }
+        | undefined;
+      const diffs = Array.isArray(input?.textDiffs) ? input.textDiffs : [];
+      return [
+        input?.uri,
+        input?.original,
+        input?.modified,
+        input?.result,
+        ...diffs.flatMap((diff) => [diff?.original, diff?.modified]),
+      ].some((shown) => shown?.toString() === key);
+    })
+  );
 }
 
 function fileLabel(uri: vscode.Uri): string {
@@ -85,6 +124,12 @@ export function registerEsiTestController(
   /** True once the workspace was searched: only then do new files get items. */
   let discovered = false;
   let disposed = false;
+  /**
+   * Scripts a run loaded itself (uri strings) and no editor has shown since:
+   * whatever tab they have does not hold them. Dropped on close and once an
+   * editor shows them.
+   */
+  const openedByRun = new Set<string>();
 
   const findOpenDocument = (uri: vscode.Uri): vscode.TextDocument | undefined => {
     const key = uri.toString();
@@ -254,10 +299,17 @@ export function registerEsiTestController(
     }
     const key = document.uri.toString();
     cancelReparse(key);
+    openedByRun.delete(key);
     // The buffer (and any unsaved edit) is gone: show what is on disk.
     const file = controller.items.get(key);
     if (file && resolved.has(key)) {
       void resolveFile(file);
+    }
+  });
+
+  const onShown = vscode.window.onDidChangeVisibleTextEditors((editors) => {
+    for (const editor of editors) {
+      openedByRun.delete(editor.document.uri.toString());
     }
   });
 
@@ -344,11 +396,27 @@ export function registerEsiTestController(
     }
     run.started(file);
 
+    // Only the issues of a script open in an editor tab go to the Problems
+    // panel. Any other has no editor to keep it open — the run opens it
+    // itself, or an earlier run did and it is still loaded — and VS Code may
+    // dispose it at any time, which would remove its problems again while the
+    // Test Results view keeps them. A tab restored after a reload holds its
+    // document only once it is shown, hence `openedByRun`. The test messages
+    // below carry the locations either way.
+    const key = uri.toString();
+    const loaded = findOpenDocument(uri) !== undefined;
+    const wasOpen = loaded && !openedByRun.has(key) && hasEditorTab(uri);
     let document: vscode.TextDocument;
     try {
       // A TextDocument, not an editor: nothing is shown. An already open
       // script is validated from its buffer, unsaved edits included.
       document = await vscode.workspace.openTextDocument(uri);
+      const shown = vscode.window.visibleTextEditors.some(
+        (editor) => editor.document.uri.toString() === key
+      );
+      if (!loaded && !shown && !disposed) {
+        openedByRun.add(key);
+      }
     } catch (err) {
       run.errored(
         file,
@@ -376,7 +444,7 @@ export function registerEsiTestController(
 
     let result: { output: string; issues: ValidityIssue[] };
     try {
-      result = await deps.validate(document, exe);
+      result = await deps.validate(document, exe, { publish: wasOpen });
     } catch (err) {
       run.errored(
         file,
@@ -505,11 +573,13 @@ export function registerEsiTestController(
           clearTimeout(timer);
         }
         reparseTimers.clear();
+        openedByRun.clear();
       },
     },
     onChange,
     onOpen,
     onClose,
+    onShown,
     watcher,
     onDiskCreate,
     onDiskChange,

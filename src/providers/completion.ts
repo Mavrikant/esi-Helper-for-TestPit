@@ -200,6 +200,9 @@ export function registerEsiCompletionProvider(): vscode.Disposable {
                 item.documentation = renderEnum(e, field, message);
                 item.range = valueRange;
                 item.filterText = e.name;
+                // Before the CSV entries ("9…"): VS Code compares sortText
+                // only when both items have one, else the labels.
+                item.sortText = `0${e.name}`;
                 items.push(item);
               }
               return items;
@@ -215,6 +218,7 @@ export function registerEsiCompletionProvider(): vscode.Disposable {
               item.detail = label;
               item.range = valueRange;
               item.filterText = value;
+              item.sortText = `0${value}`;
               items.push(item);
             };
             pushNumeric(field.defaultValue, "default");
@@ -289,12 +293,13 @@ function csvValueItems(
   }
   let entries: CsvValueEntry[];
   if (csv.kind === "tail") {
-    entries = [csvTailEntry()];
+    entries = [csvTailEntry({ withNumbers: !csv.hasAddress, beforeCol: csv.colFollows })];
   } else if (document.uri.scheme === "file") {
     entries = csvFileEntries(
       listCsvFiles(
         resolveScriptRelative(document.uri.fsPath, `${csv.dirPart}.`)
-      )
+      ),
+      { withTail: !csv.hasTail }
     );
   } else {
     // An unsaved script has no folder to look in.

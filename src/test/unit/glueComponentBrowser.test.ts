@@ -334,6 +334,49 @@ describe("component browser glue", () => {
       assert.strictEqual(shown[0].target, editor.document);
     });
 
+    it("inserts once for the two clicks of a double-click, refocusing the editor each time", async () => {
+      // A tree runs the item's command on each click of a double-click.
+      registerInsertComponent(() => RNE);
+      const editor = fakeEditor("[STEP INPUTS]\r\n\r\n[/STEP INPUTS]", 1);
+      mock.window.activeTextEditor = editor;
+      const arg = { kind: "connection", name: "DIS_PowerOnOff" };
+      await commands[INSERT_COMPONENT_COMMAND](arg);
+      await commands[INSERT_COMPONENT_COMMAND]({ ...arg });
+      assert.strictEqual(editor.calls.length, 1);
+      assert.strictEqual(shown.length, 2);
+      // Another component right after is a new insert.
+      await commands[INSERT_COMPONENT_COMMAND]({ kind: "field", name: "value", connectionName: "DIS_PowerOnOff" });
+      assert.strictEqual(editor.calls.length, 2);
+    });
+
+    it("takes the tree node the context menu passes, without serializing it", async () => {
+      // "Insert Component at Cursor" from the item's context menu passes the
+      // node itself; its fields carry whole message definitions, so
+      // serializing it cost O(fields²) and overflowed on a large message.
+      // A cycle makes any serialization throw.
+      const b = open(RNE);
+      const dis = b.roots().find((n) => b.item(n).label === "Discrete")!;
+      const conn: any = b.kids(dis).find((n) => b.item(n).label === "DIS_PowerOnOff");
+      assert.ok(conn);
+      const node = { ...conn };
+      node.self = node;
+      const field: any = { ...b.kids(conn)[0] };
+      field.self = field;
+      registerInsertComponent(() => RNE);
+      const editor = fakeEditor("[STEP INPUTS]\r\n\r\n[/STEP INPUTS]", 1);
+      mock.window.activeTextEditor = editor;
+      await commands[INSERT_COMPONENT_COMMAND](node);
+      assert.strictEqual(editor.calls.length, 1);
+      assert.strictEqual(editor.calls[0].snippet, "    [DIS_PowerOnOff]\n        $0\n    [/DIS_PowerOnOff]");
+      // The same component clicked right after: the second click of a
+      // double-click, whichever shape the argument had.
+      await commands[INSERT_COMPONENT_COMMAND]({ kind: "connection", name: "DIS_PowerOnOff" });
+      assert.strictEqual(editor.calls.length, 1);
+      await commands[INSERT_COMPONENT_COMMAND](field);
+      assert.strictEqual(editor.calls.length, 2);
+      b.disposable.dispose();
+    });
+
     it("inserts 'field = ' below the cursor line", async () => {
       registerInsertComponent(() => RNE);
       const editor = fakeEditor("    [DIS_PowerOnOff]\n    [/DIS_PowerOnOff]", 0);

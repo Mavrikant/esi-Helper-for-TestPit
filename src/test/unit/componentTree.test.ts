@@ -246,6 +246,19 @@ describe("componentTree — filter", () => {
     );
   });
 
+  it("matches some terms in the connection name and the rest in a field", () => {
+    const tree = buildComponentTree(RNE, "429 sdi");
+    const conns = tree.buses.flatMap((b) => b.connections);
+    assert.deepStrictEqual(conns.map((c) => c.name), [
+      "429_L100SelectedCourseBNR_input1",
+      "429_L100SelectedCourseBNR_input2",
+    ]);
+    for (const conn of conns) {
+      assert.deepStrictEqual(conn.fields.map((f) => f.name), ["SDI"]);
+    }
+    assert.strictEqual(treeState(buildComponentTree(RNE, "429 nosuchfield")), "noMatch");
+  });
+
   it("matches a field name and then shows only the matching fields", () => {
     const tree = buildComponentTree(RNE, "RangeValid");
     const conns = tree.buses.flatMap((b) => b.connections);

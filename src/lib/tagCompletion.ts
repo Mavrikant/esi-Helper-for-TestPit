@@ -9,6 +9,8 @@
  */
 import { nextStepNumber } from "./nextStepNumber";
 import { parseSectionTagLine } from "./parseSectionTag";
+import { parseNumberedStepTag } from "./renumberSteps";
+import { findTagPair } from "./tagPairs";
 import {
   isStepSectionName,
   SEC_EXTERNAL_VERIFY,
@@ -224,6 +226,12 @@ export interface TagCompletionResult {
 const isStepName = isStepSectionName;
 
 /**
+ * The step id a tag name ends with, as a word of its own: a number
+ * (`STE 25` → 25) or a macro (`STEP %ID%` → %ID%, a valid non-numeric id).
+ */
+const TRAILING_ID_RE = /(?:^|\s)(\d+|%[A-Za-z0-9_]+%)$/;
+
+/**
  * Sections still open just before `lineIndex`, outermost first. A proper
  * stack: a close pops back to its opener, a close with no opener is ignored,
  * and a one-liner (or a name TestPit would reject) never touches it.
@@ -295,11 +303,14 @@ function unclaimedClosesBelow(
   lines: readonly string[],
   lineIndex: number,
   openAbove: readonly OpenSection[]
-): { names: Set<string>; atCursorLevel: boolean } {
+): { names: Set<string>; atCursorLevel: boolean; ownCloseLine?: number } {
   const above = openAbove.map((s) => s.name);
   const below: string[] = [];
   const unclaimed = new Set<string>();
   let atCursorLevel = false;
+  // The first unclaimed close at the cursor's level: the block being typed
+  // (or retyped) ends there.
+  let ownCloseLine: number | undefined;
   let enclosingClosed = false;
   for (let i = lineIndex + 1; i < lines.length; i++) {
     const tag = parseSectionTagLine(lines[i]);
@@ -322,11 +333,14 @@ function unclaimedClosesBelow(
     } else {
       unclaimed.add(tag.name);
       if (!enclosingClosed && below.length === 0) {
+        if (!atCursorLevel) {
+          ownCloseLine = i;
+        }
         atCursorLevel = true;
       }
     }
   }
-  return { names: unclaimed, atCursorLevel };
+  return { names: unclaimed, atCursorLevel, ownCloseLine };
 }
 
 function escapeSnippet(text: string): string {
@@ -413,7 +427,24 @@ export function computeTagCompletions(
   const before = line.slice(0, character);
   const after = line.slice(character);
   const lineIndent = line.slice(0, bracketCol);
-  const tail = tailOf(before, after, bracketCol, character);
+  let tail = tailOf(before, after, bracketCol, character);
+  // Retyping the name of a tag that has its partner: linked editing
+  // (providers/tagPairs.ts) mirrors what changes INSIDE the name into the
+  // other tag, so the edit must end with the name and keep the line's `]` —
+  // through it, a name of another length would not mirror whole. Such a tag
+  // is closed already: no closing tag, no body.
+  const pair = tail.tagLine
+    ? findTagPair(documentText, lineIndex, character)
+    : undefined;
+  const linked = pair?.inName === true;
+  if (pair && linked) {
+    tail = {
+      ...tail,
+      endCol: Math.max(character, pair[pair.cursorOn].endCol),
+      writeBracket: false,
+      restIsEmpty: false,
+    };
+  }
   const bracket = tail.writeBracket ? "]" : "";
 
   const stack = openSectionsBefore(lines, lineIndex);
@@ -475,14 +506,33 @@ export function computeTagCompletions(
         isSnippet: true,
       };
     }
-    if (nameSnippet && tail.writeBracket) {
-      return { insertText: `${nameSnippet}]`, isSnippet: true };
+    if (nameSnippet && (tail.writeBracket || linked)) {
+      return { insertText: nameSnippet + bracket, isSnippet: true };
     }
     return { insertText: name + bracket, isSnippet: false };
   };
 
-  // A new step is proposed the number the file's own numbering leads to.
-  const stepNameSnippet = `STEP \${1:${nextStepNumber(lines, lineIndex)}}`;
+  // A step is proposed the id it already has. For a paired tag, the one its
+  // name still ends with — the word being retyped (`[STE| 25]`, which linked
+  // editing has mirrored into the partner) is no `STEP n` yet — since another
+  // would renumber the pair (or break it with the cursor before a padded
+  // name, `[| STEP 25]`). With no pair — linked editing off, the retyped word
+  // has unpaired the tag — the id its own name ends with, which the edit
+  // replaces. For a retyped opener on a fresh line, that of the closer below.
+  // Otherwise the number the file's own numbering leads to.
+  const ownTag = pair ? undefined : parseSectionTagLine(line);
+  const keptId = pair
+    ? TRAILING_ID_RE.exec(pair.name)?.[1]
+    : ownTag && !ownTag.invalid
+      ? TRAILING_ID_RE.exec(ownTag.name)?.[1]
+      : undefined;
+  const ownClose =
+    !pair && closes?.ownCloseLine !== undefined
+      ? parseNumberedStepTag(lines[closes.ownCloseLine])
+      : undefined;
+  const stepNameSnippet = `STEP \${1:${
+    keptId ?? ownClose?.digits ?? nextStepNumber(lines, lineIndex)
+  }}`;
 
   const entries: TagCompletionEntry[] = [];
   STRUCTURAL_SECTIONS.forEach((section, i) => {

@@ -32,8 +32,8 @@ describe("live validation targets", () => {
     assert.strictEqual(isLiveTarget(fakeDocument("a.txt", "plaintext")), false);
     assert.strictEqual(isLiveTarget({ ...esi, isClosed: true }), false);
     assert.strictEqual(isLiveTarget(undefined), false);
-    // The `git:` side of a diff has the working copy's fsPath: validating it
-    // too would race on the same `<path>.temp` file.
+    // The `git:` side of a diff (same fsPath as the working copy) is a
+    // snapshot nobody types into: only the explicit command validates it.
     const gitSide = { ...esi, uri: { ...esi.uri, scheme: "git" } };
     assert.strictEqual(gitSide.uri.fsPath, esi.uri.fsPath);
     assert.strictEqual(isLiveTarget(gitSide), false);

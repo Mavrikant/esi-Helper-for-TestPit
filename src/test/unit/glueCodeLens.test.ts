@@ -130,6 +130,29 @@ describe("codeLens provider (glue)", () => {
     assert.strictEqual(lenses[2].range.start.line, 1);
   });
 
+  it("gives the summary of a step with nothing to fold a command that does nothing", async () => {
+    // An empty command id fails when picked from "Show CodeLens Commands for
+    // Current Line".
+    const lenses = provider.provideCodeLenses(
+      fakeDocument(["[TEST STEPS]", "    [STEP 10/]", "[/TEST STEPS]"].join("\r\n"))
+    );
+    const summary = lenses.find((l: any) => l.range.start.line === 1);
+    assert.ok(summary);
+    assert.strictEqual(summary.command.command, "extension.esiLens.none");
+    assert.strictEqual(summary.command.arguments, undefined);
+    assert.strictEqual(typeof commands["extension.esiLens.none"], "function");
+    await commands["extension.esiLens.none"]();
+    assert.deepStrictEqual(executed, []);
+  });
+
+  it("passes the lens's own document to Validate / Open with TestPit", () => {
+    // A lens clicked in an editor group that is not the active one must not
+    // act on the active editor's file.
+    const [validate, open] = lensesOf();
+    assert.deepStrictEqual(validate.command.arguments, [URI]);
+    assert.deepStrictEqual(open.command.arguments, [URI]);
+  });
+
   it("adds a problem lens from the document's diagnostics", () => {
     diagnostics = [
       diag(3, v.DiagnosticSeverity.Error, "bad"),
@@ -186,6 +209,23 @@ describe("codeLens provider (glue)", () => {
       1
     );
     assert.deepStrictEqual(executed, []);
+  });
+
+  it("toggle-fold in a visible but inactive editor focuses that editor first", async () => {
+    const lensEditor = fakeEditor();
+    v.window.activeTextEditor = {
+      document: { uri: { toString: () => "file:///other.esi" } },
+    };
+    let shown: any;
+    patch(v.window, "visibleTextEditors", [v.window.activeTextEditor, lensEditor]);
+    patch(v.window, "showTextDocument", (doc: any) => {
+      shown = doc;
+      return Promise.resolve(lensEditor);
+    });
+    await commands["extension.esiLens.toggleStepFold"](URI, 1);
+    assert.strictEqual(shown, lensEditor.document);
+    assert.strictEqual(lensEditor.selection.active.line, 1);
+    assert.deepStrictEqual(executed, ["editor.toggleFold"]);
   });
 
   it("show-problems jumps straight to a single problem", async () => {

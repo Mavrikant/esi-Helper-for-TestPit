@@ -1,7 +1,7 @@
 import * as vscode from "vscode";
 import * as fs from "fs";
 import * as path from "path";
-import { toDiagnostic } from "../componentDiagnostics";
+import { INCLUDER_DELAY_MS, toDiagnostic } from "../componentDiagnostics";
 import { createCsvCellLookup } from "../lib/csv";
 import { getOutputChannel } from "../lib/outputChannel";
 import { getActiveProfileName } from "../lib/profileRegistry";
@@ -18,7 +18,12 @@ import {
   summarizeWorkspace,
   unreadableFile,
 } from "../lib/workspaceValidation";
-import { createMacroResolver } from "../providers/macroResolver";
+import {
+  createMacroResolver,
+  createOutsideIncludeWatchers,
+  includeIdentity,
+  sameIncludeKeys,
+} from "../providers/macroResolver";
 
 export const VALIDATE_WORKSPACE_COMMAND = "extension.validateWorkspace";
 export const CLEAR_WORKSPACE_VALIDATION_COMMAND = "extension.clearWorkspaceValidation";
@@ -44,7 +49,13 @@ function findOpenDocument(uri: vscode.Uri): vscode.TextDocument | undefined {
   return vscode.workspace.textDocuments.find((doc) => doc.uri.toString() === key);
 }
 
-type CheckResult = { issues: EsiIssue[] } | { error: string };
+type CheckResult =
+  | {
+      issues: EsiIssue[];
+      /** Every file an include names, read or not: includeIdentity → path. */
+      includes: Map<string, string>;
+    }
+  | { error: string };
 
 /**
  * Run every in-process check on one file. Never opens an editor or a
@@ -67,14 +78,18 @@ async function checkFile(
   }
   // createMacroResolver only needs the path and the text of the script.
   const scriptLike = { uri, getText: () => text } as vscode.TextDocument;
+  const includes = new Map<string, string>();
   try {
     return {
       issues: collectEsiIssues(text, {
         // Per file, never cached here (projectIndexCache owns the cache).
         index: getActiveProjectIndex(),
         csvLookup: createCsvCellLookup(uri.fsPath),
-        macroResolver: createMacroResolver(scriptLike),
+        macroResolver: createMacroResolver(scriptLike, (fullPath) =>
+          includes.set(includeIdentity(fullPath), fullPath)
+        ),
       }),
+      includes,
     };
   } catch (err) {
     // A check that throws means the file was NOT validated — say so rather
@@ -87,14 +102,30 @@ export function registerValidateWorkspace(): vscode.Disposable {
   const collection = vscode.languages.createDiagnosticCollection(COLLECTION_NAME);
   // Files of the last run (uri string -> uri); empty once cleared.
   const covered = new Map<string, vscode.Uri>();
+  // Covered file (uri string) -> the files its check read through includes
+  // (includeIdentity -> full path): its %MACRO% results depend on their text
+  // too.
+  const includesOf = new Map<string, Map<string, string>>();
+  // Per covered file (uri string): the number of its latest re-check. An
+  // older one still reading must not overwrite what a newer one found.
+  const recheckSeq = new Map<string, number>();
   // Bumped whenever results are invalidated; a run in flight notices and stops.
   let generation = 0;
+  // Set on teardown: work still in flight then publishes and watches nothing.
+  let disposed = false;
   let running = false;
+  // Why the results were last invalidated: what a run that stopped says.
+  let clearReason: "cleared" | "configChanged" = "cleared";
 
-  const clear = (): void => {
+  const clear = (reason: "cleared" | "configChanged" = "cleared"): void => {
+    clearReason = reason;
     generation++;
     covered.clear();
+    includesOf.clear();
+    recheckSeq.clear();
+    changedIds.clear();
     collection.clear();
+    watchOutside();
   };
 
   const isLive = (doc: vscode.TextDocument | undefined): boolean =>
@@ -112,10 +143,22 @@ export function registerValidateWorkspace(): vscode.Disposable {
   /** Re-check one file of the last run from disk (closed / changed on disk). */
   const recheck = async (uri: vscode.Uri, fromDisk: boolean): Promise<void> => {
     const mine = generation;
+    const key = uri.toString();
+    const seq = (recheckSeq.get(key) ?? 0) + 1;
+    recheckSeq.set(key, seq);
     const open = fromDisk ? undefined : findOpenDocument(uri);
     const result = await checkFile(uri, open);
-    if (mine !== generation || !covered.has(uri.toString())) {
+    if (disposed || mine !== generation || !covered.has(key) || recheckSeq.get(key) !== seq) {
       return;
+    }
+    if ("includes" in result) {
+      const before = includesOf.get(key);
+      includesOf.set(key, result.includes);
+      // Rarely changes; when it does, one sync for the whole burst — each one
+      // walks every covered file's includes.
+      if (!sameIncludeKeys(before, result.includes)) {
+        watchOutsideSoon();
+      }
     }
     // Re-read the open state: the file may have been (re)opened as esi while
     // it was being read, and then the live collection owns it.
@@ -154,6 +197,9 @@ export function registerValidateWorkspace(): vscode.Disposable {
         progress.report({ message: "finding files…" });
         // `exclude` left undefined = the default excludes, i.e. files.exclude.
         const found = await vscode.workspace.findFiles(ESI_GLOB, undefined, undefined, token);
+        if (disposed) {
+          return;
+        }
         if (token.isCancellationRequested) {
           cancelled = true;
           return;
@@ -184,6 +230,9 @@ export function registerValidateWorkspace(): vscode.Disposable {
           });
           const open = findOpenDocument(uri);
           const result = await checkFile(uri, open);
+          if (disposed) {
+            return;
+          }
           if (mine !== generation) {
             invalidated = true;
             return;
@@ -193,15 +242,26 @@ export function registerValidateWorkspace(): vscode.Disposable {
             continue;
           }
           covered.set(uri.toString(), uri);
-          publish(uri, result.issues, isLive(open));
+          includesOf.set(uri.toString(), result.includes);
+          // Re-read the open state, as recheck does: the file may have been
+          // opened as esi while it was read, and the live collection owns it.
+          publish(uri, result.issues, isLive(findOpenDocument(uri)));
           outcomes.push(checkedFile(uri.fsPath, result.issues));
         }
       }
     );
+    if (disposed) {
+      return;
+    }
+    // Once per run rather than per file: the union of every covered file's
+    // includes.
+    watchOutside();
 
     if (invalidated) {
       void vscode.window.showWarningMessage(
-        "Workspace validation stopped: the active TestPit configuration changed while it was running. Run it again."
+        clearReason === "cleared"
+          ? "Workspace validation stopped: its results were cleared."
+          : "Workspace validation stopped: the active TestPit configuration changed while it was running. Run it again."
       );
       return;
     }
@@ -226,13 +286,18 @@ export function registerValidateWorkspace(): vscode.Disposable {
           ? vscode.window.showWarningMessage
           : vscode.window.showInformationMessage;
     const mine = generation;
-    const choice = await show(message, ...actions);
-    if (choice === ACTION_SHOW) {
-      await vscode.commands.executeCommand("workbench.actions.view.problems");
-    } else if (choice === ACTION_CLEAR && mine === generation) {
-      // (An old notification must not clear a newer run's results.)
-      clear();
-    }
+    // Not awaited: the notification settles only when a button is clicked or
+    // it is closed (one that times out moves to the Notification Center and
+    // stays open). Awaited, the run would count as "already running" until
+    // then.
+    void show(message, ...actions).then((choice) => {
+      if (choice === ACTION_SHOW) {
+        void vscode.commands.executeCommand("workbench.actions.view.problems");
+      } else if (choice === ACTION_CLEAR && mine === generation) {
+        // (An old notification must not clear a newer run's results.)
+        clear();
+      }
+    });
   };
 
   const onOpen = vscode.workspace.onDidOpenTextDocument((doc) => {
@@ -244,27 +309,115 @@ export function registerValidateWorkspace(): vscode.Disposable {
     if (covered.has(doc.uri.toString())) {
       void recheck(doc.uri, true);
     }
+    // A covered file's check reads an include from its editor while it is
+    // open: with the buffer gone (unsaved edits too), the disk counts again.
+    recheckIncluders(doc.uri);
+  });
+  const onEdit = vscode.workspace.onDidChangeTextDocument((event) => {
+    // Back to its text on disk (File: Revert, undo to the saved state, a
+    // save): what a covered file read from this buffer may be out of date.
+    // Not per keystroke — a dirty buffer is followed again once it is saved,
+    // reverted or closed.
+    if (!event.document.isDirty) {
+      recheckIncluders(event.document.uri);
+    }
   });
 
-  // Keep the snapshot honest when a covered file changes on disk.
-  const watcher = vscode.workspace.createFileSystemWatcher(ESI_GLOB);
-  const onDiskChange = watcher.onDidChange((uri) => {
+  // Included files changed since the last includer pass (includeIdentity).
+  const changedIds = new Set<string>();
+  let includerTimer: ReturnType<typeof setTimeout> | undefined;
+
+  /**
+   * A file changed: re-check (debounced, as the live check does) the covered
+   * files that include it — each once per burst, however many of its
+   * includes changed (a checkout rewriting the shared utility scripts).
+   */
+  const recheckIncluders = (uri: vscode.Uri): void => {
+    if (uri.scheme !== "file" || includesOf.size === 0) {
+      return;
+    }
+    const id = includeIdentity(path.resolve(uri.fsPath));
+    // Only a file some covered file includes: any other change must not keep
+    // pushing the pass back — the debounce restarts on every call.
+    if (!Array.from(includesOf.values()).some((includes) => includes.has(id))) {
+      return;
+    }
+    changedIds.add(id);
+    if (includerTimer) {
+      clearTimeout(includerTimer);
+    }
+    includerTimer = setTimeout(() => {
+      includerTimer = undefined;
+      const ids = Array.from(changedIds);
+      changedIds.clear();
+      for (const [key, includes] of includesOf) {
+        const includer = covered.get(key);
+        if (!includer) {
+          continue;
+        }
+        // Also a covered file that changed itself in the burst: its own
+        // re-check read its includes as they were then. Not for naming
+        // itself, though.
+        const own = includeIdentity(path.resolve(includer.fsPath));
+        if (ids.some((id) => id !== own && includes.has(id))) {
+          void recheck(includer, false);
+        }
+      }
+    }, INCLUDER_DELAY_MS);
+  };
+
+  // Keep the snapshot honest when a covered file — or a file one of them
+  // includes — changes on disk.
+  const onDiskChange = (uri: vscode.Uri): void => {
     if (covered.has(uri.toString())) {
       void recheck(uri, false);
     }
-  });
-  const onDiskDelete = watcher.onDidDelete((uri) => {
+    recheckIncluders(uri);
+  };
+  const onDiskDelete = (uri: vscode.Uri): void => {
     if (covered.delete(uri.toString())) {
+      recheckSeq.delete(uri.toString());
+      if (includesOf.delete(uri.toString())) {
+        watchOutsideSoon();
+      }
       collection.delete(uri);
     }
-  });
+    recheckIncluders(uri);
+  };
+  const wire = (watcher: vscode.FileSystemWatcher): vscode.Disposable[] => [
+    watcher.onDidChange(onDiskChange),
+    // A created file may resolve an include that could not be read before.
+    watcher.onDidCreate(recheckIncluders),
+    watcher.onDidDelete(onDiskDelete),
+  ];
+  const watcher = vscode.workspace.createFileSystemWatcher(ESI_GLOB);
+  const onDisk = wire(watcher);
+  // Included files outside the workspace folders, which `watcher` does not
+  // see.
+  const outside = createOutsideIncludeWatchers(wire);
+  // One sync for a batch of events (VS Code delivers a branch switch's
+  // deletes together): watchOutside walks every covered file's includes.
+  let outsideTimer: ReturnType<typeof setTimeout> | undefined;
+  function watchOutside(): void {
+    if (outsideTimer) {
+      clearTimeout(outsideTimer);
+      outsideTimer = undefined;
+    }
+    outside.update(
+      Array.from(includesOf.values()).flatMap((includes) => Array.from(includes.values()))
+    );
+  }
+  function watchOutsideSoon(): void {
+    outsideTimer ??= setTimeout(watchOutside, 0);
+  }
+  const onFolders = vscode.workspace.onDidChangeWorkspaceFolders(() => watchOutside());
 
   // Results were computed against the old index (profile switch, registry
   // reload, config XML edited): showing them on would be misleading, and
   // re-running the whole workspace unasked is not this command's call.
   const onIndexChange = onIndexChanged(() => {
     if (covered.size > 0 || running) {
-      clear();
+      clear("configChanged");
       getOutputChannel().appendLine(
         "[validate-workspace] results cleared: the active TestPit configuration changed — run the command again"
       );
@@ -274,12 +427,29 @@ export function registerValidateWorkspace(): vscode.Disposable {
   return vscode.Disposable.from(
     collection,
     vscode.commands.registerCommand(VALIDATE_WORKSPACE_COMMAND, run),
-    vscode.commands.registerCommand(CLEAR_WORKSPACE_VALIDATION_COMMAND, clear),
+    vscode.commands.registerCommand(CLEAR_WORKSPACE_VALIDATION_COMMAND, () =>
+      clear("cleared")
+    ),
     onOpen,
     onClose,
+    onEdit,
     watcher,
-    onDiskChange,
-    onDiskDelete,
-    onIndexChange
+    ...onDisk,
+    outside,
+    onFolders,
+    onIndexChange,
+    {
+      dispose: () => {
+        disposed = true;
+        if (includerTimer) {
+          clearTimeout(includerTimer);
+          includerTimer = undefined;
+        }
+        if (outsideTimer) {
+          clearTimeout(outsideTimer);
+          outsideTimer = undefined;
+        }
+      },
+    }
   );
 }

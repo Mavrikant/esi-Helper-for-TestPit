@@ -23,9 +23,17 @@ import {
   validateStructure,
 } from "./componentValidator";
 import { parseSectionTagLine } from "./parseSectionTag";
-import { isKnownSectionName } from "./sectionNames";
+import {
+  SEC_EXTERNAL_VERIFY,
+  SEC_INCLUDE,
+  SEC_MANUAL_VERIFY,
+  SEC_STEP_DEFINITION,
+  SEC_TEST_DEFINITION,
+  SEC_VARIABLES,
+  isKnownSectionName,
+} from "./sectionNames";
 import { rankSuggestions, suggest } from "./suggest";
-import { VORILS_UNIT_PREFIX, XmlIndex } from "./xmlIndex";
+import { COMPONENT_TAG_PATTERN, VORILS_UNIT_PREFIX, XmlIndex } from "./xmlIndex";
 
 export interface FixEdit {
   line: number;
@@ -712,6 +720,29 @@ function blockEnd(
   return bound;
 }
 
+/**
+ * Sections that hold `key = value` lines (and prose) only, like a component
+ * (message) block — or, for [INCLUDE], also command sections ([CMD_EXECUTE],
+ * …), which may as well stand outside it: with no indentation to tell, its
+ * closer goes after its own lines too. Never one that wraps the sections
+ * after it.
+ */
+const FIELDS_ONLY_SECTIONS: ReadonlySet<string> = new Set([
+  SEC_STEP_DEFINITION,
+  SEC_TEST_DEFINITION,
+  SEC_VARIABLES,
+  SEC_INCLUDE,
+  SEC_MANUAL_VERIFY,
+  SEC_EXTERNAL_VERIFY,
+]);
+
+/**
+ * `key = value` with a one- or multi-word key (`SDI =`, `Step Description =`,
+ * `system call =`, `time offset =`). Not `%X% = v`: a macro definition may
+ * open any section, a step included.
+ */
+const KEY_LINE_RE = /^\s*[A-Za-z_][A-Za-z0-9_. \t]*=/;
+
 function fixUnclosed(ctx: FixContext, issue: ComponentIssue): QuickFix[] {
   const { lines } = ctx;
   const name = issue.identifier;
@@ -719,18 +750,29 @@ function fixUnclosed(ctx: FixContext, issue: ComponentIssue): QuickFix[] {
   if (bound <= issue.line) {
     return [];
   }
-  // A block that directly holds `key = value` lines is a message block.
-  let isMessage = false;
-  for (let l = issue.line + 1; l < bound; l++) {
+  // A block that holds only fields ends at the next tag. Known from its
+  // name; otherwise a block whose first line is `key = value` is taken for
+  // one.
+  const fieldsOnly =
+    COMPONENT_TAG_PATTERN.test(name) || FIELDS_ONLY_SECTIONS.has(name);
+  let isMessage = fieldsOnly;
+  for (let l = issue.line + 1; !isMessage && l < bound; l++) {
     if (isBlankOrComment(lines[l])) {
       continue;
     }
-    isMessage = !parseSectionTagLine(lines[l]) && ASSIGNMENT_RE.test(lines[l]);
+    isMessage = !parseSectionTagLine(lines[l]) && KEY_LINE_RE.test(lines[l]);
     break;
   }
   const closer = `${leadingWhitespace(lines[issue.line])}[/${name}]`;
   const tried = new Set<number>();
-  for (const end of [blockEnd(lines, issue.line, bound, isMessage), bound]) {
+  const ends = [blockEnd(lines, issue.line, bound, isMessage)];
+  if (!fieldsOnly) {
+    // Not known to hold fields only: it may be a container after all, which
+    // runs to the closer that exposed it. A fields-only block never wraps
+    // the sections after it.
+    ends.push(bound);
+  }
+  for (const end of ends) {
     // Sit directly under the block's last line, above any blank lines.
     let after = end - 1;
     while (after > issue.line && lines[after].trim() === "") {

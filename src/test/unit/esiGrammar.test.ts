@@ -365,6 +365,72 @@ describe("syntaxes/esi.json", () => {
       ]);
     });
 
+    it("ends on every closer shape TestPit repairs, not on a longer name", () => {
+      // parseSectionTag.ts reads each of these as a close of STEP DEFINITION.
+      for (const closer of [
+        "[/STEP DEFINITION ]",
+        "[//STEP DEFINITION]",
+        "[/ STEP DEFINITION]",
+        "[/STEP DEFINITION",
+        "[/STEP DEFINITION/]",
+        "    [/STEP DEFINITION] # c",
+        "[/STEP DEFINITION # c",
+      ]) {
+        const lines = tokenize([...open, "Step Description = x", closer, "n = 5"]);
+        assert.ok(
+          lines[3].some((t) => t.scopes.includes("constant.numeric.esi")),
+          `still inside the block after ${JSON.stringify(closer)}`
+        );
+      }
+      // `[[/NAME]]` is an opener to parseSectionTag.ts, and a tag only counts
+      // at the start of its line.
+      for (const notACloser of [
+        "[/STEP DEFINITIONS]",
+        "[/STEP DEFINITIONX",
+        "[[/STEP DEFINITION]]",
+        "  Ends with [/STEP DEFINITION",
+        "  see [/STEP DEFINITION] above",
+      ]) {
+        const lines = tokenize([...open, notACloser, "n = 5"]);
+        assert.ok(
+          lines[2].every((t) => t.scopes.includes("meta.definition.esi")),
+          `left the block at ${JSON.stringify(notACloser)}`
+        );
+      }
+    });
+
+    it("begins only on an opener at the start of a line, as TestPit reads a tag", () => {
+      // A mention in a value begins nothing: the lines after it keep their
+      // colours (the closer on the mention's line could not end it).
+      const lines = tokenize([
+        "[CMD_INSTRUCTION]",
+        "    text = fill in [STEP DEFINITION] ... [/STEP DEFINITION] first",
+        "[/CMD_INSTRUCTION]",
+        "n = 5",
+      ]);
+      assert.ok(lines.flat().every((t) => !t.scopes.includes("meta.definition.esi")));
+      assert.ok(lines[3].some((t) => t.scopes.includes("constant.numeric.esi")));
+      // The forms TestPit repairs, indented too, begin one; a one-liner not.
+      for (const opener of [
+        "    [STEP DEFINITION]",
+        "[[STEP DEFINITION]]",
+        "[ STEP DEFINITION]",
+        "[STEP DEFINITION ]",
+        "[\tSTEP DEFINITION]",
+        "[STEP DEFINITION",
+        "[STEP DEFINITION # c",
+        "[[/STEP DEFINITION]]",
+      ]) {
+        const block = tokenize([opener, "n = 5"]);
+        assert.ok(
+          block[1].every((t) => t.scopes.includes("meta.definition.esi")),
+          `no block after ${JSON.stringify(opener)}`
+        );
+      }
+      const oneLiner = tokenize(["[STEP DEFINITION/]", "n = 5"]);
+      assert.ok(oneLiner[1].some((t) => t.scopes.includes("constant.numeric.esi")));
+    });
+
     it("still colours comments, macros, strings and the markup", () => {
       assert.deepStrictEqual(leaf("  Step Conditions = <pre>", open).slice(2), ["<pre>→meta.tag.markup"]);
       assert.deepStrictEqual(leaf('    <br/> * use %PORT% and "quoted 7" # note 9', open), [

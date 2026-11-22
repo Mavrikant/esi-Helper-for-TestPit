@@ -150,10 +150,12 @@ function fieldHaystack(field: FieldDef): string {
  * Build the tree for `index`, narrowed by `filter`.
  *
  * Filter: every whitespace-separated term must be found, case-insensitively.
- * A connection whose own name (or message name) holds all terms is shown with
- * all its fields; otherwise it is shown with just the fields whose name or
- * enum value names hold all terms, and dropped when there is none. An empty
- * filter shows everything. A bus with nothing left is dropped.
+ * A term found in a connection's own name (or message name) is matched for
+ * it; when every term is, the connection is shown with all its fields.
+ * Otherwise it is shown with just the fields whose name or enum value names
+ * hold all the remaining terms (`429 sdi`: a 429 connection, its SDI field),
+ * and dropped when there is none. An empty filter shows everything. A bus
+ * with nothing left is dropped.
  */
 export function buildComponentTree(
   index: XmlIndex,
@@ -169,8 +171,9 @@ export function buildComponentTree(
     let shown: readonly FieldDef[] = allFields;
     if (terms.length > 0) {
       const own = `${connection.fullName} ${message?.name ?? ""}`.toLowerCase();
-      if (!hasAll(own, terms)) {
-        shown = allFields.filter((f) => hasAll(fieldHaystack(f), terms));
+      const rest = terms.filter((term) => !own.includes(term));
+      if (rest.length > 0) {
+        shown = allFields.filter((f) => hasAll(fieldHaystack(f), rest));
         if (shown.length === 0) {
           continue;
         }

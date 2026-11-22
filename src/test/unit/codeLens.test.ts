@@ -45,7 +45,7 @@ const SCRIPT = SCRIPT_LINES.join("\n");
 const titles = (lenses: EsiLens[]): string[] => lenses.map((l) => l.title);
 const stepLenses = (lenses: EsiLens[]): EsiLens[] =>
   lenses.filter(
-    (l) => l.action.type === "toggleFold" || l.action.type === "showProblems"
+    (l) => l.action.type !== "validate" && l.action.type !== "openWithTestPit"
   );
 
 describe("codeLens — formatting", () => {
@@ -208,6 +208,10 @@ describe("codeLens — computeCodeLenses", () => {
       steps.map((l) => `${l.line}:${l.title}`),
       ["1:0 inputs · 0 outputs", "2:0 inputs · 2 outputs"]
     );
+    // A one-liner has no fold of its own: its lens is a plain label.
+    assert.deepStrictEqual(steps[0].action, { type: "none" });
+    assert.ok(!steps[0].tooltip.includes("fold"));
+    assert.deepStrictEqual(steps[1].action, { type: "toggleFold", line: 2 });
     // A one-liner's problem range is its own line only.
     const withProblem = stepLenses(
       computeCodeLenses(text, [{ line: 1, severity: "error" }])
@@ -217,6 +221,13 @@ describe("codeLens — computeCodeLenses", () => {
       startLine: 1,
       endLine: 1,
     });
+  });
+
+  it("offers no fold on a step with nothing between its tags", () => {
+    // Toggling there would fold [TEST STEPS], every step with it.
+    const text = doc("[TEST STEPS]", "    [STEP 30]", "    [/STEP 30]", "[/TEST STEPS]");
+    const [step] = stepLenses(computeCodeLenses(text));
+    assert.deepStrictEqual(step.action, { type: "none" });
   });
 
   it("is total on unclosed steps and empty input", () => {

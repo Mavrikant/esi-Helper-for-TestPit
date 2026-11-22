@@ -237,11 +237,21 @@ export function scanXml(source: string): XmlTree {
         p = n;
         break;
       }
+      // Trimmed, as the index's parser (fast-xml-parser, trimValues) reads
+      // it: `Name = "HSI "` names partition HSI. The span is the trimmed run.
+      let vs = p + 1;
+      let ve = valueEnd;
+      while (vs < ve && WHITESPACE.test(text[vs])) {
+        vs++;
+      }
+      while (ve > vs && WHITESPACE.test(text[ve - 1])) {
+        ve--;
+      }
       node.attrs.push({
         name: attrName,
-        value: decode(text.slice(p + 1, valueEnd)),
-        valueStart: p + 1,
-        rawLength: valueEnd - p - 1,
+        value: decode(text.slice(vs, ve)),
+        valueStart: vs,
+        rawLength: ve - vs,
       });
       p = valueEnd + 1;
     }
@@ -390,33 +400,54 @@ export function sourceFileOf(target: DefinitionTarget): string | undefined {
 
 // ───────────────────────────── finders ─────────────────────────────
 
-/** `<Partition Name=partition>` → `<Port Name=port>`. */
+/**
+ * `<Partition Name=partition>` → `<Port Name=port>`. The LAST such port, in
+ * one partition or across two of that name: the index registers the PART_
+ * connection of each in turn (Map.set), so the last one is the connection
+ * hover and validation show. Its message is that port's own — unless the
+ * port carries none (see findMessageNode).
+ */
 function findPartitionPort(
   tree: XmlTree,
   partition: string,
   port: string
 ): XmlNode | undefined {
+  let last: XmlNode | undefined;
   for (const part of descendants(tree.root, "Partition")) {
     if (nameOf(part)?.value !== partition) {
       continue;
     }
-    const found = childrenOf(part, "Port").find((p) => nameOf(p)?.value === port);
-    if (found) {
-      return found;
+    for (const p of childrenOf(part, "Port")) {
+      if (nameOf(p)?.value === port) {
+        last = p;
+      }
     }
   }
-  return undefined;
+  return last;
 }
 
-/** `<Common><CommonPorts><Port Name=name>`. */
+/** A port's message: its inline `<Message>`, or the one of the shared port it names. */
+function portMessageNode(tree: XmlTree, port: XmlNode): XmlNode | undefined {
+  const inline = child(port, "Message");
+  if (inline) {
+    return inline;
+  }
+  const ref = valueOf(port, "Ref")?.value;
+  const common = ref !== undefined ? findCommonPort(tree, ref) : undefined;
+  return common ? child(common, "Message") ?? common : undefined;
+}
+
+/** `<Common><CommonPorts><Port Name=name>` — the last of that name, as above. */
 function findCommonPort(tree: XmlTree, name: string): XmlNode | undefined {
+  let last: XmlNode | undefined;
   for (const table of descendants(tree.root, "CommonPorts")) {
-    const found = childrenOf(table, "Port").find((p) => nameOf(p)?.value === name);
-    if (found) {
-      return found;
+    for (const p of childrenOf(table, "Port")) {
+      if (nameOf(p)?.value === name) {
+        last = p;
+      }
     }
   }
-  return undefined;
+  return last;
 }
 
 function findConnectionNode(tree: XmlTree, conn: ConnectionDef): XmlNode | undefined {
@@ -428,12 +459,13 @@ function findConnectionNode(tree: XmlTree, conn: ConnectionDef): XmlNode | undef
   const named = descendants(tree.root, "Connection").filter(
     (c) => attr(c, "Name")?.value === conn.rawName
   );
-  return (
-    named.find((c) => {
-      const type = c.parent ? attr(c.parent, "Type")?.value : undefined;
-      return type !== undefined && BUS_PREFIX[type] === conn.bus;
-    }) ?? named[0]
-  );
+  const sameBus = named.filter((c) => {
+    const type = c.parent ? attr(c.parent, "Type")?.value : undefined;
+    return type !== undefined && BUS_PREFIX[type] === conn.bus;
+  });
+  // The index keeps the last connection registered under a name (its card
+  // shows that one's card / channel); so does this.
+  return sameBus[sameBus.length - 1] ?? named[named.length - 1];
 }
 
 /** The name a `<Message>` goes by: its own, or — where format 2 leaves it out
@@ -462,20 +494,21 @@ function findMessageNode(
   message: MessageDef,
   conn?: ConnectionDef
 ): XmlNode | undefined {
-  // Through the port the script named, when it is in this same file.
+  // Through the port the script named, when it is in this same file. A
+  // bare port (or one whose Ref resolves nowhere) never replaces a message
+  // already registered under its name — ingestMemoryPorts makes a field-less
+  // one only when none exists — so the message the index holds then is
+  // found by name below, like any other; the port itself only when there is
+  // none.
+  let barePort: XmlNode | undefined;
   if (conn?.partition && conn.sourceFile === message.sourceFile) {
     const port = findPartitionPort(tree, conn.partition, conn.rawName);
     if (port) {
-      const inline = child(port, "Message");
-      if (inline) {
-        return inline;
+      const node = portMessageNode(tree, port);
+      if (node) {
+        return node;
       }
-      const ref = valueOf(port, "Ref")?.value;
-      const common = ref !== undefined ? findCommonPort(tree, ref) : undefined;
-      if (common) {
-        return child(common, "Message") ?? common;
-      }
-      return port;
+      barePort = port;
     }
   }
   const named = descendants(tree.root, "Message").filter(
@@ -487,12 +520,19 @@ function findMessageNode(
       return bus === undefined || bus === message.bus;
     });
     // The index keeps the last message registered under a name; so does this.
-    const pool = sameBus.length > 0 ? sameBus : named;
-    return pool[pool.length - 1];
+    if (sameBus.length > 0) {
+      return sameBus[sameBus.length - 1];
+    }
+    // For a bare port, one of another bus is not the message: the index made
+    // the field-less one of its own bus for it (its guard is per bus).
+    if (!barePort) {
+      return named[named.length - 1];
+    }
   }
   // A port with no <Message> at all still registers a (field-less) message.
-  return descendants(tree.root, "Port").find(
-    (p) => nameOf(p)?.value === message.name
+  return (
+    barePort ??
+    descendants(tree.root, "Port").find((p) => nameOf(p)?.value === message.name)
   );
 }
 
@@ -584,7 +624,11 @@ export function locateInTree(tree: XmlTree, target: DefinitionTarget): XmlPositi
       sourceFile: target.conn.sourceFile,
     };
     const messageNode = findMessageNode(tree, stand);
-    return messageNode ? toPosition(tree, spanOf(messageNode), true) : TOP_OF_FILE;
+    // A partition port that was not found is not pinpointed by a message of
+    // the same name elsewhere in the file.
+    return messageNode
+      ? toPosition(tree, spanOf(messageNode), target.conn.partition === undefined)
+      : TOP_OF_FILE;
   }
 
   const messageNode = findMessageNode(tree, target.message, target.conn);

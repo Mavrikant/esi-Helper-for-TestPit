@@ -26,6 +26,7 @@ const FILE_NAME = "testpit-settings.json";
 let ctx: vscode.ExtensionContext | undefined;
 let state: PluginState = {};
 let emitter: vscode.EventEmitter<void> | undefined;
+let exeEmitter: vscode.EventEmitter<void> | undefined;
 
 export function initPluginStore(context: vscode.ExtensionContext): void {
   const vsc: typeof vscode = require("vscode");
@@ -33,6 +34,10 @@ export function initPluginStore(context: vscode.ExtensionContext): void {
   if (!emitter) {
     emitter = new vsc.EventEmitter<void>();
     context.subscriptions.push(emitter);
+  }
+  if (!exeEmitter) {
+    exeEmitter = new vsc.EventEmitter<void>();
+    context.subscriptions.push(exeEmitter);
   }
   state = readFile();
 }
@@ -48,6 +53,7 @@ export function getTestpitExe(): string | undefined {
 export function setTestpitExe(p: string | undefined): void {
   state.testpitExe = p;
   writeFile();
+  exeEmitter?.fire();
 }
 
 export function getActiveProfileName(): string | undefined {
@@ -91,6 +97,22 @@ export const onActiveProfileChanged: vscode.Event<void> = (
     return { dispose: () => undefined };
   }
   return emitter.event(listener, thisArgs, disposables);
+};
+
+/**
+ * Fires when the TestPit.exe path is set (picked or repointed). Subscribers
+ * (live check, validation status bar) re-read getTestpitExe(). Pre-init a
+ * no-op disposable, like onActiveProfileChanged.
+ */
+export const onDidChangeTestpitExe: vscode.Event<void> = (
+  listener,
+  thisArgs,
+  disposables
+) => {
+  if (!exeEmitter) {
+    return { dispose: () => undefined };
+  }
+  return exeEmitter.event(listener, thisArgs, disposables);
 };
 
 function storageDir(): string | undefined {

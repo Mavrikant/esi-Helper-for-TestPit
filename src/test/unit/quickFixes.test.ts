@@ -228,9 +228,10 @@ describe("quickFixes", () => {
       );
     });
 
-    it("offers nothing when the value holds a macro", () => {
-      const { fixes } = fixesFor(`[${CONN}]\n    SDI = NOPE_%N%\n[/${CONN}]`, "unknownEnum");
-      assert.deepStrictEqual(fixes, []);
+    it("has nothing to fix when the value holds a macro", () => {
+      // The value only resolves at run time, so it is not even reported.
+      const ctx = createFixContext(`[${CONN}]\n    SDI = NOPE_%N%\n[/${CONN}]`, idx);
+      assert.deepStrictEqual(ctx.issues.filter((i) => i.kind === "unknownEnum"), []);
     });
   });
 
@@ -359,6 +360,46 @@ describe("quickFixes", () => {
         "unbalancedTag"
       );
       assert.deepStrictEqual(out.slice(5, 8), [`[/${CONN}]`, "[/STEP INPUTS]", "[/STEP]"]);
+    });
+
+    it("closes a fields-only section at its own fields in an unindented file", () => {
+      // Known from the name, whatever its first key looks like.
+      const definition = applyFix(
+        ["[TEST STEPS]", "[STEP 10]", "[STEP DEFINITION]", "Step Description = x", "[STEP INPUTS]", "[/STEP INPUTS]", "[/STEP 10]", "[/TEST STEPS]"],
+        "unbalancedTag"
+      );
+      assert.deepStrictEqual(definition.slice(3, 6), ["Step Description = x", "[/STEP DEFINITION]", "[STEP INPUTS]"]);
+      const verify = applyFix(
+        script(["[STEP OUTPUTS]", "[EXTERNAL_VERIFY]", "result file = r.txt", "[DIS_PowerOnOff]", "value = ON", "[/DIS_PowerOnOff]", "[/STEP OUTPUTS]"]),
+        "unbalancedTag"
+      );
+      assert.deepStrictEqual(verify.slice(4, 7), ["result file = r.txt", "[/EXTERNAL_VERIFY]", "[DIS_PowerOnOff]"]);
+      // A macro definition is not a key, but [VARIABLES] holds nothing else.
+      const variables = applyFix(
+        ["[VARIABLES]", "%SPEED% = 5", "[TEST STEPS]", "[STEP 10]", "[/STEP 10]", "[/TEST STEPS]"],
+        "unbalancedTag"
+      );
+      assert.deepStrictEqual(variables.slice(0, 4), ["[VARIABLES]", "%SPEED% = 5", "[/VARIABLES]", "[TEST STEPS]"]);
+      // A message whose first line is a multi-word parameter.
+      const message = applyFix(
+        script(["[STEP OUTPUTS]", `[${CONN}]`, "time offset = 100", "Course = 1", "[429_L100SelectedCourseBNR_input2]", "Course = 2", "[/429_L100SelectedCourseBNR_input2]", "[/STEP OUTPUTS]"]),
+        "unbalancedTag"
+      );
+      assert.deepStrictEqual(message.slice(5, 8), ["Course = 1", `[/${CONN}]`, "[429_L100SelectedCourseBNR_input2]"]);
+    });
+
+    it("takes a block starting with a multi-word key for fields-only, a macro definition not", () => {
+      const command = applyFix(
+        script(["[STEP INPUTS]", "[CMD_EXECUTE]", "system call = run.bat", "[DIS_PowerOnOff/]", "[/STEP INPUTS]"]),
+        "unbalancedTag"
+      );
+      assert.deepStrictEqual(command.slice(4, 7), ["system call = run.bat", "[/CMD_EXECUTE]", "[DIS_PowerOnOff/]"]);
+      // `%N% = 5` may open any section: the step still runs to [/TEST STEPS].
+      const step = applyFix(
+        ["[TEST STEPS]", "[STEP 10]", "%N% = 5", "[STEP INPUTS]", "[/STEP INPUTS]", "[/TEST STEPS]"],
+        "unbalancedTag"
+      );
+      assert.deepStrictEqual(step.slice(4, 7), ["[/STEP INPUTS]", "[/STEP 10]", "[/TEST STEPS]"]);
     });
 
     it("closes a never-closed section at end of file, above trailing blank lines", () => {

@@ -10,6 +10,13 @@ import {
 /** Internal commands behind the step lenses (not in the command palette). */
 export const CMD_LENS_TOGGLE_FOLD = "extension.esiLens.toggleStepFold";
 export const CMD_LENS_SHOW_PROBLEMS = "extension.esiLens.showStepProblems";
+/**
+ * Does nothing: the command of a lens that is only a label. An empty command
+ * id would draw it as plain text, but "Show CodeLens Commands for Current
+ * Line" (the keyboard / screen-reader route) still lists it and then fails
+ * with "command '' not found".
+ */
+export const CMD_LENS_NONE = "extension.esiLens.none";
 
 const SETTING = "codeLens.enabled";
 const REFRESH_DEBOUNCE_MS = 300;
@@ -49,10 +56,23 @@ function toCommand(
   uri: vscode.Uri
 ): vscode.Command {
   switch (action.type) {
+    // The lens's own document: the lens may be clicked in an editor that is
+    // not the active one (side-by-side groups), so the active editor must
+    // not decide which file is checked / opened.
     case "validate":
-      return { title, tooltip, command: "extension.runValidityCheck" };
+      return {
+        title,
+        tooltip,
+        command: "extension.runValidityCheck",
+        arguments: [uri],
+      };
     case "openWithTestPit":
-      return { title, tooltip, command: "extension.openWithTestPit" };
+      return {
+        title,
+        tooltip,
+        command: "extension.openWithTestPit",
+        arguments: [uri],
+      };
     case "toggleFold":
       return {
         title,
@@ -67,15 +87,27 @@ function toCommand(
         command: CMD_LENS_SHOW_PROBLEMS,
         arguments: [uri, action.startLine, action.endLine],
       };
+    case "none":
+      return { title, tooltip, command: CMD_LENS_NONE };
   }
 }
 
+/**
+ * The editor showing `uri`: the active one when it does, otherwise any
+ * visible one (a lens clicked in a side-by-side group that is not focused).
+ */
 function editorFor(uri: vscode.Uri | undefined): vscode.TextEditor | undefined {
-  const editor = vscode.window.activeTextEditor;
-  if (!editor || !uri || editor.document.uri.toString() !== uri.toString()) {
+  if (!uri) {
     return undefined;
   }
-  return editor;
+  const key = uri.toString();
+  const active = vscode.window.activeTextEditor;
+  if (active && active.document.uri.toString() === key) {
+    return active;
+  }
+  return vscode.window.visibleTextEditors.find(
+    (editor) => editor.document.uri.toString() === key
+  );
 }
 
 function jumpTo(editor: vscode.TextEditor, range: vscode.Range): void {
@@ -87,9 +119,16 @@ function jumpTo(editor: vscode.TextEditor, range: vscode.Range): void {
 }
 
 async function toggleStepFold(uri: vscode.Uri, line: number): Promise<void> {
-  const editor = editorFor(uri);
+  let editor = editorFor(uri);
   if (!editor || typeof line !== "number" || line >= editor.document.lineCount) {
     return;
+  }
+  // `editor.toggleFold` acts on the FOCUSED editor: focus the lens's one.
+  if (editor !== vscode.window.activeTextEditor) {
+    editor = await vscode.window.showTextDocument(editor.document, {
+      viewColumn: editor.viewColumn,
+      preserveFocus: false,
+    });
   }
   // `editor.toggleFold` acts on the cursor line, so the cursor moves there.
   const at = new vscode.Position(line, 0);
@@ -207,6 +246,7 @@ export function registerEsiCodeLensProvider(): vscode.Disposable {
     vscode.languages.registerCodeLensProvider({ language: "esi" }, provider),
     vscode.commands.registerCommand(CMD_LENS_TOGGLE_FOLD, toggleStepFold),
     vscode.commands.registerCommand(CMD_LENS_SHOW_PROBLEMS, showStepProblems),
+    vscode.commands.registerCommand(CMD_LENS_NONE, () => undefined),
     onDiagnostics,
     onConfigChange,
     new vscode.Disposable(() => {

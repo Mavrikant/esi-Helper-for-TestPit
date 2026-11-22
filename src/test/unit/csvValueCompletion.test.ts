@@ -42,6 +42,68 @@ describe("csvValueCompletion", () => {
       assert.deepStrictEqual(ctx("SDI = In.CSV  li|"), { kind: "tail", startCol: 14, endCol: 16 });
     });
 
+    it("replaces a whole file name when retyping it, and keeps an address after it", () => {
+      assert.deepStrictEqual(ctx("    SDI = ne|.csv line:4 col:2"), {
+        kind: "file",
+        dirPart: "",
+        startCol: 10,
+        endCol: 16,
+        hasTail: true,
+      });
+      assert.deepStrictEqual(ctx("    SDI = |old.csv line:4 col:2"), {
+        kind: "file",
+        dirPart: "",
+        startCol: 10,
+        endCol: 17,
+        hasTail: true,
+      });
+      assert.deepStrictEqual(ctx("    SDI = ne|w"), { kind: "file", dirPart: "", startCol: 10, endCol: 13 });
+      // …and then only the name is inserted.
+      assert.strictEqual(csvFileEntries(["new.csv"], { withTail: false })[0].insertText, "new.csv");
+    });
+
+    it("completes only the word of a tail whose numbers are already there", () => {
+      assert.deepStrictEqual(ctx("SDI = in.csv li|:4 col:2"), { kind: "tail", startCol: 13, endCol: 15, hasAddress: true });
+      assert.deepStrictEqual(ctx("SDI = in.csv li|ne:4 col:2"), { kind: "tail", startCol: 13, endCol: 17, hasAddress: true });
+      assert.strictEqual(csvTailEntry({ withNumbers: false }).insertText, "line");
+    });
+
+    it("keeps a column part after the cursor and puts only line:N in front of it", () => {
+      // The column was typed first: the line part goes in front of it.
+      assert.deepStrictEqual(ctx("    type_code = data.csv |col:2"), {
+        kind: "tail",
+        startCol: 25,
+        endCol: 25,
+        colFollows: true,
+      });
+      assert.deepStrictEqual(ctx("SDI = in.csv l| col:2"), { kind: "tail", startCol: 13, endCol: 15, colFollows: true });
+      assert.deepStrictEqual(ctx("SDI = in.csv li|ne col:2"), { kind: "tail", startCol: 13, endCol: 18, colFollows: true });
+      // …also before its number; any other word at the cursor is replaced.
+      assert.deepStrictEqual(ctx("SDI = in.csv |col"), { kind: "tail", startCol: 13, endCol: 13, colFollows: true });
+      assert.deepStrictEqual(ctx("SDI = in.csv |foo"), { kind: "tail", startCol: 13, endCol: 16 });
+      assert.deepStrictEqual(ctx("SDI = in.csv lin|x"), { kind: "tail", startCol: 13, endCol: 17 });
+      const apply = (marked: string): string => {
+        const c = ctx(marked);
+        assert.ok(c && c.kind === "tail");
+        const at = marked.indexOf("|");
+        const text = marked.slice(0, at) + marked.slice(at + 1);
+        const insert = csvTailEntry({ withNumbers: !c.hasAddress, beforeCol: c.colFollows })
+          .insertText.replace(/\$\{\d+:([^}]*)\}/g, "$1");
+        return text.slice(0, c.startCol) + insert + text.slice(c.endCol);
+      };
+      assert.strictEqual(apply("    type_code = data.csv |col:2"), "    type_code = data.csv line:1 col:2");
+      assert.strictEqual(apply("SDI = in.csv l| col:2"), "SDI = in.csv line:1 col:2");
+      assert.strictEqual(apply("SDI = in.csv li|ne:4 col:2"), "SDI = in.csv line:4 col:2");
+      assert.strictEqual(apply("SDI = in.csv |"), "SDI = in.csv line:1 col:1");
+      // Nothing glued to a word that was kept or should have gone.
+      assert.strictEqual(apply("SDI = in.csv |col"), "SDI = in.csv line:1 col");
+      assert.strictEqual(apply("SDI = in.csv |col:"), "SDI = in.csv line:1 col:");
+      assert.strictEqual(apply("SDI = in.csv |col2"), "SDI = in.csv line:1 col2");
+      assert.strictEqual(apply("SDI = in.csv lin|x"), "SDI = in.csv line:1 col:1");
+      assert.strictEqual(apply("SDI = in.csv |foo"), "SDI = in.csv line:1 col:1");
+      assert.ok(parseCsvCellRef(apply("    type_code = data.csv |col:2").split("= ")[1]));
+    });
+
     it("stays out of anything that cannot start a CSV reference", () => {
       assert.strictEqual(ctx("SDI |"), undefined); // no '=' yet
       assert.strictEqual(ctx("SDI = %MAC|"), undefined); // macro

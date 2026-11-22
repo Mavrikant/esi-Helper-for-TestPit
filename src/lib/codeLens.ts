@@ -43,7 +43,9 @@ export type LensAction =
   /** Fold / unfold the section that opens on `line`. */
   | { type: "toggleFold"; line: number }
   /** List the problems on lines `startLine`…`endLine` (inclusive). */
-  | { type: "showProblems"; startLine: number; endLine: number };
+  | { type: "showProblems"; startLine: number; endLine: number }
+  /** A plain label: a click does nothing. */
+  | { type: "none" };
 
 export interface EsiLens {
   /** 0-based line the lens sits above. */
@@ -170,14 +172,21 @@ export function computeCodeLenses(
     };
     const inputs = countBlocks(step, SEC_STEP_INPUTS);
     const outputs = countBlocks(step, SEC_STEP_OUTPUTS);
+    // The foldingRanges rule (esiOutline.ts): a one-liner, or a step with
+    // nothing between its tags, has no fold of its own — toggling there
+    // would fold the section around it, [TEST STEPS] and every step.
+    const foldable =
+      (step.closed ? step.endLine - 1 : step.endLine) > step.startLine;
     lenses.push({
       ...at,
       title: formatStepSummary(inputs, outputs),
       tooltip:
         `[${step.name}]: ${plural(inputs, "block")} in [${SEC_STEP_INPUTS}], ` +
-        `${plural(outputs, "block")} in [${SEC_STEP_OUTPUTS}]. ` +
-        "Click to fold / unfold the step.",
-      action: { type: "toggleFold", line: step.startLine },
+        `${plural(outputs, "block")} in [${SEC_STEP_OUTPUTS}].` +
+        (foldable ? " Click to fold / unfold the step." : ""),
+      action: foldable
+        ? { type: "toggleFold", line: step.startLine }
+        : { type: "none" },
     });
 
     const counts = countProblems(problems, step.startLine, step.endLine);

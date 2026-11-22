@@ -57,8 +57,12 @@ describe("esiTestController (glue)", () => {
   let exe: string | undefined;
   let validate: (doc: any) => { output: string; issues: any[] };
   let validated: string[] = [];
+  /** `<file>:<publish option>` per validate call. */
+  let publishFlags: string[] = [];
   let found: any[] = [];
   let openDocs: any[] = [];
+  /** The editor tabs (one group): `{ input: { uri } }`. */
+  const tabs: any[] = [];
   let runs: RunLog[] = [];
   const listeners: Record<string, (arg: any) => void> = {};
   const saved: Array<[any, string, PropertyDescriptor | undefined]> = [];
@@ -177,12 +181,18 @@ describe("esiTestController (glue)", () => {
       onDidDelete(l: any) { listeners.diskDelete = l; return { dispose() {} }; },
       dispose() {},
     }));
+    patch(v.window, "onDidChangeVisibleTextEditors", (l: any) => {
+      listeners.shown = l;
+      return { dispose() {} };
+    });
+    patch(v.window, "tabGroups", { all: [{ tabs }] });
     delete require.cache[require.resolve(CONTROLLER_MODULE)];
     const { registerEsiTestController } = require(CONTROLLER_MODULE) as typeof controllerModule;
     disposable = registerEsiTestController({
       getExe: () => exe,
-      validate: (doc: any) => {
+      validate: (doc: any, _exe: string, options?: { publish?: boolean }) => {
         validated.push(path.basename(doc.uri.fsPath));
+        publishFlags.push(`${path.basename(doc.uri.fsPath)}:${options?.publish}`);
         return Promise.resolve(validate(doc));
       },
       reparseDelayMs: 1,
@@ -207,9 +217,14 @@ describe("esiTestController (glue)", () => {
     exe = "C:\\TestPit\\TestPit.exe";
     validate = () => ({ output: "[Info] done", issues: [] });
     validated = [];
+    publishFlags = [];
     runs = [];
     openDocs.length = 0;
+    tabs.length = 0;
     found = [write("a.esi", SCRIPT), write("b.esi", "[TEST STEPS]\r\n[/TEST STEPS]\r\n")];
+    // Forget which scripts earlier tests' runs loaded (as if VS Code had
+    // released them): each test starts from no document open.
+    listeners.shown?.(found.map((uri) => ({ document: docOf(uri, "") })));
     controller.items.replace([]);
     await controller.resolveHandler(undefined);
   });
@@ -302,6 +317,63 @@ describe("esiTestController (glue)", () => {
     assert.match(run.name ?? "", /validity check/i);
     assert.match(run.output[0].text, /NOT executed/);
     assert.strictEqual(run.ended, true);
+  });
+
+  it("puts the issues of an already open script in the Problems panel, not of one it opened", async () => {
+    // A document the run opens has no editor: VS Code may dispose it at any
+    // time, and its problems would vanish again with it.
+    openDocs.push(docOf(found[0], SCRIPT));
+    tabs.push({ input: { uri: found[0] } });
+    await runAll();
+    assert.deepStrictEqual(publishFlags, ["a.esi:true", "b.esi:false"]);
+  });
+
+  it("counts a loaded script as open only while an editor tab holds it", async () => {
+    // Loaded without a tab (another extension, a Replace All): not open.
+    openDocs.push(docOf(found[0], SCRIPT));
+    await runAll();
+    // …and the side of a diff counts as a tab.
+    tabs.push({ input: { original: found[1], modified: found[0] } });
+    await runAll();
+    assert.deepStrictEqual(publishFlags, ["a.esi:false", "b.esi:false", "a.esi:true", "b.esi:false"]);
+  });
+
+  it("counts the result of a merge editor and the sides of a multi-diff editor as tabs", async () => {
+    openDocs.push(docOf(found[0], SCRIPT), docOf(found[1], "[TEST STEPS]\r\n[/TEST STEPS]\r\n"));
+    tabs.push({ input: { base: found[1], input1: found[1], input2: found[1], result: found[0] } });
+    await runAll();
+    assert.deepStrictEqual(publishFlags, ["a.esi:true", "b.esi:false"]);
+    tabs.length = 0;
+    tabs.push({ input: { textDiffs: [{ original: found[0], modified: found[0] }, { original: found[1], modified: found[1] }] } });
+    await runAll();
+    assert.deepStrictEqual(publishFlags.slice(2), ["a.esi:true", "b.esi:true"]);
+  });
+
+  it("does not take a script an earlier run loaded for an open one", async () => {
+    // As in VS Code: a document opened by the run stays loaded for a while.
+    patch(v.workspace, "openTextDocument", (uri: any) => {
+      let doc = openDocs.find((d) => d.uri.toString() === uri.toString());
+      if (!doc) {
+        doc = docOf(uri, fs.readFileSync(uri.fsPath, "utf-8"));
+        openDocs.push(doc);
+      }
+      return Promise.resolve(doc);
+    });
+    try {
+      await runAll();
+      // b.esi is still loaded; a tab restored after a reload, never shown,
+      // does not hold it either.
+      tabs.push({ input: { uri: found[1] } });
+      await runAll();
+      assert.deepStrictEqual(publishFlags, ["a.esi:false", "b.esi:false", "a.esi:false", "b.esi:false"]);
+      // Once an editor showed it, its tab keeps it open.
+      listeners.shown([{ document: openDocs.find((d) => d.uri.toString() === found[1].toString()) }]);
+      await runAll();
+      assert.deepStrictEqual(publishFlags.slice(4), ["a.esi:false", "b.esi:true"]);
+    } finally {
+      const [obj, key, desc] = saved.pop()!;
+      Object.defineProperty(obj, key, desc!);
+    }
   });
 
   it("fails the step holding the error, with a located message; the other step passes", async () => {
