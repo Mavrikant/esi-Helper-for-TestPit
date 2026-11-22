@@ -61,6 +61,7 @@ describe("live TestPit check (glue)", () => {
   let changeListener: ((e: unknown) => void) | undefined;
   let visibleListener: ((editors: unknown[]) => void) | undefined;
   let configListener: ((e: unknown) => void) | undefined;
+  let closeListener: ((document: unknown) => void) | undefined;
   /** What `getConfiguration("esihelper").get(key)` returns. */
   let settings: Record<string, unknown>;
   /** What the "esi-testpit" collection was asked to do, in order. */
@@ -72,6 +73,7 @@ describe("live TestPit check (glue)", () => {
     changeListener = undefined;
     visibleListener = undefined;
     configListener = undefined;
+    closeListener = undefined;
     // Shortest debounce the setting allows.
     settings = { liveValidationDelay: 200 };
     patch(mock.workspace, "onDidChangeTextDocument", (l: any) => {
@@ -96,6 +98,10 @@ describe("live TestPit check (glue)", () => {
     patch(mock.workspace, "onDidChangeConfiguration", (l: any) => {
       configListener = l;
       return { dispose: () => (configListener = undefined) };
+    });
+    patch(mock.workspace, "onDidCloseTextDocument", (l: any) => {
+      closeListener = l;
+      return { dispose: () => (closeListener = undefined) };
     });
     // The profile / exe events live in the plugin store; with no storage
     // folder nothing is read or written.
@@ -250,6 +256,28 @@ describe("live TestPit check (glue)", () => {
     visibleListener([editor]);
     await ended;
     assert.deepStrictEqual(ops, ["set unshown.esi"]);
+  });
+
+  it("checks such a script once shown even after VS Code let go of its document", async () => {
+    // VS Code releases a document the extension opened within minutes (or
+    // once some fifty others were opened): the user's open makes a new one.
+    setTestpitExe("echo");
+    const loaded = fakeDocument("released.esi");
+    mock.workspace.textDocuments = [loaded];
+    await runValidityCheckForDocument(loaded, "echo", { publish: false });
+    assert.ok(closeListener, "listens to closed documents");
+    mock.workspace.textDocuments = [];
+    closeListener(loaded);
+
+    const reopened = fakeDocument("released.esi");
+    mock.workspace.textDocuments = [reopened];
+    const ended = nextRunEnd(reopened.uri, 5000);
+    const editor = { document: reopened };
+    mock.window.visibleTextEditors = [editor];
+    assert.ok(visibleListener, "listens to visible editors");
+    visibleListener([editor]);
+    await ended;
+    assert.deepStrictEqual(ops, ["set released.esi"]);
   });
 
   it("publishes a result asked not to be if an editor shows the document by then", async () => {

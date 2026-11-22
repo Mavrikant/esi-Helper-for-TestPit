@@ -93,11 +93,12 @@ export interface ValidityRunHooks {
   onCommand?: (command: string) => void;
   /**
    * False: return the result without putting it in the Problems panel. For
-   * a document no editor holds, opened by the caller only to validate it
-   * (Test Explorer): VS Code may dispose such a document at any time, and
-   * closing it would remove its problems again. It is published all the
-   * same if an editor shows the document by the time TestPit is done;
-   * otherwise the live check takes the document once one does.
+   * a document no editor tab holds (Test Explorer): VS Code may dispose such
+   * a document at any time, and closing it would remove its problems again.
+   * It is published all the same if an editor shows the document by the time
+   * TestPit is done; otherwise (live check on, an exe set) the live check
+   * takes the script once an editor shows it, even after VS Code let go of
+   * the document meanwhile (`checkOnShow`).
    */
   publish?: boolean;
 }
@@ -110,8 +111,10 @@ export interface ValidityRunResult {
   /**
    * False when the result was not put in the Problems panel: a newer one was
    * already shown, the document was closed, the profile or the TestPit
-   * executable changed during the run, the text of a document no editor
-   * shows changed during it, or `hooks.publish` was false.
+   * executable changed during the run, the text of a document left for a
+   * check on show (`notRechecked`) changed during it while no editor showed
+   * it, or `hooks.publish` was false and no editor showed the document by
+   * the end of the run.
    */
   published: boolean;
 }
@@ -142,6 +145,7 @@ export function registerLiveDiagnostics(): vscode.Disposable {
         runTracker.clear();
         runUris.clear();
         notRechecked.clear();
+        checkOnShow.clear();
         collection?.dispose();
         collection = undefined;
       },
@@ -253,10 +257,20 @@ function scheduleOpenDocuments(profileChanged: boolean): void {
 /**
  * Background documents whose check scheduleOpenDocuments or
  * handleDocumentChange put off until they are shown again. Results shown for
- * them that went stale (other profile, other text) were dropped, and only a
- * result for their current text is published for them (see publish).
+ * them that went stale (other profile, other text) were dropped, and while
+ * no editor shows them only a result for their current text is published
+ * for them (see publish). A mark goes with its document (on close).
  */
 const notRechecked = new Set<string>();
+
+/**
+ * Scripts validated without publishing (checkWhenShown), by uri: checked
+ * once an editor shows them. Unlike a notRechecked mark, this one outlives
+ * the document — VS Code lets go of a document the extension opened within
+ * minutes (or once some fifty others were opened after it), and opening the
+ * script later makes a new one.
+ */
+const checkOnShow = new Set<string>();
 
 function scheduleUncheckedVisible(editors: readonly vscode.TextEditor[]): void {
   if (disposed || !isLiveValidationEnabled() || !getTestpitExe()) {
@@ -265,7 +279,10 @@ function scheduleUncheckedVisible(editors: readonly vscode.TextEditor[]): void {
   for (const editor of editors) {
     const document = editor.document;
     const key = document.uri.toString();
-    if (notRechecked.delete(key) && isLiveTarget(document)) {
+    // Both marks go: neither is wanted once the check is scheduled.
+    const marked = notRechecked.delete(key);
+    const asked = checkOnShow.delete(key);
+    if ((marked || asked) && isLiveTarget(document)) {
       scheduler.schedule(key);
     }
   }
@@ -284,6 +301,7 @@ function handleConfigurationChange(event: vscode.ConfigurationChangeEvent): void
     // setting back on marks the background documents again.
     scheduler.cancelAll();
     notRechecked.clear();
+    checkOnShow.clear();
   }
 }
 
@@ -342,9 +360,9 @@ async function validateDocument(
 }
 
 /**
- * A document validated without publishing (no editor holds it): the live
- * check takes it once an editor shows it, so its problems then appear in the
- * Problems panel — and stay, the editor keeping the document open.
+ * A document validated without publishing (no editor tab holds it): the live
+ * check takes the script once an editor shows it, so its problems then
+ * appear in the Problems panel — and stay, the editor keeping it open.
  */
 function checkWhenShown(document: vscode.TextDocument): void {
   if (
@@ -355,7 +373,7 @@ function checkWhenShown(document: vscode.TextDocument): void {
   ) {
     return;
   }
-  notRechecked.add(document.uri.toString());
+  checkOnShow.add(document.uri.toString());
 }
 
 /**
@@ -417,5 +435,6 @@ function publish(
   collection ??= vscode.languages.createDiagnosticCollection(COLLECTION_NAME);
   collection.set(document.uri, issues.map(toDiagnostic));
   notRechecked.delete(key);
+  checkOnShow.delete(key);
   return true;
 }

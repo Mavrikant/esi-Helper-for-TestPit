@@ -176,4 +176,4 @@ export function summarizeValidity(
  * the Problems panel (`ValidityRunResult.published` false).
  */
 export const NOT_PUBLISHED_NOTE =
-  "Not put in the Problems panel: the script, the profile or the TestPit executable changed while TestPit was running (or the script was closed). Run the check again.";
+  "Not put in the Problems panel: the profile or the TestPit executable changed while TestPit was running, or the script was closed (or changed while no editor showed it). Run the check again.";

@@ -41,8 +41,10 @@ export interface EsiTestControllerDeps {
   /** The configured TestPit.exe, or undefined. Must never prompt. */
   getExe(): string | undefined;
   /**
-   * Run TestPit's validity check on a document. `publish: false`: keep the
-   * issues out of the Problems panel (a script the run opened itself).
+   * Run TestPit's validity check on a document. `publish: false`: a script
+   * no editor tab holds (not loaded before, loaded by a run, or held with no
+   * tab) — its issues stay out of the Problems panel unless an editor shows
+   * it by the time TestPit is done.
    */
   validate(
     document: vscode.TextDocument,
@@ -64,8 +66,9 @@ function isEsiFile(document: vscode.TextDocument): boolean {
 }
 
 /**
- * True when an editor tab shows `uri` (as a text editor, or as a side of a
- * diff). A tab keeps its document open; one the extension opened with
+ * True when an editor tab shows `uri`: a text editor, a side of a diff, the
+ * result of a merge editor, or a side of one of a multi-diff editor's diffs.
+ * A tab keeps its document open; one the extension opened with
  * openTextDocument stays in `workspace.textDocuments` only until VS Code
  * releases it, which it may do at any time.
  */
@@ -74,11 +77,22 @@ function hasEditorTab(uri: vscode.Uri): boolean {
   return vscode.window.tabGroups.all.some((group) =>
     group.tabs.some((tab) => {
       const input = tab.input as
-        | { uri?: vscode.Uri; original?: vscode.Uri; modified?: vscode.Uri }
+        | {
+            uri?: vscode.Uri;
+            original?: vscode.Uri;
+            modified?: vscode.Uri;
+            result?: vscode.Uri;
+            textDiffs?: ReadonlyArray<{ original?: vscode.Uri; modified?: vscode.Uri }>;
+          }
         | undefined;
-      return [input?.uri, input?.original, input?.modified].some(
-        (shown) => shown?.toString() === key
-      );
+      const diffs = Array.isArray(input?.textDiffs) ? input.textDiffs : [];
+      return [
+        input?.uri,
+        input?.original,
+        input?.modified,
+        input?.result,
+        ...diffs.flatMap((diff) => [diff?.original, diff?.modified]),
+      ].some((shown) => shown?.toString() === key);
     })
   );
 }

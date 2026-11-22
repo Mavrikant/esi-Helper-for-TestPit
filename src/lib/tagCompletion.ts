@@ -225,6 +225,9 @@ export interface TagCompletionResult {
 
 const isStepName = isStepSectionName;
 
+/** The number a tag name ends with, as a word of its own (`STE 25` → 25). */
+const TRAILING_NUMBER_RE = /(?:^|\s)(\d+)$/;
+
 /**
  * Sections still open just before `lineIndex`, outermost first. A proper
  * stack: a close pops back to its opener, a close with no opener is ignored,
@@ -506,16 +509,20 @@ export function computeTagCompletions(
     return { insertText: name + bracket, isSnippet: false };
   };
 
-  // A step is proposed the number it already has: its partner's, when the
-  // tag is paired (linked editing mirrors the name into the partner, so
-  // another number would renumber the pair — or break it with linked editing
-  // off), or that of the closer below a retyped opener. Otherwise the one the
-  // file's own numbering leads to.
-  const ownCloseLine = linked && pair ? pair.close.line : closes?.ownCloseLine;
+  // A step is proposed the number it already has. For a paired tag, the one
+  // its name still ends with — the word being retyped (`[STE| 25]`, which
+  // linked editing has mirrored into the partner) is no `STEP n` yet — since
+  // another number would renumber the pair (or break it with linked editing
+  // off, or with the cursor before a padded name, `[| STEP 25]`). For a
+  // retyped opener, that of the closer below. Otherwise the one the file's
+  // own numbering leads to.
+  const pairDigits = pair ? TRAILING_NUMBER_RE.exec(pair.name)?.[1] : undefined;
   const ownClose =
-    ownCloseLine !== undefined ? parseNumberedStepTag(lines[ownCloseLine]) : undefined;
+    !pair && closes?.ownCloseLine !== undefined
+      ? parseNumberedStepTag(lines[closes.ownCloseLine])
+      : undefined;
   const stepNameSnippet = `STEP \${1:${
-    ownClose?.digits ?? nextStepNumber(lines, lineIndex)
+    pairDigits ?? ownClose?.digits ?? nextStepNumber(lines, lineIndex)
   }}`;
 
   const entries: TagCompletionEntry[] = [];

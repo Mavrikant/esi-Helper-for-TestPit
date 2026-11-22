@@ -338,6 +338,17 @@ describe("esiTestController (glue)", () => {
     assert.deepStrictEqual(publishFlags, ["a.esi:false", "b.esi:false", "a.esi:true", "b.esi:false"]);
   });
 
+  it("counts the result of a merge editor and the sides of a multi-diff editor as tabs", async () => {
+    openDocs.push(docOf(found[0], SCRIPT), docOf(found[1], "[TEST STEPS]\r\n[/TEST STEPS]\r\n"));
+    tabs.push({ input: { base: found[1], input1: found[1], input2: found[1], result: found[0] } });
+    await runAll();
+    assert.deepStrictEqual(publishFlags, ["a.esi:true", "b.esi:false"]);
+    tabs.length = 0;
+    tabs.push({ input: { textDiffs: [{ original: found[0], modified: found[0] }, { original: found[1], modified: found[1] }] } });
+    await runAll();
+    assert.deepStrictEqual(publishFlags.slice(2), ["a.esi:true", "b.esi:true"]);
+  });
+
   it("does not take a script an earlier run loaded for an open one", async () => {
     // As in VS Code: a document opened by the run stays loaded for a while.
     patch(v.workspace, "openTextDocument", (uri: any) => {

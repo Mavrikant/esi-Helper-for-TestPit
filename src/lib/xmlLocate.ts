@@ -402,8 +402,10 @@ export function sourceFileOf(target: DefinitionTarget): string | undefined {
 
 /**
  * `<Partition Name=partition>` → `<Port Name=port>`. The LAST such port, in
- * one partition or across two of that name: the index registers each in turn
- * (Map.set), so the last one is what hover and validation show.
+ * one partition or across two of that name: the index registers the PART_
+ * connection of each in turn (Map.set), so the last one is the connection
+ * hover and validation show. Its message is that port's own — unless the
+ * port carries none (see findMessageNode).
  */
 function findPartitionPort(
   tree: XmlTree,
@@ -422,6 +424,17 @@ function findPartitionPort(
     }
   }
   return last;
+}
+
+/** A port's message: its inline `<Message>`, or the one of the shared port it names. */
+function portMessageNode(tree: XmlTree, port: XmlNode): XmlNode | undefined {
+  const inline = child(port, "Message");
+  if (inline) {
+    return inline;
+  }
+  const ref = valueOf(port, "Ref")?.value;
+  const common = ref !== undefined ? findCommonPort(tree, ref) : undefined;
+  return common ? child(common, "Message") ?? common : undefined;
 }
 
 /** `<Common><CommonPorts><Port Name=name>` — the last of that name, as above. */
@@ -481,20 +494,21 @@ function findMessageNode(
   message: MessageDef,
   conn?: ConnectionDef
 ): XmlNode | undefined {
-  // Through the port the script named, when it is in this same file.
+  // Through the port the script named, when it is in this same file. A
+  // bare port (or one whose Ref resolves nowhere) never replaces a message
+  // already registered under its name — ingestMemoryPorts makes a field-less
+  // one only when none exists — so the message the index holds then is
+  // found by name below, like any other; the port itself only when there is
+  // none.
+  let barePort: XmlNode | undefined;
   if (conn?.partition && conn.sourceFile === message.sourceFile) {
     const port = findPartitionPort(tree, conn.partition, conn.rawName);
     if (port) {
-      const inline = child(port, "Message");
-      if (inline) {
-        return inline;
+      const node = portMessageNode(tree, port);
+      if (node) {
+        return node;
       }
-      const ref = valueOf(port, "Ref")?.value;
-      const common = ref !== undefined ? findCommonPort(tree, ref) : undefined;
-      if (common) {
-        return child(common, "Message") ?? common;
-      }
-      return port;
+      barePort = port;
     }
   }
   const named = descendants(tree.root, "Message").filter(
@@ -510,8 +524,9 @@ function findMessageNode(
     return pool[pool.length - 1];
   }
   // A port with no <Message> at all still registers a (field-less) message.
-  return descendants(tree.root, "Port").find(
-    (p) => nameOf(p)?.value === message.name
+  return (
+    barePort ??
+    descendants(tree.root, "Port").find((p) => nameOf(p)?.value === message.name)
   );
 }
 

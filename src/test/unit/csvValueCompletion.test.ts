@@ -68,7 +68,7 @@ describe("csvValueCompletion", () => {
       assert.strictEqual(csvTailEntry({ withNumbers: false }).insertText, "line");
     });
 
-    it("keeps a word that cannot be `line`, and puts only line:N before a col:M already there", () => {
+    it("keeps a column part after the cursor and puts only line:N in front of it", () => {
       // The column was typed first: the line part goes in front of it.
       assert.deepStrictEqual(ctx("    type_code = data.csv |col:2"), {
         kind: "tail",
@@ -78,8 +78,10 @@ describe("csvValueCompletion", () => {
       });
       assert.deepStrictEqual(ctx("SDI = in.csv l| col:2"), { kind: "tail", startCol: 13, endCol: 15, colFollows: true });
       assert.deepStrictEqual(ctx("SDI = in.csv li|ne col:2"), { kind: "tail", startCol: 13, endCol: 18, colFollows: true });
-      // Any other word after the cursor is not replaced.
-      assert.deepStrictEqual(ctx("SDI = in.csv |foo"), { kind: "tail", startCol: 13, endCol: 13 });
+      // …also before its number; any other word at the cursor is replaced.
+      assert.deepStrictEqual(ctx("SDI = in.csv |col"), { kind: "tail", startCol: 13, endCol: 13, colFollows: true });
+      assert.deepStrictEqual(ctx("SDI = in.csv |foo"), { kind: "tail", startCol: 13, endCol: 16 });
+      assert.deepStrictEqual(ctx("SDI = in.csv lin|x"), { kind: "tail", startCol: 13, endCol: 17 });
       const apply = (marked: string): string => {
         const c = ctx(marked);
         assert.ok(c && c.kind === "tail");
@@ -93,6 +95,12 @@ describe("csvValueCompletion", () => {
       assert.strictEqual(apply("SDI = in.csv l| col:2"), "SDI = in.csv line:1 col:2");
       assert.strictEqual(apply("SDI = in.csv li|ne:4 col:2"), "SDI = in.csv line:4 col:2");
       assert.strictEqual(apply("SDI = in.csv |"), "SDI = in.csv line:1 col:1");
+      // Nothing glued to a word that was kept or should have gone.
+      assert.strictEqual(apply("SDI = in.csv |col"), "SDI = in.csv line:1 col");
+      assert.strictEqual(apply("SDI = in.csv |col:"), "SDI = in.csv line:1 col:");
+      assert.strictEqual(apply("SDI = in.csv |col2"), "SDI = in.csv line:1 col2");
+      assert.strictEqual(apply("SDI = in.csv lin|x"), "SDI = in.csv line:1 col:1");
+      assert.strictEqual(apply("SDI = in.csv |foo"), "SDI = in.csv line:1 col:1");
       assert.ok(parseCsvCellRef(apply("    type_code = data.csv |col:2").split("= ")[1]));
     });
 

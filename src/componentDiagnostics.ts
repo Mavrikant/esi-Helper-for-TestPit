@@ -6,6 +6,7 @@ import {
   createMacroResolver,
   createOutsideIncludeWatchers,
   includeIdentity,
+  sameIncludeKeys,
 } from "./providers/macroResolver";
 import { getActiveProjectIndex, onIndexChanged } from "./lib/projectIndexCache";
 import { getOutputChannel } from "./lib/outputChannel";
@@ -58,7 +59,7 @@ export function registerComponentDiagnostics(): vscode.Disposable {
     } else {
       includesOf.delete(key);
     }
-    if (!sameKeys(before, includes)) {
+    if (!sameIncludeKeys(before, includes)) {
       watchOutside();
     }
     if (lastLoggedCount.get(key) !== issues.length) {
@@ -79,7 +80,14 @@ export function registerComponentDiagnostics(): vscode.Disposable {
     if (uri.scheme !== "file" || includesOf.size === 0) {
       return;
     }
-    changedFiles.add(includeIdentity(path.resolve(uri.fsPath)));
+    const id = includeIdentity(path.resolve(uri.fsPath));
+    // Only a file some open script includes: any other change (typing in an
+    // unrelated script, a log reloaded every 100 ms) must not keep pushing
+    // the pass back — the debounce restarts on every call.
+    if (!Array.from(includesOf.values()).some((includes) => includes.has(id))) {
+      return;
+    }
+    changedFiles.add(id);
     if (includerTimer) {
       clearTimeout(includerTimer);
     }
@@ -173,18 +181,6 @@ export function registerComponentDiagnostics(): vscode.Disposable {
       },
     }
   );
-}
-
-function sameKeys(a: ReadonlyMap<string, string> | undefined, b: ReadonlyMap<string, string>): boolean {
-  if ((a?.size ?? 0) !== b.size) {
-    return false;
-  }
-  for (const key of b.keys()) {
-    if (!a?.has(key)) {
-      return false;
-    }
-  }
-  return true;
 }
 
 const SEVERITY: Record<ReturnType<typeof issueSeverity>, vscode.DiagnosticSeverity> = {

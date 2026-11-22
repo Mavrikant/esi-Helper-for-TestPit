@@ -45,8 +45,9 @@ export type CsvValueContext =
        */
       hasAddress?: true;
       /**
-       * Present (true) when a `col:M` already follows (`data.csv |col:2`):
-       * only `line:N ` goes in front of it.
+       * Present (true) when the column part already follows (`data.csv
+       * |col:2`, or `|col` before its number): only `line:N ` goes in front
+       * of it.
        */
       colFollows?: true;
     };
@@ -60,10 +61,11 @@ const TAIL_PARTIAL_RE = /^(?:[A-Za-z]:)?[A-Za-z0-9_.\-\\/]+\.csv\s+([A-Za-z]*)$/
 const PATH_REST_RE = /^[A-Za-z0-9_.\-\\/]*/;
 const ADDRESS_AFTER_NAME_RE = /^\s+line\s*:\s*\d+\s+col\s*:\s*\d+/i;
 // After the cursor, in the tail: the rest of the word; then `:N`, or the
-// column part of the address (with the blanks before it).
+// column part of the address, with or without its number yet (and the
+// blanks before it).
 const WORD_REST_RE = /^[A-Za-z]*/;
 const NUMBER_AFTER_WORD_RE = /^\s*:\s*\d+/;
-const COL_AFTER_RE = /^(\s*)col\s*:\s*\d+/i;
+const COL_AFTER_RE = /^(\s*)col(?![A-Za-z])/i;
 
 /**
  * Where the cursor stands in a CSV reference, from the text of its line.
@@ -83,27 +85,26 @@ export function csvValueContext(
   const after = line.slice(character);
   const tail = TAIL_PARTIAL_RE.exec(rhs);
   if (tail) {
-    // The rest of the word at the cursor is replaced only while the word can
-    // still be `line`: another one (`data.csv |col:2`) is kept.
+    const startCol = character - tail[1].length;
     const wordRest = (WORD_REST_RE.exec(after) as RegExpExecArray)[0];
     const inLineWord = "line".startsWith((tail[1] + wordRest).toLowerCase());
-    const rest = inLineWord ? wordRest : "";
-    const afterWord = after.slice(rest.length);
-    if (inLineWord && NUMBER_AFTER_WORD_RE.test(afterWord)) {
+    if (inLineWord && NUMBER_AFTER_WORD_RE.test(after.slice(wordRest.length))) {
+      return { kind: "tail", startCol, endCol: character + wordRest.length, hasAddress: true };
+    }
+    // The column part typed first (`|col:2`, `|col`, `| col:2`) is kept:
+    // `line:N ` goes in front of it.
+    const lineRest = inLineWord ? wordRest : "";
+    const col = COL_AFTER_RE.exec(after.slice(lineRest.length));
+    if (col) {
       return {
         kind: "tail",
-        startCol: character - tail[1].length,
-        endCol: character + rest.length,
-        hasAddress: true,
+        startCol,
+        endCol: character + lineRest.length + col[1].length,
+        colFollows: true,
       };
     }
-    const col = COL_AFTER_RE.exec(afterWord);
-    return {
-      kind: "tail",
-      startCol: character - tail[1].length,
-      endCol: character + rest.length + (col ? col[1].length : 0),
-      ...(col ? { colFollows: true as const } : {}),
-    };
+    // Any other word at the cursor is replaced, as completion does.
+    return { kind: "tail", startCol, endCol: character + wordRest.length };
   }
   if (!PATH_PARTIAL_RE.test(rhs)) {
     return undefined;

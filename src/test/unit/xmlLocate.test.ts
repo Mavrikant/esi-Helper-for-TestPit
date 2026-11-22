@@ -332,6 +332,67 @@ describe("xmlLocate — NEOCAS Ref forms", () => {
     }
   });
 
+  it("finds a field in the earlier port when the last of the same name carries no message", () => {
+    // A bare port (or one whose Ref resolves nowhere) never replaces the
+    // message the index already holds: the field lives in the first port.
+    const dir = fs.mkdtempSync(path.join(require("os").tmpdir(), "esi-bare-port-"));
+    try {
+      for (const last of ['<Port Name="Status"/>', '<Port Name="Status" Ref="Nowhere"/>']) {
+        const file = path.join(dir, "Ports.xml");
+        fs.writeFileSync(
+          file,
+          [
+            "<Partitions>", // 0
+            '  <Partition Name="HSI">', // 1
+            '    <Port Name="Status"><Message Name="Status"><Field Name="Old" Type="UInt8"/></Message></Port>', // 2
+            `    ${last}`, // 3
+            "  </Partition>", // 4
+            "</Partitions>",
+          ].join("\n")
+        );
+        const idx = parseConfigFiles({ partition: file });
+        const text = "[PART_HSI_Status]\nOld = 1\n[/PART_HSI_Status]";
+        assert.deepStrictEqual(
+          idx.resolveConnectionMessage("PART_HSI_Status")?.fields.map((f) => f.name),
+          ["Old"]
+        );
+        // The tag is the last port (the connection the index keeps)…
+        assert.strictEqual(define(idx, text, "PART_HSI")[0].line, 3, last);
+        // …the field the one in the earlier port's message.
+        const [field] = define(idx, text, "Old =");
+        assert.strictEqual(field.line, 2, last);
+        assert.strictEqual(field.exact, true, last);
+      }
+      // A same-named message registered later elsewhere is the one the
+      // index keeps (Map.set): it is found by name.
+      const file = path.join(dir, "Ports.xml");
+      fs.writeFileSync(
+        file,
+        [
+          "<Partitions>", // 0
+          '  <Partition Name="HSI">', // 1
+          '    <Port Name="Status"><Message Name="Status"><Field Name="Old" Type="UInt8"/></Message></Port>', // 2
+          '    <Port Name="Status"/>', // 3
+          "  </Partition>", // 4
+          '  <Partition Name="OTHER">', // 5
+          '    <Port Name="X"><Message Name="Status"><Field Name="Late" Type="UInt8"/></Message></Port>', // 6
+          "  </Partition>", // 7
+          "</Partitions>",
+        ].join("\n")
+      );
+      const idx = parseConfigFiles({ partition: file });
+      assert.deepStrictEqual(
+        idx.resolveConnectionMessage("PART_HSI_Status")?.fields.map((f) => f.name),
+        ["Late"]
+      );
+      const [late] = define(idx, "[PART_HSI_Status]\nLate = 1\n[/PART_HSI_Status]", "Late =");
+      assert.strictEqual(late.line, 6);
+      assert.strictEqual(late.exact, true);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it("cable <Connection Ref> → the connection; message file not configured → one result", () => {
     const locs = define(idx, "[429_L164RadioAltitude]", "429_L164");
     assert.strictEqual(locs.length, 1);

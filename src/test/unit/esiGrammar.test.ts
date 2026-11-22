@@ -399,6 +399,27 @@ describe("syntaxes/esi.json", () => {
       }
     });
 
+    it("begins only on an opener at the start of a line, as TestPit reads a tag", () => {
+      // A mention in a value begins nothing: the lines after it keep their
+      // colours (the closer on the mention's line could not end it).
+      const lines = tokenize([
+        "[CMD_INSTRUCTION]",
+        "    text = fill in [STEP DEFINITION] ... [/STEP DEFINITION] first",
+        "[/CMD_INSTRUCTION]",
+        "n = 5",
+      ]);
+      assert.ok(lines.flat().every((t) => !t.scopes.includes("meta.definition.esi")));
+      assert.ok(lines[3].some((t) => t.scopes.includes("constant.numeric.esi")));
+      // The forms TestPit repairs, indented, still begin one.
+      for (const opener of ["    [STEP DEFINITION]", "[[STEP DEFINITION]]"]) {
+        const block = tokenize([opener, "n = 5"]);
+        assert.ok(
+          block[1].every((t) => t.scopes.includes("meta.definition.esi")),
+          `no block after ${JSON.stringify(opener)}`
+        );
+      }
+    });
+
     it("still colours comments, macros, strings and the markup", () => {
       assert.deepStrictEqual(leaf("  Step Conditions = <pre>", open).slice(2), ["<pre>→meta.tag.markup"]);
       assert.deepStrictEqual(leaf('    <br/> * use %PORT% and "quoted 7" # note 9', open), [

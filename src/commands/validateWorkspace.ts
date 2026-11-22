@@ -22,6 +22,7 @@ import {
   createMacroResolver,
   createOutsideIncludeWatchers,
   includeIdentity,
+  sameIncludeKeys,
 } from "../providers/macroResolver";
 
 export const VALIDATE_WORKSPACE_COMMAND = "extension.validateWorkspace";
@@ -105,8 +106,13 @@ export function registerValidateWorkspace(): vscode.Disposable {
   // (includeIdentity -> full path): its %MACRO% results depend on their text
   // too.
   const includesOf = new Map<string, Map<string, string>>();
+  // Per covered file (uri string): the number of its latest re-check. An
+  // older one still reading must not overwrite what a newer one found.
+  const recheckSeq = new Map<string, number>();
   // Bumped whenever results are invalidated; a run in flight notices and stops.
   let generation = 0;
+  // Set on teardown: work still in flight then publishes and watches nothing.
+  let disposed = false;
   let running = false;
   // Why the results were last invalidated: what a run that stopped says.
   let clearReason: "cleared" | "configChanged" = "cleared";
@@ -116,8 +122,8 @@ export function registerValidateWorkspace(): vscode.Disposable {
     generation++;
     covered.clear();
     includesOf.clear();
+    recheckSeq.clear();
     changedIds.clear();
-    changedKeys.clear();
     collection.clear();
     watchOutside();
   };
@@ -137,14 +143,22 @@ export function registerValidateWorkspace(): vscode.Disposable {
   /** Re-check one file of the last run from disk (closed / changed on disk). */
   const recheck = async (uri: vscode.Uri, fromDisk: boolean): Promise<void> => {
     const mine = generation;
+    const key = uri.toString();
+    const seq = (recheckSeq.get(key) ?? 0) + 1;
+    recheckSeq.set(key, seq);
     const open = fromDisk ? undefined : findOpenDocument(uri);
     const result = await checkFile(uri, open);
-    if (mine !== generation || !covered.has(uri.toString())) {
+    if (disposed || mine !== generation || !covered.has(key) || recheckSeq.get(key) !== seq) {
       return;
     }
     if ("includes" in result) {
-      includesOf.set(uri.toString(), result.includes);
-      watchOutside();
+      const before = includesOf.get(key);
+      includesOf.set(key, result.includes);
+      // Rarely changes; when it does, one sync for the whole burst — each one
+      // walks every covered file's includes.
+      if (!sameIncludeKeys(before, result.includes)) {
+        watchOutsideSoon();
+      }
     }
     // Re-read the open state: the file may have been (re)opened as esi while
     // it was being read, and then the live collection owns it.
@@ -213,6 +227,9 @@ export function registerValidateWorkspace(): vscode.Disposable {
           });
           const open = findOpenDocument(uri);
           const result = await checkFile(uri, open);
+          if (disposed) {
+            return;
+          }
           if (mine !== generation) {
             invalidated = true;
             return;
@@ -230,6 +247,9 @@ export function registerValidateWorkspace(): vscode.Disposable {
         }
       }
     );
+    if (disposed) {
+      return;
+    }
     // Once per run rather than per file: the union of every covered file's
     // includes.
     watchOutside();
@@ -300,10 +320,8 @@ export function registerValidateWorkspace(): vscode.Disposable {
     }
   });
 
-  // Files changed since the last includer pass (includeIdentity), and the
-  // covered ones among them (uri strings; re-checked on their own).
+  // Included files changed since the last includer pass (includeIdentity).
   const changedIds = new Set<string>();
-  const changedKeys = new Set<string>();
   let includerTimer: ReturnType<typeof setTimeout> | undefined;
 
   /**
@@ -315,20 +333,30 @@ export function registerValidateWorkspace(): vscode.Disposable {
     if (uri.scheme !== "file" || includesOf.size === 0) {
       return;
     }
-    changedIds.add(includeIdentity(path.resolve(uri.fsPath)));
-    changedKeys.add(uri.toString());
+    const id = includeIdentity(path.resolve(uri.fsPath));
+    // Only a file some covered file includes: any other change must not keep
+    // pushing the pass back — the debounce restarts on every call.
+    if (!Array.from(includesOf.values()).some((includes) => includes.has(id))) {
+      return;
+    }
+    changedIds.add(id);
     if (includerTimer) {
       clearTimeout(includerTimer);
     }
     includerTimer = setTimeout(() => {
       includerTimer = undefined;
       const ids = Array.from(changedIds);
-      const keys = new Set(changedKeys);
       changedIds.clear();
-      changedKeys.clear();
       for (const [key, includes] of includesOf) {
         const includer = covered.get(key);
-        if (includer && !keys.has(key) && ids.some((id) => includes.has(id))) {
+        if (!includer) {
+          continue;
+        }
+        // Also a covered file that changed itself in the burst: its own
+        // re-check read its includes as they were then. Not for naming
+        // itself, though.
+        const own = includeIdentity(path.resolve(includer.fsPath));
+        if (ids.some((id) => id !== own && includes.has(id))) {
           void recheck(includer, false);
         }
       }
@@ -345,8 +373,9 @@ export function registerValidateWorkspace(): vscode.Disposable {
   };
   const onDiskDelete = (uri: vscode.Uri): void => {
     if (covered.delete(uri.toString())) {
+      recheckSeq.delete(uri.toString());
       if (includesOf.delete(uri.toString())) {
-        watchOutside();
+        watchOutsideSoon();
       }
       collection.delete(uri);
     }
@@ -363,10 +392,20 @@ export function registerValidateWorkspace(): vscode.Disposable {
   // Included files outside the workspace folders, which `watcher` does not
   // see.
   const outside = createOutsideIncludeWatchers(wire);
+  // One sync for a batch of events (VS Code delivers a branch switch's
+  // deletes together): watchOutside walks every covered file's includes.
+  let outsideTimer: ReturnType<typeof setTimeout> | undefined;
   function watchOutside(): void {
+    if (outsideTimer) {
+      clearTimeout(outsideTimer);
+      outsideTimer = undefined;
+    }
     outside.update(
       Array.from(includesOf.values()).flatMap((includes) => Array.from(includes.values()))
     );
+  }
+  function watchOutsideSoon(): void {
+    outsideTimer ??= setTimeout(watchOutside, 0);
   }
   const onFolders = vscode.workspace.onDidChangeWorkspaceFolders(() => watchOutside());
 
@@ -398,9 +437,14 @@ export function registerValidateWorkspace(): vscode.Disposable {
     onIndexChange,
     {
       dispose: () => {
+        disposed = true;
         if (includerTimer) {
           clearTimeout(includerTimer);
           includerTimer = undefined;
+        }
+        if (outsideTimer) {
+          clearTimeout(outsideTimer);
+          outsideTimer = undefined;
         }
       },
     }

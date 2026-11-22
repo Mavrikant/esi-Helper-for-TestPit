@@ -551,6 +551,27 @@ describe("tagCompletion", () => {
       assert.strictEqual(entry(complete(single), "STEP").insertText, "STEP ${1:5}");
     });
 
+    it("keeps the pair's number while the word STEP is being retyped", () => {
+      // Linked editing has mirrored the half-typed word into the closer:
+      // neither tag reads `STEP n` any more, but the number is still there.
+      const steps = (opener: string, closer: string): string[] => [
+        "[TEST STEPS]",
+        "    [STEP 10]",
+        "    [/STEP 10]",
+        `    ${opener}`,
+        `    ${closer}`,
+        "[/TEST STEPS]",
+      ];
+      assert.strictEqual(entry(complete(steps("[STE| 25]", "[/STE 25]")), "STEP").insertText, "STEP ${1:25}");
+      assert.strictEqual(entry(complete(steps("[S| 25]", "[/S 25]")), "STEP").insertText, "STEP ${1:25}");
+      // The cursor before a padded name (TestPit trims it): not in the name,
+      // so the edit runs through the `]` — with the pair's number all the same.
+      assert.strictEqual(
+        entry(complete(steps("[| STEP 25]", "[/STEP 25]")), "STEP").insertText,
+        "STEP ${1:25}]"
+      );
+    });
+
     it("still writes the bracket for a tag with no partner", () => {
       const e = entry(complete(["[STEP 10]", "    [STEP IN|PUTS]", "[/STEP 10]"]), "STEP OUTPUTS");
       assert.strictEqual(e.insertText, "STEP OUTPUTS]");

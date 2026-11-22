@@ -337,6 +337,75 @@ describe("validateWorkspace command (glue)", () => {
     assert.deepStrictEqual(codesOf(root), ["undefinedMacro"]);
   });
 
+  it("re-checks a covered file again when an include changes after it in the same burst", async () => {
+    // A checkout writes the script first, its include ~100 ms later: the
+    // script's own re-check read the old include.
+    const root = write("burst-root.esi", rootIncluding("burst-common.esi"));
+    const common = write("burst-common.esi", WITH_SPEED);
+    found = [root];
+    await run();
+    assert.deepStrictEqual(codesOf(root), []);
+    touch(root);
+    listeners.change(root);
+    await new Promise((r) => setTimeout(r, 100));
+    write("burst-common.esi", WITHOUT_SPEED);
+    touch(common);
+    listeners.change(common);
+    await settleIncluders();
+    assert.deepStrictEqual(codesOf(root), ["undefinedMacro"]);
+  });
+
+  it("does not let changes to files nothing includes hold the includer pass back", async () => {
+    const root = write("quiet-root.esi", rootIncluding("quiet-common.esi"));
+    const common = write("quiet-common.esi", WITH_SPEED);
+    const log = write("quiet-other.esi", CLEAN);
+    found = [root];
+    await run();
+    write("quiet-common.esi", WITHOUT_SPEED);
+    touch(common);
+    listeners.change(common);
+    // Another file, included by nothing, changing every 100 ms meanwhile.
+    for (let i = 0; i < 4; i++) {
+      await new Promise((r) => setTimeout(r, 100));
+      listeners.change(log);
+    }
+    await new Promise((r) => setTimeout(r, 100));
+    assert.deepStrictEqual(codesOf(root), ["undefinedMacro"]);
+  });
+
+  it("does not walk every covered file's includes once per re-check", async () => {
+    // Each sync of the outside-workspace watchers looks at every include of
+    // every covered file; a pass re-checking all includers must not run one
+    // per file (O(N²) on a large suite).
+    const shared = write("walk-shared.esi", WITH_SPEED);
+    const roots: any[] = [];
+    for (let i = 0; i < 15; i++) {
+      roots.push(write(`walk-root-${i}.esi`, rootIncluding("walk-shared.esi")));
+    }
+    found = roots;
+    await run();
+    let reads = 0;
+    saved.push([v.workspace, "workspaceFolders", Object.getOwnPropertyDescriptor(v.workspace, "workspaceFolders")]);
+    Object.defineProperty(v.workspace, "workspaceFolders", {
+      configurable: true,
+      get: () => {
+        reads++;
+        return undefined;
+      },
+    });
+    try {
+      writes.clear();
+      touch(shared);
+      listeners.change(shared);
+      await settleIncluders();
+      assert.strictEqual(writes.size, 15, "every includer re-checked");
+      assert.ok(reads < 15, `workspace folders read ${reads} times`);
+    } finally {
+      const [obj, key, desc] = saved.pop()!;
+      Object.defineProperty(obj, key, desc!);
+    }
+  });
+
   it("watches an include outside the workspace folders on its own", async () => {
     const elsewhere = fs.mkdtempSync(path.join(os.tmpdir(), "esi-ws-out-"));
     try {
@@ -372,6 +441,37 @@ describe("validateWorkspace command (glue)", () => {
       } else {
         delete obj[key];
       }
+      fs.rmSync(elsewhere, { recursive: true, force: true });
+    }
+  });
+
+  it("publishes and watches nothing once disposed, with a re-check still reading", async () => {
+    // A second registration, torn down while a re-check it started is in
+    // flight; the suite's own one gets its commands and listeners back.
+    const elsewhere = fs.mkdtempSync(path.join(os.tmpdir(), "esi-ws-disp-"));
+    const savedCommands = { ...v.__registered.commands };
+    const savedListeners = { ...listeners };
+    try {
+      const lib1 = path.join(elsewhere, "lib1.esi");
+      const lib2 = path.join(elsewhere, "lib2.esi");
+      fs.writeFileSync(lib1, WITH_SPEED);
+      fs.writeFileSync(lib2, WITH_SPEED);
+      const root = write("disp-root.esi", rootIncluding(lib1));
+      const second = registerValidateWorkspace();
+      found = [root];
+      await v.__registered.commands[VALIDATE_WORKSPACE_COMMAND]();
+      const made = watchers.length;
+      writes.clear();
+      // It now includes another file outside: a re-check would watch it.
+      write("disp-root.esi", rootIncluding(lib2));
+      listeners.change(root);
+      second.dispose();
+      await settle();
+      assert.strictEqual(writes.get(root.toString()), undefined, "published after dispose");
+      assert.strictEqual(watchers.length, made, "watcher made after dispose");
+    } finally {
+      Object.assign(v.__registered.commands, savedCommands);
+      Object.assign(listeners, savedListeners);
       fs.rmSync(elsewhere, { recursive: true, force: true });
     }
   });

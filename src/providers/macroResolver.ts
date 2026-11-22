@@ -95,6 +95,32 @@ export function macroFileLabel(key: string): string {
   return path.basename(key);
 }
 
+/** True when two include sets (includeIdentity → path) name the same files. */
+export function sameIncludeKeys(
+  a: ReadonlyMap<string, string> | undefined,
+  b: ReadonlyMap<string, string> | undefined
+): boolean {
+  if ((a?.size ?? 0) !== (b?.size ?? 0)) {
+    return false;
+  }
+  for (const key of b?.keys() ?? []) {
+    if (!a?.has(key)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/**
+ * A file name as a glob that matches only itself: VS Code's glob reads `[…]`
+ * as a character class, `{…}` as alternatives and `*` / `?` as wildcards
+ * (`Common [v2].esi` would never match its own events). Each such character
+ * goes in a class of its own — `]` is literal as the first one in a class.
+ */
+export function literalGlob(name: string): string {
+  return name.replace(/[[\]{}*?]/g, (c) => `[${c}]`);
+}
+
 /** Watchers kept in step with the include targets a caller depends on. */
 export interface OutsideIncludeWatchers extends vscode.Disposable {
   /** The full paths of every include target still depended on. */
@@ -114,12 +140,18 @@ export function createOutsideIncludeWatchers(
 ): OutsideIncludeWatchers {
   // includeIdentity → the watcher and its subscriptions.
   const watchers = new Map<string, vscode.Disposable>();
+  // After dispose, a caller's work still in flight must make no watcher
+  // nobody would dispose.
+  let disposed = false;
   const drop = (key: string): void => {
     watchers.get(key)?.dispose();
     watchers.delete(key);
   };
   return {
     update(paths) {
+      if (disposed) {
+        return;
+      }
       const wanted = new Map<string, string>();
       for (const fullPath of paths) {
         if (!isInWorkspaceFolder(fullPath)) {
@@ -136,12 +168,13 @@ export function createOutsideIncludeWatchers(
           continue;
         }
         const watcher = vscode.workspace.createFileSystemWatcher(
-          new vscode.RelativePattern(path.dirname(fullPath), path.basename(fullPath))
+          new vscode.RelativePattern(path.dirname(fullPath), literalGlob(path.basename(fullPath)))
         );
         watchers.set(key, vscode.Disposable.from(watcher, ...wire(watcher)));
       }
     },
     dispose() {
+      disposed = true;
       for (const key of Array.from(watchers.keys())) {
         drop(key);
       }

@@ -4,7 +4,11 @@ import * as os from "os";
 import * as path from "path";
 import * as vscode from "vscode";
 import { registerComponentDiagnostics } from "../../componentDiagnostics";
-import { createMacroResolver } from "../../providers/macroResolver";
+import {
+  createMacroResolver,
+  createOutsideIncludeWatchers,
+  literalGlob,
+} from "../../providers/macroResolver";
 
 // Glue for the live in-process checks (componentDiagnostics.ts), driven
 // through the vscode mock (test/setup.js). The members it listens to are
@@ -186,6 +190,43 @@ describe("component diagnostics (glue)", () => {
     assert.strictEqual(passes.get(key), 1, "no pass while typing goes on");
     await sleep(300);
     assert.strictEqual(passes.get(key), 2);
+  });
+
+  it("does not let typing in a script nothing includes hold the includer pass back", async () => {
+    const root = docOf("root.esi", () => ROOT);
+    let common = WITHOUT;
+    const included = docOf("common.esi", () => common);
+    const other = docOf("other.esi", () => WITHOUT);
+    mock.workspace.textDocuments = [root, included, other];
+    live = registerComponentDiagnostics();
+    assert.deepStrictEqual(codes(root), ["undefinedMacro"]);
+    common = WITH;
+    listeners.change({ document: included, contentChanges: [{ text: "x" }] });
+    // Keys in another script every 100 ms meanwhile.
+    for (let i = 0; i < 4; i++) {
+      await sleep(100);
+      listeners.change({ document: other, contentChanges: [{ text: "x" }] });
+    }
+    await sleep(100);
+    assert.deepStrictEqual(codes(root), []);
+  });
+
+  it("writes an include's file name as a glob that matches only itself", () => {
+    assert.strictEqual(literalGlob("common.esi"), "common.esi");
+    assert.strictEqual(literalGlob("Common [v2].esi"), "Common [[]v2[]].esi");
+    assert.strictEqual(literalGlob("Utils{A429}*?.esi"), "Utils[{]A429[}][*][?].esi");
+  });
+
+  it("makes no watcher once disposed", () => {
+    const outsidePath = path.join(os.tmpdir(), "esi-outside-disposed", "lib.esi");
+    const outside = createOutsideIncludeWatchers(() => []);
+    outside.update([outsidePath]);
+    assert.strictEqual(watchers.length, 1);
+    outside.dispose();
+    assert.strictEqual(watchers[0].disposed, true);
+    // Work still in flight at deactivation.
+    outside.update([outsidePath]);
+    assert.strictEqual(watchers.length, 1);
   });
 
   it("watches an include outside the workspace folders on its own", async () => {
